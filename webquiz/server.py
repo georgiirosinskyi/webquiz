@@ -1504,7 +1504,7 @@ class TestingServer:
         Args:
             user_id: User identifier
             question_id: Question identifier
-            state: State string ("think", "ok", "fail")
+            state: State string ("think", "ok", "fail", "skip")
             time_taken: Optional time taken in seconds
         """
         if user_id not in self.live_stats:
@@ -1554,6 +1554,7 @@ class TestingServer:
             "username": username,
             "registered_at": datetime.now().isoformat(),
             "approved": not requires_approval,  # Auto-approve if approval not required
+            "skipped_questions": []
         }
 
         # Add additional registration fields if configured
@@ -1689,6 +1690,155 @@ class TestingServer:
             {"success": True, "message": "Registration data updated successfully", "user_data": user_data}
         )
 
+    async def skip_question(self, request):
+        """Skip test answer.
+
+        Validates answer, calculates time taken, stores response, updates progress,
+        broadcasts to WebSocket clients, and calculates final stats if test complete.
+
+        Args:
+            request: aiohttp request with user_id and question_id
+
+        Returns:
+            JSON response with feedback (conditionally includes correctness)
+        """
+        data = await request.json()
+        user_id = data["user_id"]
+        question_id = data["question_id"]
+
+        # Find user by user_id
+        if user_id not in self.users:
+            return web.json_response({"error": "Користувача не знайдено"}, status=404)
+
+        username = self.users[user_id]["username"]
+        user_data = self.users[user_id]
+
+        # # Validate question order for randomized quizzes (security check)
+        # if getattr(self, "randomize_questions", False) and "question_order" in user_data:
+        #     question_order = user_data["question_order"]
+        #     last_answered_id = self.user_progress.get(user_id, 0)
+
+        #     # Determine the expected next question
+        #     if last_answered_id == 0:
+        #         # First question - should be the first in their order
+        #         expected_question_id = question_order[0]
+        #     else:
+        #         # Find the index of last answered question in their order
+        #         try:
+        #             last_index = question_order.index(last_answered_id)
+        #             next_index = last_index + 1
+
+        #             # Check if user has finished all questions
+        #             if next_index >= len(question_order):
+        #                 return web.json_response({"error": "Ви вже відповіли на всі питання"}, status=400)
+
+        #             expected_question_id = question_order[next_index]
+        #         except ValueError:
+        #             # Last answered question not in order (shouldn't happen)
+        #             logger.error(f"User {user_id} last_answered_id {last_answered_id} not found in question_order")
+        #             return web.json_response({"error": "Помилка валідації порядку питань"}, status=500)
+
+        #     # Validate submitted question matches expected
+        #     if question_id != expected_question_id:
+        #         logger.warning(
+        #             f"User {user_id} attempted to answer question {question_id} "
+        #             f"but expected question {expected_question_id}"
+        #         )
+        #         return web.json_response(
+        #             {
+        #                 "error": "Ви можете відповідати лише на поточне питання",
+        #                 "expected_question_id": expected_question_id,
+        #             },
+        #             status=403,
+        #         )
+
+        # Find the question
+        question = next((q for q in self.questions if q["id"] == question_id), None)
+        if not question:
+            return web.json_response({"error": "Питання не знайдено"}, status=404)
+
+        # Calculate time taken server-side from when question was displayed
+        time_taken = 0
+        if user_id in self.question_start_times:
+            time_taken = (datetime.now() - self.question_start_times[user_id]).total_seconds()
+            # Clean up the start time
+            del self.question_start_times[user_id]
+
+        # Store response in memory
+        # response_data = {
+        #     "user_id": user_id,
+        #     "username": username,
+        #     "question_id": question_id,
+        #     "question": question.get("question", ""),  # Handle image-only questions
+        #     "selected_answer": "",
+        #     "correct_answer": "",
+        #     "is_correct": False,
+        #     "time_taken_seconds": time_taken,
+        #     "timestamp": datetime.now().isoformat(),
+        # }
+
+        # self.user_responses.append(response_data)
+
+        user_data["skipped_questions"].append(question_id);
+
+        # # Track answer separately for stats calculation (independent of CSV flushing)
+        # if user_id not in self.user_answers:
+        #     self.user_answers[user_id] = []
+
+        # # Normalize file path for results (prepend /attach/ if needed)
+        # file_value = question.get("file")
+        # if file_value and not file_value.startswith("/attach/"):
+        #     file_value = f"/attach/{file_value}"
+
+        # answer_data = {
+        #     "question": question.get("question", ""),  # Handle image-only questions
+        #     "image": question.get("image"),
+        #     "file": file_value,
+        #     "selected_answer": "",
+        #     "correct_answer": "",
+        #     "is_correct": False,
+        #     "time_taken": time_taken,
+        #     "points": 0,
+        #     "earned_points": 0
+        # }
+
+        # self.user_answers[user_id].append(answer_data)
+
+        # Update user progress
+        self.user_progress[user_id] = question_id
+
+        # Update live stats: set current question state based on correctness
+        state = "skip"
+        self.update_live_stats(user_id, question_id, state, time_taken)
+
+        # Broadcast current question result with completion status
+        await self.broadcast_to_websockets(
+            {
+                "type": "state_update",
+                "user_id": user_id,
+                "username": username,
+                "question_id": question_id,
+                "state": state,
+                "time_taken": time_taken,
+                "total_questions": len(self.questions),
+                "total_points": sum(q.get("points", 1) for q in self.questions),
+                "earned_points": 0,
+                "question_points": 0,
+                "completed": False,
+                "completed_at": None,
+            }
+        )
+
+        logger.info(
+            f"Answer skipped by {username} (ID: {user_id}) for question {question_id}: (took {time_taken}s)"
+        )
+        logger.info(f"Updated progress for user {user_id}: last answered question = {question_id}")
+
+        # Prepare response data
+        response_data = {"time_taken": time_taken, "message": "Answer skipped successfully"}
+
+        return web.json_response(response_data)
+
     async def submit_answer(self, request):
         """Submit test answer.
 
@@ -1713,44 +1863,46 @@ class TestingServer:
         username = self.users[user_id]["username"]
         user_data = self.users[user_id]
 
-        # Validate question order for randomized quizzes (security check)
-        if getattr(self, "randomize_questions", False) and "question_order" in user_data:
-            question_order = user_data["question_order"]
-            last_answered_id = self.user_progress.get(user_id, 0)
+        # # Validate question order for randomized quizzes (security check)
+        # if getattr(self, "randomize_questions", False) and "question_order" in user_data:
+        #     question_order = user_data["question_order"]
+        #     last_answered_id = self.user_progress.get(user_id, 0)
 
-            # Determine the expected next question
-            if last_answered_id == 0:
-                # First question - should be the first in their order
-                expected_question_id = question_order[0]
-            else:
-                # Find the index of last answered question in their order
-                try:
-                    last_index = question_order.index(last_answered_id)
-                    next_index = last_index + 1
+        #     # Determine the expected next question
+        #     if last_answered_id == 0:
+        #         # First question - should be the first in their order
+        #         expected_question_id = question_order[0]
+        #     else:
+        #         # Find the index of last answered question in their order
+        #         try:
+        #             last_index = question_order.index(last_answered_id)
+        #             next_index = last_index + 1
 
-                    # Check if user has finished all questions
-                    if next_index >= len(question_order):
-                        return web.json_response({"error": "Ви вже відповіли на всі питання"}, status=400)
+        #             print(f"last_index: {last_index}, next_index: {next_index}, len(question_order): {len(question_order)}")
 
-                    expected_question_id = question_order[next_index]
-                except ValueError:
-                    # Last answered question not in order (shouldn't happen)
-                    logger.error(f"User {user_id} last_answered_id {last_answered_id} not found in question_order")
-                    return web.json_response({"error": "Помилка валідації порядку питань"}, status=500)
+        #             # Check if user has finished all questions
+        #             if next_index >= len(question_order):
+        #                 return web.json_response({"error": "Ви вже відповіли на всі питання"}, status=400)
 
-            # Validate submitted question matches expected
-            if question_id != expected_question_id:
-                logger.warning(
-                    f"User {user_id} attempted to answer question {question_id} "
-                    f"but expected question {expected_question_id}"
-                )
-                return web.json_response(
-                    {
-                        "error": "Ви можете відповідати лише на поточне питання",
-                        "expected_question_id": expected_question_id,
-                    },
-                    status=403,
-                )
+        #             expected_question_id = question_order[next_index]
+        #         except ValueError:
+        #             # Last answered question not in order (shouldn't happen)
+        #             logger.error(f"User {user_id} last_answered_id {last_answered_id} not found in question_order")
+        #             return web.json_response({"error": "Помилка валідації порядку питань"}, status=500)
+
+        #     # Validate submitted question matches expected
+        #     if question_id != expected_question_id:
+        #         logger.warning(
+        #             f"User {user_id} attempted to answer question {question_id} "
+        #             f"but expected question {expected_question_id}"
+        #         )
+        #         return web.json_response(
+        #             {
+        #                 "error": "Ви можете відповідати лише на поточне питання",
+        #                 "expected_question_id": expected_question_id,
+        #             },
+        #             status=403,
+        #         )
 
         # Find the question
         question = next((q for q in self.questions if q["id"] == question_id), None)
@@ -2152,7 +2304,7 @@ class TestingServer:
             next_question_index = len(self.questions)
 
         # Check if test is completed
-        test_completed = next_question_index >= len(self.questions)
+        test_completed = len(self.user_answers.get(user_id, [])) == len(self.questions)
 
         response_data = {
             "valid": True,
@@ -3952,6 +4104,7 @@ async def create_app(config: WebQuizConfig):
     app.router.add_post("/api/register", server.register_user)
     app.router.add_put("/api/update-registration", server.update_registration)
     app.router.add_post("/api/submit-answer", server.submit_answer)
+    app.router.add_post("/api/skip-question", server.skip_question)
     app.router.add_post("/api/question-start", server.question_start)
     app.router.add_get("/api/verify-user/{user_id}", server.verify_user_id)
 
