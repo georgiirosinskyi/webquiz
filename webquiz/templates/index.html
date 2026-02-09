@@ -784,17 +784,10 @@
 
         <!-- Waiting for Approval Section -->
         <div id="waiting-approval" class="section hidden">
-            <h2>Очікування підтвердження</h2>
             <p style="text-align: center; color: var(--text-color); margin: 20px 0;">
                 Ваша реєстрація очікує підтвердження адміністратором.<br>
-                Ви можете змінити свої дані нижче та натиснути кнопку "Перевірити", щоб дізнатися чи вас підтвердили.
             </p>
             <div id="waiting-error" class="error-message hidden"></div>
-            <div id="waiting-registration-fields"></div>
-            <div style="text-align: center; margin-top: 20px;">
-                <button onclick="updateRegistrationData()" style="margin-right: 10px;">💾 Зберегти зміни</button>
-                <button onclick="checkApprovalStatus()">🔄 Перевірити</button>
-            </div>
         </div>
 
         <!-- Test Section -->
@@ -833,6 +826,7 @@
         let testTimeLimitSec = null;
         let testStartedAt = null;
         let countdownTimer = null;
+        let approvalCheckTimer = null;
         let remainingSeconds = null;
 
         questions.forEach(q => {
@@ -1108,8 +1102,6 @@
             await startTest();
         }
 
-
-
         async function registerUser() {
             const username = document.getElementById('username').value.trim();
             if (!username) {
@@ -1192,27 +1184,10 @@
         }
 
         function showWaitingForApproval(registrationData) {
-            // Populate the waiting approval form with current registration data
-            const waitingFieldsContainer = document.getElementById('waiting-registration-fields');
-
-            // Create a table similar to registration form using CSS classes
-            let fieldsHTML = '<table class="registration-table">';
-            fieldsHTML += `<tr><td class="registration-label">{{USERNAME_LABEL}}:</td><td class="registration-input"><input type="text" id="waiting-username" value="${registrationData.username || ''}" /></td></tr>`;
-
-            // Add additional registration fields if they exist
-            const additionalFields = document.querySelectorAll('.registration-field');
-            for (const field of additionalFields) {
-                const fieldName = field.getAttribute('data-field-name');
-                const fieldRow = field.closest('tr');
-                const fieldLabel = fieldRow ? fieldRow.querySelector('td:first-child')?.textContent.trim() : fieldName;
-                const fieldValue = registrationData[fieldName] || '';
-
-                fieldsHTML += `<tr><td class="registration-label">${fieldLabel}</td><td class="registration-input"><input type="text" class="waiting-field" data-field-name="${fieldName}" value="${fieldValue}" /></td></tr>`;
-            }
-            fieldsHTML += '</table>';
-
-            waitingFieldsContainer.innerHTML = fieldsHTML;
             document.getElementById('waiting-approval').classList.remove('hidden');
+            approvalCheckTimer = setInterval(async () => {
+                await checkApprovalStatus();
+            }, 1000);
         }
 
         async function updateRegistrationData() {
@@ -1291,6 +1266,8 @@
                     if (data.approved) {
                         // User has been approved! Start the test
 
+                        clearInterval(approvalCheckTimer);
+
                         // Apply question order if provided (for randomization)
                         if (data.question_order) {
                             applyQuestionOrder(data.question_order);
@@ -1300,9 +1277,6 @@
                         currentQuestionIndex = 0;
                         await startTest();
                         await notifyQuestionStart(questions[currentQuestionIndex].id);
-                    } else {
-                        // Still waiting for approval
-                        showError('waiting-error', 'Ви ще не підтверджені. Будь ласка, зачекайте.');
                     }
                 } else {
                     showError('waiting-error', data.message || 'Помилка перевірки статусу');
