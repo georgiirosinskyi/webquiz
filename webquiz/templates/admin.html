@@ -862,6 +862,25 @@
             margin: 3px 0;
         }
 
+        .pending-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        #approve-all-btn {
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #approve-all-btn:disabled {
+            background: #CCCCCC;
+            cursor: not-allowed;
+            /* opacity: 0.6; */
+        }
+
         .approve-btn {
             background: var(--success-green);
             color: var(--white);
@@ -1066,7 +1085,19 @@
 
             <!-- Pending Approvals Section (only shown when registration.approve is true) -->
             <div id="pending-approvals-section" class="pending-approvals hidden">
-                <h3 style="margin-top: 0;">⏳ Очікуючі Підтвердження</h3>
+                <div class="pending-header">
+                    <h3 style="margin-top: 0;">
+                        ⏳ Очікуючі Підтвердження:
+                        <span id="pending-count">0</span>
+                    </h3>
+
+                    <button id="approve-all-btn"
+                            class="approve-btn"
+                            onclick="approveAllPending()">
+                        ✓ Підтвердити всіх
+                    </button>
+                </div>
+
                 <div id="pending-users-list">
                     <p style="text-align: center; color: var(--text-muted);">Немає користувачів, що очікують підтвердження</p>
                 </div>
@@ -3233,10 +3264,17 @@
             const listContainer = document.getElementById('pending-users-list');
             const userIds = Object.keys(pendingUsers);
 
+            updatePendingCount(userIds.length);
+
+            const approveAllBtn = document.getElementById('approve-all-btn');
+
             if (userIds.length === 0) {
+                approveAllBtn.disabled = true;
                 listContainer.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Немає користувачів, що очікують підтвердження</p>';
                 return;
             }
+
+            approveAllBtn.disabled = false;
 
             let html = '';
             for (const user_id of userIds) {
@@ -3676,6 +3714,19 @@
             }
         }
 
+        function updatePendingCount(count) {
+            document.getElementById('pending-count').textContent = count;
+        }
+
+        function approveAllPending() {
+            // if (!confirm('Підтвердити всіх користувачів?')) return;
+
+            const userIds = Object.keys(pendingUsers);
+
+            for (const user_id of userIds) {
+                approveUser(user_id);
+            }
+        }
     </script>
 
 </body>
