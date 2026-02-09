@@ -938,6 +938,8 @@ class TestingServer:
             # Store show_answers_on_completion setting (default: False)
             self.show_answers_on_completion = data.get("show_answers_on_completion", False)
 
+            self.time_limit_s = data.get("time_limit", 0)
+
             # Add automatic IDs based on array index (for quiz execution only)
             for i, question in enumerate(self.questions):
                 question["id"] = i + 1
@@ -945,7 +947,8 @@ class TestingServer:
             logger.info(
                 f"Loaded {len(self.questions)} questions from {quiz_file_path}, "
                 f"show_right_answer: {self.show_right_answer}, randomize_questions: {self.randomize_questions}, "
-                f"show_answers_on_completion: {self.show_answers_on_completion}"
+                f"show_answers_on_completion: {self.show_answers_on_completion}, "
+                f"time_limit: {self.time_limit_s}"
             )
 
     async def load_questions(self):
@@ -1554,7 +1557,8 @@ class TestingServer:
             "username": username,
             "registered_at": datetime.now().isoformat(),
             "approved": not requires_approval,  # Auto-approve if approval not required
-            "skipped_questions": []
+            "skipped_questions": [],
+            "time_limit": self.time_limit_s
         }
 
         # Add additional registration fields if configured
@@ -1620,6 +1624,8 @@ class TestingServer:
             "message": "User registered successfully",
             "requires_approval": requires_approval,
             "approved": user_data["approved"],
+            "time_limit": self.time_limit_s,
+            "quiz_start_time": datetime.now().isoformat()
         }
 
         # Include question_order if randomization is enabled
@@ -1971,6 +1977,7 @@ class TestingServer:
 
         answer_data = {
             "question": question.get("question", ""),  # Handle image-only questions
+            "question_id": question.get("id"),
             "image": question.get("image"),
             "file": file_value,
             "selected_answer": selected_answer_text,
@@ -2047,6 +2054,98 @@ class TestingServer:
                 response_data["is_multiple_choice"] = isinstance(question["correct_answer"], list)
 
         return web.json_response(response_data)
+
+    async def finish_test(self, request):
+        """Finish test attempt.
+
+        Finalizes the test session for a user. Marks the test as completed,
+        calculates final results and statistics, handles timeout or manual
+        completion, and broadcasts completion status to WebSocket clients.
+
+        Args:
+            request: aiohttp request with user_id and optional finish reason
+                     (e.g. "timeout", "manual", "forced")
+
+        Returns:
+            JSON response with success status
+        """
+
+        data = await request.json()
+        user_id = data["user_id"]
+        reason = data["reason"]
+
+        # Find user by user_id
+        if user_id not in self.users:
+            return web.json_response({"error": "Користувача не знайдено"}, status=404)
+
+        username = self.users[user_id]["username"]
+        user_data = self.users[user_id]
+
+        # Track answer separately for stats calculation (independent of CSV flushing)
+        if user_id not in self.user_answers:
+            self.user_answers[user_id] = []
+
+        for question in self.questions:
+            has_answer = False
+            for answer in self.user_answers[user_id]:
+                if answer["question_id"] == question["id"]:
+                    has_answer = True
+                    break
+            if has_answer:
+                continue
+
+            # Normalize file path for results (prepend /attach/ if needed)
+            file_value = question.get("file")
+            if file_value and not file_value.startswith("/attach/"):
+                file_value = f"/attach/{file_value}"
+
+            is_text_question = "checker" in question
+            if is_text_question:
+                correct_answer_text = question.get("correct_value", "")
+            else:
+                correct_answer_text = self._format_answer_text(question["correct_answer"], question.get("options"))
+
+            answer_data = {
+                "question": question.get("question", ""),  # Handle image-only questions
+                "question_id": question.get("id"),
+                "image": question.get("image"),
+                "file": file_value,
+                "selected_answer": "",
+                "correct_answer": correct_answer_text,
+                "is_correct": False,
+                "time_taken": 0,
+                "points": question.get("points", 1),  # Points for this question
+                "earned_points": 0,  # Points actually earned
+            }
+
+            self.user_answers[user_id].append(answer_data)
+
+            # Update live stats: set current question state based on correctness
+            state = "fail"
+            self.update_live_stats(user_id, question.get("id"), state, 0)
+
+            await self.broadcast_to_websockets(
+                {
+                    "type": "state_update",
+                    "user_id": user_id,
+                    "username": username,
+                    "question_id": question.get("id"),
+                    "state": state,
+                    "time_taken": 0,
+                    "total_questions": len(self.questions),
+                    "total_points": sum(q.get("points", 1) for q in self.questions),
+                    "earned_points": 0,
+                    "question_points": question.get("points", 1),
+                    "completed": True,
+                    "completed_at": self.user_stats.get(user_id, {}).get("completed_at"),
+                }
+            )
+
+        # Test completed - calculate and store final stats
+        self.calculate_and_store_user_stats(user_id)
+        logger.info(f"Test completed for user {user_id} - final stats calculated")
+
+        return web.json_response({"status": "success"})
 
     async def question_start(self, request):
         """Handle notification that a user started viewing a question.
@@ -2500,6 +2599,8 @@ class TestingServer:
             user_data["question_order"] = self.generate_random_question_order()
             logger.info(f"Generated random question order for approved user {user_id}: {user_data['question_order']}")
 
+        user_data["time_limit"] = self.time_limit_s
+        user_data["quiz_start_time"] = datetime.now().isoformat()
         self.users[user_id] = user_data
 
         # Start timing for first question
@@ -4107,6 +4208,7 @@ async def create_app(config: WebQuizConfig):
     app.router.add_post("/api/skip-question", server.skip_question)
     app.router.add_post("/api/question-start", server.question_start)
     app.router.add_get("/api/verify-user/{user_id}", server.verify_user_id)
+    app.router.add_post("/api/finish-test", server.finish_test)
 
     # Admin routes
     app.router.add_get("/admin/", server.serve_admin_page)

@@ -345,6 +345,23 @@
         .current  { background: #3ca841; }
         .current:hover  { background: rgb(55, 131, 59); }
 
+        #timer {
+            background: none !important;
+            border: none !important;
+            padding: 0 !important;
+
+            font-size: 30px;
+            font-weight: bold;
+            text-align: right;
+
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 6px;
+        }
+        #timer.warning { color: #fb8c00; }
+        #timer.danger  { color: #dc3545; }
+
         #question-box {
             border: 1px solid #ccc;
             padding: 15px;
@@ -782,7 +799,9 @@
 
         <!-- Test Section -->
         <div id="test-section" class="section hidden">
-            <div id="nav"></div>
+            <div id="timer" class="user-info">
+                ⏳ <span id="timer-value"></span>
+            </div>
             <div id="test-error" class="error-message hidden"></div>
             <div id="current-question-container"></div>
             <div class="button-container">
@@ -790,6 +809,7 @@
                 <button id="continue-btn" onclick="continueToNextQuestion()" class="hidden">Продовжити</button>
                 <button id="skip-question-btn" class="action" onclick="skipCurrentQuestion()">Пропустити питання</button>
             </div>
+            <div id="nav"></div>
         </div>
 
         <!-- Results Section -->
@@ -809,6 +829,11 @@
         let selectedAnswers = []; // For multiple choice questions
         let textAnswer = ''; // For text input questions
         let testResults = [];
+
+        let testTimeLimitSec = null;
+        let testStartedAt = null;
+        let countdownTimer = null;
+        let remainingSeconds = null;
 
         questions.forEach(q => {
             q.status = "unseen"
@@ -1130,6 +1155,11 @@
                     currentUserId = data.user_id;
                     setCookie('user_id', currentUserId);
 
+                    if (data.time_limit) {
+                        testTimeLimitSec = data.time_limit;
+                        testStartedAt = new Date(data.quiz_start_time);
+                    }
+
                     // Save registration data to localStorage for future use
                     saveRegistrationData(registrationData);
 
@@ -1287,6 +1317,7 @@
             selectedAnswer = null;
             testResults = [];
             document.getElementById('test-section').classList.remove('hidden');
+            startCountdownIfNeeded();
             await showCurrentQuestion(false); // Don't animate first question
         }
 
@@ -2027,6 +2058,82 @@
             `;
 
             document.getElementById('results').classList.remove('hidden');
+        }
+
+        function calculateRemainingSeconds() {
+            if (!testTimeLimitSec || !testStartedAt) return null;
+
+            const now = new Date();
+            const elapsed = Math.floor((now - testStartedAt) / 1000);
+            return Math.max(0, testTimeLimitSec - elapsed);
+        }
+
+        function startCountdownIfNeeded() {
+            const timerEl = document.getElementById('timer');
+
+            if (!testTimeLimitSec) {
+                timerEl.classList.add('hidden');
+                timerEl.style.display = 'none';
+                return;
+            }
+
+            remainingSeconds = calculateRemainingSeconds();
+            if (remainingSeconds <= 0) {
+                finishTestByTimeout();
+                return;
+            }
+
+            timerEl.style.display = 'block';
+
+            updateTimerUI();
+
+            countdownTimer = setInterval(() => {
+                remainingSeconds--;
+
+                updateTimerUI();
+
+                if (remainingSeconds <= 0) {
+                    clearInterval(countdownTimer);
+                    finishTestByTimeout();
+                }
+            }, 1000);
+        }
+
+        function updateTimerUI() {
+            const timerEl = document.getElementById('timer');
+            const valueEl = document.getElementById('timer-value');
+
+            const min = Math.floor(remainingSeconds / 60);
+            const sec = remainingSeconds % 60;
+
+            valueEl.textContent = `${min}:${sec.toString().padStart(2, '0')}`;
+
+            timerEl.classList.remove('warning', 'danger');
+
+            if (remainingSeconds <= 60) {
+                timerEl.classList.add('danger');
+            } else if (remainingSeconds <= 180) {
+                timerEl.classList.add('warning');
+            }
+        }
+
+        async function finishTestByTimeout() {
+            showError('test-error', '⏰ Час тесту вичерпано');
+
+            try {
+                await fetch('api/finish-test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: currentUserId,
+                        reason: 'timeout'
+                    })
+                });
+            } catch (e) {
+                console.warn('Failed to notify server about timeout');
+            }
+
+            await fetchAndShowFinalResults();
         }
     </script>
 
