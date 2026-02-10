@@ -15,6 +15,7 @@ title: "Назва тесту"
 description: "Опис тесту (необов'язково)"
 show_right_answer: false
 randomize_questions: false  # true для випадкового порядку питань для кожного учня
+time_limit: 300 # Ліміт по часу у секундах
 questions:
   - question: "Текст питання"
     options:

@@ -15,6 +15,7 @@ title: "Test Title"
 description: "Test description (optional)"
 show_right_answer: false
 randomize_questions: false  # true for randomized question order for each student
+time_limit: 300 # Time limit in seconds
 questions:
   - question: "Question text"
     options:
