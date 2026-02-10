@@ -12,7 +12,7 @@ import tempfile
 import shutil
 import random
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from aiohttp import web, WSMsgType
@@ -1150,21 +1150,24 @@ class TestingServer:
         csv_writer = csv.writer(csv_buffer)
 
         # Determine headers based on registration fields
-        headers = ["user_id", "username"]
+        headers = ["№", "ПІБ"]
         if hasattr(self.config, "registration") and self.config.registration.fields:
             for field_label in self.config.registration.fields:
-                field_name = field_label.lower().replace(" ", "_")
+                field_name = field_label.replace(" ", "_")
                 headers.append(field_name)
+
         headers.extend(
-            ["registered_at", "total_questions_asked", "correct_answers", "earned_points", "total_points", "total_time"]
+            ["Оцінка", "Витрачено часу", "Дано відповідей", "Правильні відповіді", "Всього питань", "Старт тесту", "Завершення тесту"]
         )
 
         # Always write headers (we always overwrite the file)
         csv_writer.writerow(headers)
 
         # Write all user data to buffer
+        i = 1
         for user_id, user_data in self.users.items():
-            row = [user_id, user_data["username"]]
+            row = [i, user_data["username"]]
+            i = i + 1
 
             # Add additional registration fields in order
             if hasattr(self.config, "registration") and self.config.registration.fields:
@@ -1172,22 +1175,28 @@ class TestingServer:
                     field_name = field_label.lower().replace(" ", "_")
                     row.append(user_data.get(field_name, ""))
 
-            row.append(user_data.get("registered_at", ""))
-
             # Calculate and add user statistics
             user_answer_list = self.user_answers.get(user_id, [])
-            total_questions_asked = len(user_answer_list)
+            # time_taken == -1 indicates a placeholder answer generated after the quiz timeout
+            answers_given = len([a for a in user_answer_list if a["time_taken"] != -1])
             correct_answers = sum(answer["is_correct"] for answer in user_answer_list)
-            earned_points = sum(
-                answer.get("earned_points", 1 if answer["is_correct"] else 0) for answer in user_answer_list
-            )
-            total_points = sum(answer.get("points", 1) for answer in user_answer_list)
-            total_time_seconds = sum(answer.get("time_taken", 0) for answer in user_answer_list)
+            total_questions = len(self.questions)
+            percentage = round((correct_answers / total_questions) * 100) if total_questions > 0 else 0
+            mark = self.get_mark(percentage)
+            start_dt = user_data.get("quiz_start_time")
+            end_dt = user_data.get("quiz_finish_time")
+
+            if start_dt and end_dt:
+                total_time_seconds = (end_dt - start_dt).total_seconds()
+            else:
+                total_time_seconds = 0
+            time_start = start_dt.strftime("%d.%m.%Y %H:%M:%S") if start_dt else ""
+            time_end = end_dt.strftime("%d.%m.%Y %H:%M:%S") if end_dt else ""
             # Format total_time as MM:SS
             minutes = int(total_time_seconds // 60)
             seconds = int(total_time_seconds % 60)
             total_time_formatted = f"{minutes}:{seconds:02d}"
-            row.extend([total_questions_asked, correct_answers, earned_points, total_points, total_time_formatted])
+            row.extend([mark, total_time_formatted, answers_given, correct_answers, len(self.questions), time_start, time_end])
 
             csv_writer.writerow(row)
 
@@ -1583,6 +1592,7 @@ class TestingServer:
         if not requires_approval:
             # Start timing for first question
             self.question_start_times[user_id] = datetime.now()
+            user_data["quiz_start_time"] = datetime.now()
 
             # Initialize live stats: set first question to "think"
             if len(self.questions) > 0:
@@ -2006,6 +2016,7 @@ class TestingServer:
         test_completed = len(self.user_answers.get(user_id, [])) == len(self.questions)
         completion_time = None
         if test_completed:
+            user_data["quiz_finish_time"] = datetime.now()
             # Test completed - calculate and store final stats
             self.calculate_and_store_user_stats(user_id)
             # Get completion time from stored stats
@@ -2080,6 +2091,10 @@ class TestingServer:
 
         username = self.users[user_id]["username"]
         user_data = self.users[user_id]
+        if (reason == "timeout"):
+            user_data["quiz_finish_time"] = user_data["quiz_start_time"] + timedelta(seconds=self.time_limit_s)
+        else:
+            user_data["quiz_finish_time"] = datetime.now()
 
         # Track answer separately for stats calculation (independent of CSV flushing)
         if user_id not in self.user_answers:
@@ -2113,7 +2128,7 @@ class TestingServer:
                 "selected_answer": "",
                 "correct_answer": correct_answer_text,
                 "is_correct": False,
-                "time_taken": 0,
+                "time_taken": -1,
                 "points": question.get("points", 1),  # Points for this question
                 "earned_points": 0,  # Points actually earned
             }
@@ -2137,7 +2152,7 @@ class TestingServer:
                     "earned_points": 0,
                     "question_points": question.get("points", 1),
                     "completed": True,
-                    "completed_at": self.user_stats.get(user_id, {}).get("completed_at"),
+                    "completed_at": user_data["quiz_finish_time"],
                 }
             )
 
@@ -2191,6 +2206,18 @@ class TestingServer:
 
         return web.json_response({"status": "success"})
 
+    def get_mark(self, percentage):
+        if (percentage >= 95):
+            mark = 5
+        elif (percentage >= 80):
+            mark = 4
+        elif (percentage >= 60):
+            mark = 3
+        else:
+            mark = 2
+
+        return mark
+
     def calculate_and_store_user_stats(self, user_id):
         """Calculate and store final stats for a completed user.
 
@@ -2240,27 +2267,23 @@ class TestingServer:
         percentage = round((correct_count / total_count) * 100) if total_count > 0 else 0
         points_percentage = round((earned_points / total_points) * 100) if total_points > 0 else 0
 
-        if (percentage >= 95):
-            mark = 5
-        elif (percentage >= 80):
-            mark = 4
-        elif (percentage >= 60):
-            mark = 3
-        else:
-            mark = 2
+        # time_taken == -1 indicates a placeholder answer generated after the quiz timeout
+        given_answers_count = len([a for a in sorted_answers if a["time_taken"] != -1])
+
+        mark = self.get_mark(percentage)
 
         # Store final stats (copy the answer data to avoid reference issues)
         self.user_stats[user_id] = {
             "test_results": [answer.copy() for answer in sorted_answers],
             "correct_count": correct_count,
-            "total_count": total_count,
+            "total_count": given_answers_count,
             "percentage": percentage,
             "mark": mark,
             "earned_points": earned_points,
             "total_points": total_points,
             "points_percentage": points_percentage,
             "total_time": total_time,
-            "completed_at": datetime.now().isoformat(),
+            "completed_at": user_data["quiz_finish_time"],
         }
 
         logger.info(
@@ -2440,7 +2463,7 @@ class TestingServer:
             "total_questions": len(self.questions),
             "last_answered_question_id": last_answered_question_id,
             "test_completed": test_completed,
-            "quiz_start_time": user_data.get("quiz_start_time", datetime.now().isoformat())
+            "quiz_start_time": user_data.get("quiz_start_time", datetime.now()).isoformat()
         }
 
         # Include question_order if randomization is enabled
@@ -2627,7 +2650,7 @@ class TestingServer:
             logger.info(f"Generated random question order for approved user {user_id}: {user_data['question_order']}")
 
         user_data["time_limit"] = self.time_limit_s
-        user_data["quiz_start_time"] = datetime.now().isoformat()
+        user_data["quiz_start_time"] = datetime.now()
         self.users[user_id] = user_data
 
         # Start timing for first question
