@@ -2205,7 +2205,23 @@ class TestingServer:
             logger.warning(f"No answers found for user {user_id} during stats calculation")
             return
 
+        user_data = self.users[user_id]
+        if getattr(self, "randomize_questions", False) and "question_order" in user_data:
+            question_order = user_data["question_order"]
+        else:
+            question_order = [q["id"] for q in self.questions]
+
+        question_position = {}
+
+        for idx, qid in enumerate(question_order):
+            question_position[qid] = idx
+
         user_answer_list = self.user_answers[user_id]
+
+        sorted_answers = sorted(
+            user_answer_list,
+            key=lambda a: question_position.get(a["question_id"], float("inf"))
+        )
 
         # Calculate stats from user_answers
         correct_count = 0
@@ -2213,20 +2229,20 @@ class TestingServer:
         earned_points = 0
         total_points = 0
 
-        for answer in user_answer_list:
+        for answer in sorted_answers:
             if answer["is_correct"]:
                 correct_count += 1
             total_time += answer["time_taken"]
             earned_points += answer.get("earned_points", 1 if answer["is_correct"] else 0)
             total_points += answer.get("points", 1)
 
-        total_count = len(user_answer_list)
+        total_count = len(sorted_answers)
         percentage = round((correct_count / total_count) * 100) if total_count > 0 else 0
         points_percentage = round((earned_points / total_points) * 100) if total_points > 0 else 0
 
         # Store final stats (copy the answer data to avoid reference issues)
         self.user_stats[user_id] = {
-            "test_results": [answer.copy() for answer in user_answer_list],
+            "test_results": [answer.copy() for answer in sorted_answers],
             "correct_count": correct_count,
             "total_count": total_count,
             "percentage": percentage,
