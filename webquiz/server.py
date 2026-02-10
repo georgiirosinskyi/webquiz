@@ -2414,6 +2414,7 @@ class TestingServer:
             "total_questions": len(self.questions),
             "last_answered_question_id": last_answered_question_id,
             "test_completed": test_completed,
+            "quiz_start_time": user_data.get("quiz_start_time", datetime.now().isoformat())
         }
 
         # Include question_order if randomization is enabled

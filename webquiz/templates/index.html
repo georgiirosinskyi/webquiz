@@ -1268,6 +1268,8 @@
 
                         clearInterval(approvalCheckTimer);
 
+                        testStartedAt = new Date(data.quiz_start_time);
+
                         // Apply question order if provided (for randomization)
                         if (data.question_order) {
                             applyQuestionOrder(data.question_order);
