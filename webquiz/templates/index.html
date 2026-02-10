@@ -1981,7 +1981,7 @@
             container.innerHTML = '';
 
             const correctCount = finalResults.correct_count;
-            const totalCount = finalResults.total_count;
+            const totalCount = questions.length;
             const percentage = finalResults.percentage;
             const mark = finalResults.mark;
             const earnedPoints = finalResults.earned_points || 0;
@@ -2035,7 +2035,7 @@
                                     <span class="${result.is_correct === true ? 'answer-correct' : (result.is_correct === false ? 'answer-incorrect' : '')}">
                                         ${formatAnswerForDisplay(result.selected_answer)}
                                     </span>
-                                    ${result.is_correct === false && result.correct_answer && (showRightAnswer || hasCorrectAnswers) ? `<div class="correct-answer-hint">Правильна: ${formatAnswerForDisplay(result.correct_answer)}</div>` : ''}
+                                    ${result.is_correct === false && result.correct_answer && result.selected_answer && (showRightAnswer || hasCorrectAnswers) ? `<div class="correct-answer-hint">Правильна: ${formatAnswerForDisplay(result.correct_answer)}</div>` : ''}
                                 </td>
                                 <td data-label="Правильно" style="text-align: center;">
                                     ${result.is_correct !== undefined ? `<span class="${result.is_correct ? 'correct' : 'incorrect'}" style="font-size: 18px;">${result.is_correct ? '✓' : '✗'}</span>` : '<span style="color: #666;">не відомо</span>'}
