@@ -1307,7 +1307,9 @@
                 btn.className = `q-btn ${q.status}`;
 
                 btn.onclick = () => {
-                    if (q.status === "unseen") return;
+                    if (q.status === "unseen") {
+                        return;
+                    }
                     continueToNextQuestion(index);
                 };
 
@@ -1408,7 +1410,9 @@
                 skipBtn.classList.remove('hidden');
                 skipBtn.disabled = false;
 
-                if (question.status === "answered") {
+                const nextQuestionWasSeen = (questions[currentQuestionIndex + 1].status !== "unseen");
+
+                if (question.status === "answered" || nextQuestionWasSeen) {
                     skipBtn.textContent = "Далі"
                 } else {
                     skipBtn.textContent = "Пропустити"
@@ -1496,7 +1500,10 @@
             skipBtn.disabled = true;
 
             try {
-                if (question.status !== "answered") {
+                const isNotLastQuestion = (currentQuestionIndex < (questions.length - 1));
+                const nextQuestionUnseen = isNotLastQuestion && (questions[currentQuestionIndex + 1].status === "unseen");
+
+                if ((question.status !== "answered") && nextQuestionUnseen) {
                     const response = await fetch('api/skip-question', {
                         method: 'POST',
                         headers: {
@@ -1785,6 +1792,9 @@
             if (continueBtn) {
                 continueBtn.disabled = true;
             }
+
+            const skipBtn = document.getElementById('skip-question-btn');
+            skipBtn.classList.add('hidden');
 
             // Only apply fade-out animation for manual transitions (not auto-advance)
             if (withAnimation) {
