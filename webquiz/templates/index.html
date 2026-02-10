@@ -1786,7 +1786,7 @@
             continueBtn.disabled = false; // Re-enable for the next question
         }
 
-        async function continueToNextQuestion(questionIdx = null, withAnimation = true) {
+        async function continueToNextQuestion(questionIdx = null, withAnimation = false) {
             // Disable continue button to prevent double-clicks during animation
             const continueBtn = document.getElementById('continue-btn');
             if (continueBtn) {
