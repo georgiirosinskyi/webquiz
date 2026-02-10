@@ -895,9 +895,16 @@ class TestingServer:
             file_path = self.config_file if hasattr(self, "config_file") else "config.yaml"
         default_questions = {
             "title": "Тестовий Quiz",
-            "show_right_answer": True,
+            "show_right_answer": False,
+            "show_answers_on_completion": True,
+            "randomize_questions": False,
+            "time_limit": 300,
             "questions": [
-                {"question": "Скільки буде 2 + 2?", "options": ["3", "4", "5", "6"], "correct_answer": 1},
+                {
+                    "question": "Скільки буде 2 + 2?",
+                    "options": ["3", "4", "5", "6"],
+                    "correct_answer": 1,
+                },
                 {
                     "question": "Яка столиця України?",
                     "options": ["Харків", "Львів", "Київ", "Одеса"],
