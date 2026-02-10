@@ -320,12 +320,12 @@ jobs:
           binaries/webquiz-macos-apple-silicon/webquiz-macos-apple-silicon.zip \
           binaries/webquiz-windows.exe/webquiz-windows.exe.zip
 
-  deploy-pages:
-    needs: release
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    uses: ./.github/workflows/deploy-pages.yml
-    with:
-      version: ${{ github.event.inputs.version }}
+#  deploy-pages:
+#    needs: release
+#    permissions:
+#      contents: read
+#      pages: write
+#      id-token: write
+#    uses: ./.github/workflows/deploy-pages.yml
+#    with:
+#      version: ${{ github.event.inputs.version }}
