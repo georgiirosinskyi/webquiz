@@ -20,6 +20,7 @@ import aiofiles
 import logging
 from io import StringIO
 import ipaddress
+from importlib import resources
 
 from .config import WebQuizConfig, load_config_from_yaml
 from .tunnel import TunnelManager
@@ -53,6 +54,17 @@ def read_package_resource(filename: str) -> str:
         import pkg_resources
 
         return pkg_resources.resource_string("webquiz", filename).decode("utf-8")
+
+def copy_resource(filename: str, dst_dir: Path):
+    dst_dir.mkdir(parents=True, exist_ok=True)
+
+    dst_file = dst_dir / Path(filename).name
+
+    if dst_file.exists():
+        return
+
+    with resources.as_file(resources.files("webquiz") / filename) as src:
+        shutil.copy2(src, dst_file)
 
 
 def get_package_version() -> str:
@@ -796,6 +808,11 @@ class TestingServer:
 
         # Regenerate index.html with new questions
         await self.create_default_index_html()
+
+        img_path = Path(f"{self.static_dir}/img")
+        copy_resource("img/background.png", img_path)
+        copy_resource("img/top-left.png", img_path)
+        copy_resource("img/top-right.png", img_path)
 
         # Notify WebSocket clients about quiz switch
         await self.broadcast_to_websockets(

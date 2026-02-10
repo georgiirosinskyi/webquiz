@@ -37,6 +37,10 @@
             --shadow: rgba(0,0,0,0.3);
         }
 
+        html, body {
+            height: 100%;
+            margin: 0;
+            }
         body {
             font-family: Arial, sans-serif;
             max-width: 800px;
@@ -45,6 +49,12 @@
             background-color: var(--bg-color);
             color: var(--text-color);
             transition: background-color 0.3s ease, color 0.3s ease;
+
+            background-image: url('img/background.png');
+            background-size: cover;
+            background-position: center top;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
         }
         .container {
             background: var(--container-bg);
@@ -754,9 +764,28 @@
             border-color: #28a745;
             color: #a5d6a7;
         }
+
+        .corner-image {
+            position: fixed;
+            top: 20px;
+            width: 180px;           /* розмір картинки */
+            height: auto;
+            z-index: 0;
+            pointer-events: none; /* не заважає клікам */
+        }
+
+        .corner-image.top-left {
+            left: 20px;
+        }
+
+        .corner-image.top-right {
+            right: 20px;
+        }
     </style>
 </head>
 <body>
+    <img src="img/top-left.png" class="corner-image top-left" alt="">
+    <img src="img/top-right.png" class="corner-image top-right" alt="">
     <div class="container">
         <div class="top-right-controls">
             <div class="user-info" id="user-info">

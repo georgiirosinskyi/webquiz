@@ -29,6 +29,7 @@ classifiers = [
 packages = [{include = "webquiz"}]
 include = [
     "webquiz/templates/*",
+    "webquiz/img/*",
     "server_config.yaml.example"
 ]
 

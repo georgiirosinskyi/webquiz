@@ -27,6 +27,8 @@ def main():
         "--name",
         "webquiz",
         "--add-data",
+        f"{project_root / 'webquiz' / 'img'}:webquiz/img",
+        "--add-data",
         f"{project_root / 'webquiz' / 'templates'}:webquiz/templates",
         "--add-data",
         f"{project_root / 'webquiz' / 'server_config.yaml.example'}:webquiz/",
