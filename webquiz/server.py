@@ -2240,12 +2240,22 @@ class TestingServer:
         percentage = round((correct_count / total_count) * 100) if total_count > 0 else 0
         points_percentage = round((earned_points / total_points) * 100) if total_points > 0 else 0
 
+        if (percentage >= 95):
+            mark = 5
+        elif (percentage >= 80):
+            mark = 4
+        elif (percentage >= 60):
+            mark = 3
+        else:
+            mark = 2
+
         # Store final stats (copy the answer data to avoid reference issues)
         self.user_stats[user_id] = {
             "test_results": [answer.copy() for answer in sorted_answers],
             "correct_count": correct_count,
             "total_count": total_count,
             "percentage": percentage,
+            "mark": mark,
             "earned_points": earned_points,
             "total_points": total_points,
             "points_percentage": points_percentage,

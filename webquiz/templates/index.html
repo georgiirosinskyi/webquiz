@@ -1983,6 +1983,7 @@
             const correctCount = finalResults.correct_count;
             const totalCount = finalResults.total_count;
             const percentage = finalResults.percentage;
+            const mark = finalResults.mark;
             const earnedPoints = finalResults.earned_points || 0;
             const totalPoints = finalResults.total_points || totalCount;
             const pointsPercentage = finalResults.points_percentage || percentage;
@@ -2004,6 +2005,7 @@
 
             container.innerHTML = `
                 <p><strong>Результат:</strong> ${correctCount}/${totalCount} (${percentage}%)</p>
+                <p><strong>Оцінка:</strong> ${mark}</p>
                 ${pointsDisplay}
                 ${shouldShowWaitingMessage ? `
                     <div style="background: var(--stats-bg); padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #2196f3;">
