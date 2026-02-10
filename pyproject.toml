@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "webquiz"
+name = "webquizplus"
 version = "1.15.2"
 description = "A modern web-based quiz and testing system built with Python and aiohttp"
 authors = ["Oleksandr Liabakh <oduvan@gmail.com>"]
