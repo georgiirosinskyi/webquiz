@@ -267,7 +267,7 @@ jobs:
 
         **Linux:**
         ```bash
-        wget https://github.com/oduvan/webquiz/releases/download/v${{ github.event.inputs.version }}/webquiz-linux.zip
+        wget https://github.com/georgiirosinskyi/webquiz/releases/download/v${{ github.event.inputs.version }}/webquiz-linux.zip
         unzip webquiz-linux.zip
         chmod +x webquiz-linux
         ./webquiz-linux --help
@@ -275,7 +275,7 @@ jobs:
 
         **macOS Intel (x86_64):**
         ```bash
-        wget https://github.com/oduvan/webquiz/releases/download/v${{ github.event.inputs.version }}/webquiz-macos-intel.zip
+        wget https://github.com/georgiirosinskyi/webquiz/releases/download/v${{ github.event.inputs.version }}/webquiz-macos-intel.zip
         unzip webquiz-macos-intel.zip
         chmod +x webquiz-macos-intel
         ./webquiz-macos-intel --help
@@ -283,7 +283,7 @@ jobs:
 
         **macOS Apple Silicon (ARM64/M1/M2/M3):**
         ```bash
-        wget https://github.com/oduvan/webquiz/releases/download/v${{ github.event.inputs.version }}/webquiz-macos-apple-silicon.zip
+        wget https://github.com/georgiirosinskyi/webquiz/releases/download/v${{ github.event.inputs.version }}/webquiz-macos-apple-silicon.zip
         unzip webquiz-macos-apple-silicon.zip
         chmod +x webquiz-macos-apple-silicon
         ./webquiz-macos-apple-silicon --help
@@ -301,7 +301,7 @@ jobs:
         ```
 
         ## What's Changed
-        See the [commit history](https://github.com/oduvan/webquiz/commits/v${{ github.event.inputs.version }}) for detailed changes.
+        See the [commit history](https://github.com/georgiirosinskyi/webquiz/commits/v${{ github.event.inputs.version }}) for detailed changes.
 
         ---
         *This release was automatically created by the release workflow.*
@@ -319,38 +319,6 @@ jobs:
           binaries/webquiz-macos-intel/webquiz-macos-intel.zip \
           binaries/webquiz-macos-apple-silicon/webquiz-macos-apple-silicon.zip \
           binaries/webquiz-windows.exe/webquiz-windows.exe.zip
-
-    - name: Update webquiz-ansible repository
-      env:
-        ANSIBLE_REPO_TOKEN: ${{ secrets.ANSIBLE_REPO_TOKEN }}
-      run: |
-        echo "Updating webquiz-ansible repository with new version ${{ github.event.inputs.version }}"
-
-        # Clone the webquiz-ansible repository
-        git clone https://$ANSIBLE_REPO_TOKEN@github.com/oduvan/webquiz-ansible.git
-        cd webquiz-ansible
-
-        # Configure git for the action
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-
-        # Update the version in playbooks/raspberry-pi.yml (GitHub release URL format)
-        sed -i 's|https://github.com/oduvan/webquiz/releases/download/v[0-9]\+\(\.[0-9]\+\)\{0,2\}/webquiz-[0-9]\+\(\.[0-9]\+\)\{0,2\}\.tar\.gz|https://github.com/oduvan/webquiz/releases/download/v${{ github.event.inputs.version }}/webquiz-${{ github.event.inputs.version }}.tar.gz|g' playbooks/raspberry-pi.yml
-
-        # Check if there are any changes to commit
-        if git diff --quiet; then
-          echo "No changes to commit - version may already be up to date"
-        else
-          # Commit and push the changes
-          git add playbooks/raspberry-pi.yml
-          git commit -m "Update webquiz version to ${{ github.event.inputs.version }}
-
-          Automatically updated by webquiz release workflow.
-          Release: https://github.com/oduvan/webquiz/releases/tag/v${{ github.event.inputs.version }}"
-
-          git push origin master
-          echo "Successfully updated webquiz-ansible repository"
-        fi
 
   deploy-pages:
     needs: release
