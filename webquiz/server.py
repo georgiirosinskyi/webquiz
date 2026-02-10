@@ -1729,45 +1729,6 @@ class TestingServer:
         username = self.users[user_id]["username"]
         user_data = self.users[user_id]
 
-        # # Validate question order for randomized quizzes (security check)
-        # if getattr(self, "randomize_questions", False) and "question_order" in user_data:
-        #     question_order = user_data["question_order"]
-        #     last_answered_id = self.user_progress.get(user_id, 0)
-
-        #     # Determine the expected next question
-        #     if last_answered_id == 0:
-        #         # First question - should be the first in their order
-        #         expected_question_id = question_order[0]
-        #     else:
-        #         # Find the index of last answered question in their order
-        #         try:
-        #             last_index = question_order.index(last_answered_id)
-        #             next_index = last_index + 1
-
-        #             # Check if user has finished all questions
-        #             if next_index >= len(question_order):
-        #                 return web.json_response({"error": "Ви вже відповіли на всі питання"}, status=400)
-
-        #             expected_question_id = question_order[next_index]
-        #         except ValueError:
-        #             # Last answered question not in order (shouldn't happen)
-        #             logger.error(f"User {user_id} last_answered_id {last_answered_id} not found in question_order")
-        #             return web.json_response({"error": "Помилка валідації порядку питань"}, status=500)
-
-        #     # Validate submitted question matches expected
-        #     if question_id != expected_question_id:
-        #         logger.warning(
-        #             f"User {user_id} attempted to answer question {question_id} "
-        #             f"but expected question {expected_question_id}"
-        #         )
-        #         return web.json_response(
-        #             {
-        #                 "error": "Ви можете відповідати лише на поточне питання",
-        #                 "expected_question_id": expected_question_id,
-        #             },
-        #             status=403,
-        #         )
-
         # Find the question
         question = next((q for q in self.questions if q["id"] == question_id), None)
         if not question:
@@ -1780,45 +1741,7 @@ class TestingServer:
             # Clean up the start time
             del self.question_start_times[user_id]
 
-        # Store response in memory
-        # response_data = {
-        #     "user_id": user_id,
-        #     "username": username,
-        #     "question_id": question_id,
-        #     "question": question.get("question", ""),  # Handle image-only questions
-        #     "selected_answer": "",
-        #     "correct_answer": "",
-        #     "is_correct": False,
-        #     "time_taken_seconds": time_taken,
-        #     "timestamp": datetime.now().isoformat(),
-        # }
-
-        # self.user_responses.append(response_data)
-
         user_data["skipped_questions"].append(question_id);
-
-        # # Track answer separately for stats calculation (independent of CSV flushing)
-        # if user_id not in self.user_answers:
-        #     self.user_answers[user_id] = []
-
-        # # Normalize file path for results (prepend /attach/ if needed)
-        # file_value = question.get("file")
-        # if file_value and not file_value.startswith("/attach/"):
-        #     file_value = f"/attach/{file_value}"
-
-        # answer_data = {
-        #     "question": question.get("question", ""),  # Handle image-only questions
-        #     "image": question.get("image"),
-        #     "file": file_value,
-        #     "selected_answer": "",
-        #     "correct_answer": "",
-        #     "is_correct": False,
-        #     "time_taken": time_taken,
-        #     "points": 0,
-        #     "earned_points": 0
-        # }
-
-        # self.user_answers[user_id].append(answer_data)
 
         # Update user progress
         self.user_progress[user_id] = question_id
@@ -1878,47 +1801,6 @@ class TestingServer:
 
         username = self.users[user_id]["username"]
         user_data = self.users[user_id]
-
-        # # Validate question order for randomized quizzes (security check)
-        # if getattr(self, "randomize_questions", False) and "question_order" in user_data:
-        #     question_order = user_data["question_order"]
-        #     last_answered_id = self.user_progress.get(user_id, 0)
-
-        #     # Determine the expected next question
-        #     if last_answered_id == 0:
-        #         # First question - should be the first in their order
-        #         expected_question_id = question_order[0]
-        #     else:
-        #         # Find the index of last answered question in their order
-        #         try:
-        #             last_index = question_order.index(last_answered_id)
-        #             next_index = last_index + 1
-
-        #             print(f"last_index: {last_index}, next_index: {next_index}, len(question_order): {len(question_order)}")
-
-        #             # Check if user has finished all questions
-        #             if next_index >= len(question_order):
-        #                 return web.json_response({"error": "Ви вже відповіли на всі питання"}, status=400)
-
-        #             expected_question_id = question_order[next_index]
-        #         except ValueError:
-        #             # Last answered question not in order (shouldn't happen)
-        #             logger.error(f"User {user_id} last_answered_id {last_answered_id} not found in question_order")
-        #             return web.json_response({"error": "Помилка валідації порядку питань"}, status=500)
-
-        #     # Validate submitted question matches expected
-        #     if question_id != expected_question_id:
-        #         logger.warning(
-        #             f"User {user_id} attempted to answer question {question_id} "
-        #             f"but expected question {expected_question_id}"
-        #         )
-        #         return web.json_response(
-        #             {
-        #                 "error": "Ви можете відповідати лише на поточне питання",
-        #                 "expected_question_id": expected_question_id,
-        #             },
-        #             status=403,
-        #         )
 
         # Find the question
         question = next((q for q in self.questions if q["id"] == question_id), None)
