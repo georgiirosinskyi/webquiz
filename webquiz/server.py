@@ -1192,7 +1192,7 @@ class TestingServer:
 
         # Use StringIO buffer to write CSV data
         csv_buffer = StringIO()
-        csv_writer = csv.writer(csv_buffer)
+        csv_writer = csv.writer(csv_buffer, lineterminator="\n")
 
         # Determine headers based on registration fields
         headers = ["№", "ПІБ"]
