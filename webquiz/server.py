@@ -916,6 +916,11 @@ class TestingServer:
             "show_answers_on_completion": True,
             "randomize_questions": False,
             "time_limit": 300,
+            "marks": [
+                {"grade": 5, "min_score": 95},
+                {"grade": 4, "min_score": 80},
+                {"grade": 3, "min_score": 60},
+            ],
             "questions": [
                 {
                     "question": "Скільки буде 2 + 2?",
@@ -963,6 +968,22 @@ class TestingServer:
             self.show_answers_on_completion = data.get("show_answers_on_completion", False)
 
             self.time_limit_s = data.get("time_limit", 0)
+
+            default_marks = [
+                {'grade': 5, 'min_score': 95},
+                {'grade': 4, 'min_score': 80},
+                {'grade': 3, 'min_score': 60},
+            ]
+
+            marks_data = data.get("marks", default_marks)
+
+            self.marks = sorted(
+                [m for m in marks_data if "grade" in m and "min_score" in m],
+                key=lambda x: x["min_score"],
+                reverse=True
+            )
+
+            print(self.marks)
 
             # Add automatic IDs based on array index (for quiz execution only)
             for i, question in enumerate(self.questions):
@@ -2112,17 +2133,11 @@ class TestingServer:
 
         return web.json_response({"status": "success"})
 
-    def get_mark(self, percentage):
-        if (percentage >= 95):
-            mark = 5
-        elif (percentage >= 80):
-            mark = 4
-        elif (percentage >= 60):
-            mark = 3
-        else:
-            mark = 2
-
-        return mark
+    def get_mark(self, percentage) -> int:
+        for rule in self.marks:
+            if percentage >= rule["min_score"]:
+                return rule["grade"]
+        return 2
 
     def calculate_and_store_user_stats(self, user_id):
         """Calculate and store final stats for a completed user.
