@@ -9,7 +9,7 @@
             --bg-color: #f5f5f5;
             --container-bg: white;
             --text-color: #333;
-            --border-color: #ddd;
+            --border-color: #666666;
             --think-color: #cdeaff;
             --ok-color: #d4edda;
             --fail-color: #f8d7da;
@@ -145,7 +145,8 @@
         .stats-table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 600px;
+            min-width: 800px;
+            table-layout: fixed
         }
 
         .stats-table th,
@@ -153,7 +154,19 @@
             padding: 12px;
             text-align: center;
             border: 1px solid var(--border-color);
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
+
+        .stats-table th:nth-child(1),
+            .stats-table td:nth-child(1) {
+                width: 200px;
+            }
+
+            .stats-table th:nth-child(n+2),
+            .stats-table td:nth-child(n+2) {
+                width: 200px;
+            }
 
         .stats-table th {
             background: var(--header-bg);
@@ -168,6 +181,7 @@
             background: var(--header-bg);
             color: var(--header-color);
             font-weight: bold;
+            font-size: 14px;
             text-align: left;
             width: 150px;
             position: sticky;
@@ -178,6 +192,7 @@
         .stats-table .username-cell {
             background: var(--container-bg);
             font-weight: bold;
+            min-width: 150px;
             text-align: left;
             position: sticky;
             left: 0;
@@ -256,6 +271,7 @@
         }
 
         .question-text {
+            font-size: 14px;
             font-weight: bold;
             text-align: center;
             margin-bottom: 4px;
@@ -270,12 +286,39 @@
             border-radius: 3px;
         }
 
+        .username-content {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
         .username-text {
             font-weight: bold;
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+
+        .user-stats-row {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            gap: 6px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .user-icon {
+            flex-shrink: 0;
+            font-size: 16px;
         }
 
         .user-stats {
-            font-size: 11px;
+            margin-left: auto;
+            font-size: 12px;
             font-weight: normal;
             color: #666;
             background: rgba(0,0,0,0.1);
@@ -283,6 +326,7 @@
             border-radius: 3px;
             margin-top: 4px;
             text-align: center;
+            white-space: nowrap;
         }
 
         .image-header .question-stats {
@@ -967,7 +1011,6 @@
                             <div class="image-header">
                                 <img src="${imagePath}" alt="${filename}" class="header-image">
                                 <div class="image-filename">${filename}${fileIndicator}${pointsIndicator}</div>
-                                <div class="question-stats">${statsText}</div>
                             </div>
                         </th>`;
                     } else {
@@ -976,7 +1019,6 @@
                         headerHtml += `<th title="${questionText} - Correct: ${statsText}${questionPoints > 1 ? ` - ${questionPoints} points` : ''}">
                             <div class="question-header">
                                 <div class="question-text">${questionText}${fileIndicator}${pointsIndicator}</div>
-                                <div class="question-stats">${statsText}</div>
                             </div>
                         </th>`;
                     }
@@ -992,12 +1034,17 @@
                     // Get user statistics - show points instead of question count
                     const userStats = this.userStatistics[userId] || { correct_count: 0, total_answered: 0, earned_points: 0, attempted_points: 0 };
                     const userStatsText = `${userStats.earned_points}/${this.totalPoints}`;
+                    const isCompleted = this.completedUsers[userId] || false;
+                    const statusIcon = isCompleted ? "✅" : "🔄";
 
                     bodyHtml += `<tr id="user-${userId}">`;
                     bodyHtml += `<td class="username-cell">
                         <div class="username-content">
                             <div class="username-text">${username}</div>
-                            <span class="user-stats">${userStatsText}</span>
+                            <div class="user-stats-row">
+                                <span class="user-icon">${statusIcon}</span>
+                                <span class="user-stats">${userStatsText}</span>
+                            </div>
                         </div>
                     </td>`;
 
