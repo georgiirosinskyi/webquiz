@@ -1948,7 +1948,7 @@ class TestingServer:
             # Test completed - calculate and store final stats
             self.calculate_and_store_user_stats(user_id)
             # Get completion time from stored stats
-            completion_time = self.user_stats.get(user_id, {}).get("completed_at")
+            completion_time = self.user_stats.get(user_id, {}).get("completed_at").strftime("%d.%m.%Y %H:%M:%S")
             logger.info(f"Test completed for user {user_id} - final stats calculated")
 
         # Broadcast current question result with completion status
@@ -2080,7 +2080,7 @@ class TestingServer:
                     "earned_points": 0,
                     "question_points": question.get("points", 1),
                     "completed": True,
-                    "completed_at": user_data["quiz_finish_time"],
+                    "completed_at": user_data["quiz_finish_time"].strftime("%d.%m.%Y %H:%M:%S"),
                 }
             )
 
@@ -4083,7 +4083,7 @@ class TestingServer:
 
         # Build completion timestamps for approved users
         completion_times = {
-            user_id: self.user_stats.get(user_id, {}).get("completed_at")
+            user_id: self.user_stats.get(user_id, {}).get("completed_at").strftime("%d.%m.%Y %H:%M:%S")
             for user_id in approved_users.keys()
             if user_id in self.user_stats
         }
