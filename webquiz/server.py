@@ -1232,15 +1232,16 @@ class TestingServer:
             end_dt = user_data.get("quiz_finish_time")
 
             if start_dt and end_dt:
-                total_time_seconds = (end_dt - start_dt).total_seconds()
+                total_time_seconds = int((end_dt - start_dt).total_seconds())
             else:
                 total_time_seconds = 0
             time_start = start_dt.strftime("%d.%m.%Y %H:%M:%S") if start_dt else ""
             time_end = end_dt.strftime("%d.%m.%Y %H:%M:%S") if end_dt else ""
-            # Format total_time as MM:SS
-            minutes = int(total_time_seconds // 60)
-            seconds = int(total_time_seconds % 60)
-            total_time_formatted = f"{minutes}:{seconds:02d}"
+            # Format total_time as HH:MM:SS
+            hours = total_time_seconds // 3600
+            minutes = (total_time_seconds % 3600) // 60
+            seconds = total_time_seconds % 60
+            total_time_formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
             row.extend([mark, total_time_formatted, answers_given, correct_answers, len(self.questions), time_start, time_end])
 
             csv_writer.writerow(row)
