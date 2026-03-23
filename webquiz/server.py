@@ -2013,6 +2013,8 @@ class TestingServer:
         user_id = data["user_id"]
         reason = data["reason"]
 
+        logger.info(f"Test is finished for user_id {user_id}, reason: {reason}")
+
         # Find user by user_id
         if user_id not in self.users:
             return web.json_response({"error": "Користувача не знайдено"}, status=404)

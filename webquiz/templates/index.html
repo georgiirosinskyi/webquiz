@@ -1097,6 +1097,7 @@
                                 showWaitingForApproval(data.user_data);
                             }
                         } else if (data.test_completed && data.final_results) {
+                            clearInterval(countdownTimer);
                             // Test is completed, show final results
                             showCompletedTestResults(data.final_results);
                         } else {
@@ -1178,7 +1179,7 @@
 
                     if (data.time_limit) {
                         testTimeLimitSec = data.time_limit;
-                        testStartedAt = new Date(data.quiz_start_time);
+                        testStartedAt = new Date();
                     }
 
                     // Save registration data to localStorage for future use
@@ -1297,7 +1298,7 @@
 
                         clearInterval(approvalCheckTimer);
 
-                        testStartedAt = new Date(data.quiz_start_time);
+                        testStartedAt = new Date();
 
                         // Apply question order if provided (for randomization)
                         if (data.question_order) {
@@ -1355,6 +1356,7 @@
 
         async function showCurrentQuestion(withAnimation = true) {
             if (answeredQuestions === questions.length) {
+                clearInterval(countdownTimer);
                 // Test completed - fetch final results from server to ensure consistency
                 await fetchAndShowFinalResults();
                 return;
@@ -2137,6 +2139,7 @@
         }
 
         async function finishTestByTimeout() {
+            clearInterval(countdownTimer);
             showError('test-error', '⏰ Час тесту вичерпано');
 
             try {
