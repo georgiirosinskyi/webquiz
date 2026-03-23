@@ -843,6 +843,7 @@
     <script>
         let currentUsername = null;
         let currentUserId = null;
+        let allowSkipQuestions = false;
         let questions = {{QUESTIONS_DATA}};
         let answeredQuestions = 0;
         let showRightAnswer = {{SHOW_RIGHT_ANSWER}};
@@ -1175,6 +1176,7 @@
                 if (response.ok) {
                     currentUsername = data.username;
                     currentUserId = data.user_id;
+                    allowSkipQuestions = data.allow_skip_questions;
                     setCookie('user_id', currentUserId);
 
                     if (data.time_limit) {
@@ -1436,8 +1438,9 @@
             const skipBtn = document.getElementById('skip-question-btn');
 
             submitBtn.classList.remove('hidden');
+            skipBtn.classList.add('hidden');
 
-            if (currentQuestionIndex < (questions.length - 1)) {
+            if (allowSkipQuestions && (currentQuestionIndex < (questions.length - 1))) {
                 skipBtn.classList.remove('hidden');
                 skipBtn.disabled = false;
 

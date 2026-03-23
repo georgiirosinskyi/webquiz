@@ -916,6 +916,7 @@ class TestingServer:
             "show_answers_on_completion": True,
             "randomize_questions": False,
             "time_limit": 300,
+            "allow_skip_questions": False,
             "marks": [
                 {"grade": 5, "min_score": 95},
                 {"grade": 4, "min_score": 80},
@@ -968,6 +969,7 @@ class TestingServer:
             self.show_answers_on_completion = data.get("show_answers_on_completion", False)
 
             self.time_limit_s = data.get("time_limit", 0)
+            self.allow_skip_questions = data.get("allow_skip_questions", False)
 
             default_marks = [
                 {'grade': 5, 'min_score': 95},
@@ -1613,7 +1615,8 @@ class TestingServer:
             "registered_at": datetime.now().isoformat(),
             "approved": not requires_approval,  # Auto-approve if approval not required
             "skipped_questions": [],
-            "time_limit": self.time_limit_s
+            "time_limit": self.time_limit_s,
+            "allow_skip_questions": self.allow_skip_questions
         }
 
         # Add additional registration fields if configured
@@ -1681,6 +1684,7 @@ class TestingServer:
             "requires_approval": requires_approval,
             "approved": user_data["approved"],
             "time_limit": self.time_limit_s,
+            "allow_skip_questions": self.allow_skip_questions,
             "quiz_start_time": datetime.now().isoformat()
         }
 
@@ -1764,6 +1768,10 @@ class TestingServer:
         Returns:
             JSON response with feedback (conditionally includes correctness)
         """
+
+        if not self.allow_skip_questions:
+            return web.json_response({"error": "Пропуск питань заборонено"}, status=403)
+
         data = await request.json()
         user_id = data["user_id"]
         question_id = data["question_id"]
@@ -2574,6 +2582,7 @@ class TestingServer:
             logger.info(f"Generated random question order for approved user {user_id}: {user_data['question_order']}")
 
         user_data["time_limit"] = self.time_limit_s
+        user_data["allow_skip_questions"] = self.allow_skip_questions
         user_data["quiz_start_time"] = datetime.now()
         self.users[user_id] = user_data
 
