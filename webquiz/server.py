@@ -1147,24 +1147,28 @@ class TestingServer:
 
         # Use StringIO buffer to write CSV data
         csv_buffer = StringIO()
-        csv_writer = csv.writer(csv_buffer)
+        csv_writer = csv.writer(csv_buffer, lineterminator="\n")
 
         # Write headers if file doesn't exist
         if not file_exists:
             csv_writer.writerow(
-                ["user_id", "question", "selected_answer", "correct_answer", "is_correct", "time_taken_seconds"]
+                ["ПІБ", "Питання", "Відповідь", "Правильна відповідь", "Результат", "Витрачено часу"]
             )
 
         # Write all responses to buffer
         for response in self.user_responses:
+            user_data = self.users[response["user_id"]]
+            username = user_data["username"]
+            result = "Вірно" if response['is_correct'] == True else "Помилка"
+            total_time_formatted = self.format_seconds_to_hms(int(response["time_taken_seconds"]))
             csv_writer.writerow(
                 [
-                    response["user_id"],
+                    username,
                     response["question"],
                     response["selected_answer"],
                     response["correct_answer"],
-                    response["is_correct"],
-                    response["time_taken_seconds"],
+                    result,
+                    total_time_formatted,
                 ]
             )
 
@@ -1240,10 +1244,7 @@ class TestingServer:
             time_start = start_dt.strftime("%d.%m.%Y %H:%M:%S") if start_dt else ""
             time_end = end_dt.strftime("%d.%m.%Y %H:%M:%S") if end_dt else ""
             # Format total_time as HH:MM:SS
-            hours = total_time_seconds // 3600
-            minutes = (total_time_seconds % 3600) // 60
-            seconds = total_time_seconds % 60
-            total_time_formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            total_time_formatted = self.format_seconds_to_hms(total_time_seconds)
             row.extend([mark, total_time_formatted, answers_given, correct_answers, len(self.questions), time_start, time_end])
 
             csv_writer.writerow(row)
@@ -1257,6 +1258,12 @@ class TestingServer:
             await f.write(csv_content)
             await f.flush()
             os.fsync(f.fileno())
+
+    def format_seconds_to_hms(self, seconds):
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        seconds = seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
     async def periodic_flush(self):
         """Periodically flush responses and users to CSV every 5 seconds."""
