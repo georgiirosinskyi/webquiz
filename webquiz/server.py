@@ -617,8 +617,9 @@ class TestingServer:
         """
         ensure_directory_exists(self.csv_dir)
 
-        # Clean quiz name (remove extension)
+        # Clean quiz name (remove extension and replace path separators)
         quiz_prefix = quiz_name.replace(".yaml", "").replace(".yml", "")
+        quiz_prefix = quiz_prefix.replace("/", "_").replace("\\", "_")
 
         # Find the next available number for this quiz
         suffix = 1
@@ -762,19 +763,33 @@ class TestingServer:
             Sorted list of dicts with 'filename' and 'title' keys
         """
         quiz_files = []
-        if os.path.exists(self.quizzes_dir):
-            for filename in os.listdir(self.quizzes_dir):
-                if filename.endswith((".yaml", ".yml")):
+        quizzes_path = Path(self.quizzes_dir)
+        if quizzes_path.exists():
+            for quiz_path in quizzes_path.rglob("*.yaml"):
+                if "imgs" in quiz_path.parts or "attach" in quiz_path.parts:
+                    continue
+                filename = str(quiz_path.relative_to(quizzes_path))
+                quiz_info = {"filename": filename, "title": None}
+                try:
+                    with open(quiz_path, "r", encoding="utf-8") as f:
+                        data = yaml.safe_load(f)
+                        if data and isinstance(data, dict) and "title" in data:
+                            quiz_info["title"] = data["title"]
+                except Exception:
+                    pass
+                quiz_files.append(quiz_info)
+            for quiz_path in quizzes_path.rglob("*.yml"):
+                if "imgs" in quiz_path.parts or "attach" in quiz_path.parts:
+                    continue
+                filename = str(quiz_path.relative_to(quizzes_path))
+                if not any(q["filename"] == filename for q in quiz_files):
                     quiz_info = {"filename": filename, "title": None}
-                    # Try to read the title from the quiz file
                     try:
-                        quiz_path = os.path.join(self.quizzes_dir, filename)
                         with open(quiz_path, "r", encoding="utf-8") as f:
                             data = yaml.safe_load(f)
                             if data and isinstance(data, dict) and "title" in data:
                                 quiz_info["title"] = data["title"]
                     except Exception:
-                        # If we can't read the title, leave it as None
                         pass
                     quiz_files.append(quiz_info)
         return sorted(quiz_files, key=lambda x: x["filename"])
@@ -862,7 +877,7 @@ class TestingServer:
         # Generate log file path
         self.log_file = self.generate_log_path()
         # Create the new log file
-        with open(self.log_file, "w") as f:
+        with open(self.log_file, "w", encoding="utf-8") as f:
             f.write("")
         logger.info(f"=== Server Started - New Log File Created: {self.log_file} ===")
 
@@ -2433,7 +2448,7 @@ class TestingServer:
         return web.json_response(
             {
                 "quizzes": quizzes,
-                "current_quiz": os.path.basename(self.current_quiz_file) if self.current_quiz_file else None,
+                "current_quiz": str(Path(self.current_quiz_file).relative_to(self.quizzes_dir)).replace("\\", "/") if self.current_quiz_file else None,
                 "force_all_completed": self.force_all_completed,
                 "show_answers_on_completion": self.show_answers_on_completion,
             }
