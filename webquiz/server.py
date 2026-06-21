@@ -3332,17 +3332,20 @@ class TestingServer:
             return web.json_response({"images": []})
 
         image_files = []
-        for filename in os.listdir(imgs_dir):
-            if filename.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".svg")):
-                image_files.append(
-                    {
+        for root, dirs, files in os.walk(imgs_dir):
+            dirs.sort()  # Обходимо папки в алфавітному порядку
+            for filename in files:
+                if filename.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".svg")):
+                    # Відносний шлях від imgs_dir, наприклад "cats/cat1.png"
+                    rel_path = os.path.relpath(os.path.join(root, filename), imgs_dir)
+                    rel_path = rel_path.replace("\\", "/")  # Windows сумісність
+                    image_files.append({
                         "filename": filename,
-                        "path": f"/imgs/{filename}",
-                    }
-                )
+                        "path": f"/imgs/{rel_path}",
+                        "folder": os.path.dirname(rel_path) or "imgs",
+                    })
 
-        # Sort alphabetically by filename (case-insensitive)
-        image_files.sort(key=lambda x: x["filename"].lower())
+        image_files.sort(key=lambda x: (x["folder"], x["filename"].lower()))
 
         return web.json_response({"images": image_files})
 

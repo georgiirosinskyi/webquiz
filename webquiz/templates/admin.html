@@ -2859,15 +2859,32 @@
                 return;
             }
 
-            let gridHtml = '';
+            // Групуємо по папках
+            const groups = {};
             images.forEach(image => {
+                const folder = image.folder || 'imgs';
+                if (!groups[folder]) groups[folder] = [];
+                groups[folder].push(image);
+            });
+
+            let gridHtml = '';
+            for (const [folder, folderImages] of Object.entries(groups)) {
                 gridHtml += `
-                    <div class="image-item" onclick="selectImage('${image.path}')" title="${image.filename}">
-                        <img src="${image.path}" alt="${image.filename}" loading="lazy">
-                        <div class="image-filename">${image.filename}</div>
+                    <div style="grid-column: 1 / -1; margin-top: 15px; padding-bottom: 5px;
+                                border-bottom: 1px solid var(--border-color); font-weight: bold;
+                                color: var(--text-muted); font-size: 0.9em;">
+                        📁 ${folder}/
                     </div>
                 `;
-            });
+                folderImages.forEach(image => {
+                    gridHtml += `
+                        <div class="image-item" onclick="selectImage('${image.path}')" title="${image.filename}">
+                            <img src="${image.path}" alt="${image.filename}" loading="lazy">
+                            <div class="image-filename">${image.filename}</div>
+                        </div>
+                    `;
+                });
+            }
 
             gridContainer.innerHTML = gridHtml;
         }
