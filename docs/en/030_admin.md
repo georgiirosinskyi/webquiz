@@ -183,7 +183,7 @@ The editor uses a visual wizard interface for easy question management.
 #### Quiz Settings
 
 - **Quiz Filename**
-  The filename for the quiz (without the `.yaml` extension).
+  The filename for the quiz (without the `.yaml` extension). To put the quiz into a folder inside `quizzes/`, include the path, for example `grade5/math`; missing folders are created automatically. This also works when renaming an existing quiz and when uniting quizzes.
 
 - **Quiz Name (optional)**
   A human-readable title for the quiz. If not specified, the filename is used.

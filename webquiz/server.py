@@ -913,6 +913,16 @@ class TestingServer:
             return None
         return path
 
+    @staticmethod
+    def _with_quiz_extension(filename):
+        """Append .yaml unless the name already ends with .yaml or .yml."""
+        return filename if filename.endswith((".yaml", ".yml")) else filename + ".yaml"
+
+    @staticmethod
+    def _ensure_parent_dir(path):
+        """Create the folder a new quiz file goes into (quizzes may live in subfolders)."""
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
     def _quiz_relative_name(self, path):
         """Return the quiz name relative to quizzes_dir with forward slashes."""
         return Path(os.path.relpath(path, self.quizzes_dir)).as_posix()
@@ -3142,10 +3152,10 @@ class TestingServer:
         if not filename:
             return web.json_response({"error": "Filename is required"}, status=400)
 
-        if not filename.endswith(".yaml"):
-            filename += ".yaml"
-
-        quiz_path = os.path.join(self.quizzes_dir, filename)
+        filename = self._with_quiz_extension(filename).replace("\\", "/")
+        quiz_path = self._resolve_quiz_path(filename)
+        if not quiz_path:
+            return web.json_response({"error": "Invalid quiz filename"}, status=400)
 
         # Check if file already exists
         if os.path.exists(quiz_path):
@@ -3176,6 +3186,7 @@ class TestingServer:
                 return web.json_response({"error": f"Неправильний YAML: {str(e)}"}, status=400)
 
         # Write the quiz file with fsync for SD card/slow storage reliability
+        self._ensure_parent_dir(quiz_path)
         async with aiofiles.open(quiz_path, "w", encoding="utf-8") as f:
             await f.write(quiz_content)
             await f.flush()
@@ -3267,6 +3278,7 @@ class TestingServer:
 
         # Rename file if filename changed (only for inactive quizzes)
         if filename_changed:
+            self._ensure_parent_dir(new_path)
             os.rename(old_path, new_path)
             logger.info(f"Renamed quiz: {old_filename} -> {new_filename}")
 
@@ -3362,11 +3374,12 @@ class TestingServer:
             )
 
         # Add .yaml extension if not present
-        if not new_name.endswith(".yaml") and not new_name.endswith(".yml"):
-            new_name += ".yaml"
+        new_name = self._with_quiz_extension(new_name).replace("\\", "/")
+        new_quiz_path = self._resolve_quiz_path(new_name)
+        if not new_quiz_path:
+            return web.json_response({"error": "Invalid quiz filename"}, status=400)
 
         # Check new filename doesn't exist
-        new_quiz_path = os.path.join(self.quizzes_dir, new_name)
         if os.path.exists(new_quiz_path):
             return web.json_response(
                 {"error": f"Quiz '{new_name}' вже існує"},
@@ -3438,6 +3451,7 @@ class TestingServer:
                 united_quiz["questions"].append(question)
 
         # Write the new quiz file with fsync for reliability
+        self._ensure_parent_dir(new_quiz_path)
         async with aiofiles.open(new_quiz_path, "w", encoding="utf-8") as f:
             await f.write(yaml.dump(united_quiz, default_flow_style=False, allow_unicode=True))
             await f.flush()
