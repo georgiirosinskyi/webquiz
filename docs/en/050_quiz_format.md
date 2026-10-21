@@ -131,7 +131,7 @@ allow_skip_questions: true
 
 #### `marks` (optional)
 
-Rules that convert the percentage of correct answers into a grade. The grade is shown to the student on the results screen and written to the users CSV file. The first rule (from the highest `min_score`) whose `min_score` the percentage reaches is used; if none matches, the grade is `2`.
+Rules that convert the percentage of earned points into a grade (when every question is worth 1 point, this is the percentage of correct answers). The grade is shown to the student on the results screen and written to the users CSV file. The first rule (from the highest `min_score`) whose `min_score` the percentage reaches is used; if none matches, the grade is `default_mark` (default `2`).
 
 Default:
 
@@ -143,6 +143,19 @@ marks:
     min_score: 80
   - grade: 3
     min_score: 60
+```
+
+Example for a 12-point scale:
+
+```
+marks:
+  - grade: 12
+    min_score: 95
+  - grade: 9
+    min_score: 75
+  - grade: 6
+    min_score: 50
+default_mark: 3  # grade when the percentage is below every rule
 ```
 
 ---

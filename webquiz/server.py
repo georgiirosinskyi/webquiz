@@ -131,6 +131,14 @@ POINTS_DECIMAL_PLACES = 2
 #: Answers arriving this many seconds after the time limit are still accepted (slow or retried requests)
 TIME_LIMIT_GRACE_SECONDS = 10
 
+#: Grade rules used when a quiz has no ``marks``
+DEFAULT_MARKS = [
+    {"grade": 5, "min_score": 95},
+    {"grade": 4, "min_score": 80},
+    {"grade": 3, "min_score": 60},
+]
+DEFAULT_MARK = 2
+
 
 def normalize_points(value) -> float:
     """Round a points value to POINTS_DECIMAL_PLACES, returning an int when whole.
@@ -604,6 +612,8 @@ class TestingServer:
         self.show_final_list = True  # Default setting, updated when quiz is loaded
         self.time_limit_s = 0  # Seconds for the whole test, 0 = no limit (updated when quiz is loaded)
         self.allow_skip_questions = False
+        self.marks = list(DEFAULT_MARKS)
+        self.default_mark = DEFAULT_MARK
         self.users: Dict[str, Dict[str, Any]] = {}  # user_id -> user data
         self.questions: List[Dict[str, Any]] = []
         self.user_responses: List[Dict[str, Any]] = []
@@ -1106,21 +1116,21 @@ class TestingServer:
             self.time_limit_s = data.get("time_limit", 0)
             self.allow_skip_questions = data.get("allow_skip_questions", False)
 
-            default_marks = [
-                {'grade': 5, 'min_score': 95},
-                {'grade': 4, 'min_score': 80},
-                {'grade': 3, 'min_score': 60},
-            ]
-
-            marks_data = data.get("marks", default_marks)
-
+            marks_data = data.get("marks") or DEFAULT_MARKS
             self.marks = sorted(
-                [m for m in marks_data if "grade" in m and "min_score" in m],
+                [
+                    m
+                    for m in marks_data
+                    if isinstance(m, dict)
+                    and "grade" in m
+                    and isinstance(m.get("min_score"), (int, float))
+                    and not isinstance(m.get("min_score"), bool)
+                ],
                 key=lambda x: x["min_score"],
-                reverse=True
+                reverse=True,
             )
-
-            print(self.marks)
+            # Grade when no rule matches (below the lowest min_score)
+            self.default_mark = data.get("default_mark", DEFAULT_MARK)
 
             # Store show_final_list setting (default: True)
             self.show_final_list = data.get("show_final_list", True)
@@ -1467,8 +1477,11 @@ class TestingServer:
             # time_taken == -1 indicates a placeholder answer generated after the quiz timeout
             answers_given = len([a for a in user_answer_list if a["time_taken"] != -1])
             correct_answers = sum(answer["is_correct"] for answer in user_answer_list)
-            total_questions = len(self.questions)
-            percentage = round((correct_answers / total_questions) * 100) if total_questions > 0 else 0
+            total_points = sum_points(q.get("points", 1) for q in self.questions)
+            earned_points = sum_points(
+                answer.get("earned_points", 1 if answer["is_correct"] else 0) for answer in user_answer_list
+            )
+            percentage = round((earned_points / total_points) * 100) if total_points > 0 else 0
             mark = self.get_mark(percentage)
             start_dt = user_data.get("quiz_start_time")
             end_dt = user_data.get("quiz_finish_time")
@@ -2496,11 +2509,15 @@ class TestingServer:
 
         return web.json_response({"status": "success"})
 
-    def get_mark(self, percentage) -> int:
+    def get_mark(self, percentage):
+        """Convert a score percentage into a grade using the quiz ``marks`` rules.
+
+        Rules are sorted by ``min_score`` descending; when none matches, ``default_mark`` is used.
+        """
         for rule in self.marks:
             if percentage >= rule["min_score"]:
                 return rule["grade"]
-        return 2
+        return self.default_mark
 
     def calculate_and_store_user_stats(self, user_id):
         """Calculate and store final stats for a completed user.
@@ -2559,7 +2576,8 @@ class TestingServer:
         # time_taken == -1 indicates a placeholder answer generated after the quiz timeout
         given_answers_count = len([a for a in sorted_answers if a["time_taken"] != -1])
 
-        mark = self.get_mark(percentage)
+        # The grade follows the points percentage, which equals the plain percentage when all points are 1
+        mark = self.get_mark(points_percentage)
 
         # Store final stats (copy the answer data to avoid reference issues)
         self.user_stats[user_id] = {

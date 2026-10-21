@@ -380,6 +380,37 @@ def test_total_time_ignores_unanswered_placeholders(temp_dir):
         assert verify(port, user_id)["final_results"]["total_time"] >= 0
 
 
+def test_mark_uses_points(temp_dir):
+    """With question points the grade follows the points percentage."""
+    weighted = {
+        "title": "Weighted",
+        "questions": [
+            {"question": "Big", "options": ["A", "B"], "correct_answer": 0, "points": 7},
+            {"question": "Q2", "options": ["A", "B"], "correct_answer": 0},
+            {"question": "Q3", "options": ["A", "B"], "correct_answer": 0},
+            {"question": "Q4", "options": ["A", "B"], "correct_answer": 0},
+        ],
+    }
+    with custom_webquiz_server(quizzes={"quiz.yaml": weighted}) as (proc, port):
+        user_id = register(port)["user_id"]
+        for question_id, answer in ((1, 0), (2, 1), (3, 1), (4, 1)):
+            assert submit(port, user_id, question_id, answer).status_code == 200
+        results = verify(port, user_id)["final_results"]
+        assert results["percentage"] == 25
+        assert results["points_percentage"] == 70
+        assert results["mark"] == 3
+        assert users_csv_rows(port)[1][2] == "3"
+
+
+def test_default_mark_and_invalid_rules(temp_dir):
+    marks = [{"grade": 12, "min_score": 90}, {"grade": "bad", "min_score": "x"}, {"grade": 6}]
+    with custom_webquiz_server(quizzes={"quiz.yaml": quiz(marks=marks, default_mark=1)}) as (proc, port):
+        user_id = register(port)["user_id"]
+        for question_id in (1, 2, 3, 4):
+            assert submit(port, user_id, question_id, 0).status_code == 200  # 2 of 4 correct
+        assert verify(port, user_id)["final_results"]["mark"] == 1
+
+
 def test_question_time_follows_shown_question(temp_dir):
     """Time spent on another question before navigating away is not counted for the answered one."""
     with custom_webquiz_server(quizzes={"quiz.yaml": quiz(allow_skip_questions=True)}) as (proc, port):
