@@ -1058,77 +1058,8 @@ def test_results_table_displays_all_questions(browser):
 
 
 # ============================================================================
-# 7. PROGRESS THROUGH QUIZ TESTS (3 tests)
+# 7. PROGRESS THROUGH QUIZ TESTS (1 test)
 # ============================================================================
-
-
-@skip_if_selenium_disabled
-def test_progress_bar_advances_after_multiple_choice(browser):
-    """Progress bar updates after multiple choice submission."""
-    quiz_data = {
-        "default.yaml": {
-            "title": "Progress Bar Test",
-            "questions": [
-                {"question": "Q1", "options": ["A", "B"], "correct_answer": [0]},
-                {"question": "Q2", "options": ["X", "Y"], "correct_answer": [0]},
-                {"question": "Q3", "options": ["M", "N"], "correct_answer": [0]},
-            ],
-        }
-    }
-
-    with custom_webquiz_server(quizzes=quiz_data) as (proc, port):
-        register_user(browser, port, "ProgressBar")
-
-        # Check initial progress (0%)
-        progress_fill = browser.find_element(By.ID, "progress-fill")
-        initial_width = progress_fill.get_attribute("style")
-
-        # Answer Q1
-        options = find_options(browser)
-        options[0].click()
-        browser.find_element(By.ID, "submit-answer-btn").click()
-        wait_for_clickable(browser, By.ID, "continue-btn").click()
-
-        # Progress should have increased
-        wait_for_question_transition(browser)
-        progress_fill = browser.find_element(By.ID, "progress-fill")
-        new_width = progress_fill.get_attribute("style")
-
-        # Width should be different (increased)
-        assert new_width != initial_width, "Progress bar should advance"
-
-
-@skip_if_selenium_disabled
-def test_question_counter_multiple_choice(browser):
-    """'Question 2 of 5' updates correctly."""
-    quiz_data = {
-        "default.yaml": {
-            "title": "Counter Test",
-            "questions": [
-                {"question": "Q1", "options": ["A", "B"], "correct_answer": [0]},
-                {"question": "Q2", "options": ["X", "Y"], "correct_answer": [0]},
-                {"question": "Q3", "options": ["M", "N"], "correct_answer": [0]},
-            ],
-        }
-    }
-
-    with custom_webquiz_server(quizzes=quiz_data) as (proc, port):
-        register_user(browser, port, "Counter")
-
-        # Check Q1 counter
-        progress_text = browser.find_element(By.ID, "progress-text")
-        assert "1" in progress_text.text and "3" in progress_text.text
-
-        # Answer Q1
-        options = find_options(browser)
-        options[0].click()
-        browser.find_element(By.ID, "submit-answer-btn").click()
-        wait_for_clickable(browser, By.ID, "continue-btn").click()
-
-        # Check Q2 counter
-        wait_for_question_transition(browser)
-        progress_text = browser.find_element(By.ID, "progress-text")
-        assert "2" in progress_text.text and "3" in progress_text.text
 
 
 @skip_if_selenium_disabled

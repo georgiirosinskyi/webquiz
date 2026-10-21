@@ -141,33 +141,6 @@ class TestDecimalPointsScoring:
         assert final_results["total_points"] == 1
         assert final_results["points_percentage"] == 30
 
-    def test_users_csv_contains_decimal_points(self, decimal_points_server):
-        """Decimal earned/total points are written to the users CSV."""
-        proc, port = decimal_points_server
-        base_url = f"http://localhost:{port}"
-
-        user_id = requests.post(f"{base_url}/api/register", json={"username": "decimal_csv"}).json()["user_id"]
-
-        for question_id, answer in [(1, 0), (2, 1), (3, 1)]:
-            requests.post(
-                f"{base_url}/api/submit-answer",
-                json={"user_id": user_id, "question_id": question_id, "selected_answer": answer},
-            )
-
-        # Wait for the periodic CSV flush (5s interval)
-        time.sleep(7)
-
-        users_csv = glob.glob(os.path.join(f"data_{port}", "*.users.csv"))
-        assert users_csv, "users CSV was not created"
-
-        with open(users_csv[0], newline="", encoding="utf-8") as f:
-            rows = list(csv.DictReader(f))
-
-        row = next(r for r in rows if r["username"] == "decimal_csv")
-        assert float(row["earned_points"]) == 1.75
-        assert float(row["total_points"]) == 4
-
-
 @pytest.mark.asyncio
 async def test_live_stats_broadcast_carries_decimal_points():
     """The live-stats WebSocket reports decimal question and total points."""

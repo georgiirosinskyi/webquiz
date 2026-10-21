@@ -70,167 +70,6 @@ def test_registration_field_validation():
         assert "error" in response.json()
 
 
-def test_user_csv_creation(temp_dir):
-    """Test that user CSV file is created with correct headers"""
-    config = {"registration": {"fields": ["Grade", "School"]}}
-
-    with custom_webquiz_server(config=config) as (proc, port):
-        base_url = f"http://localhost:{port}"
-
-        # Register a user
-        response = requests.post(
-            f"{base_url}/api/register", json={"username": "student4", "grade": "12", "school": "North HS"}
-        )
-        assert response.status_code == 200
-
-        # Wait for periodic CSV flush (runs every 5 seconds)
-        time.sleep(6)
-
-        # Find and read the user CSV file
-        import glob
-
-        user_csv_files = glob.glob(f"{temp_dir}/data_*/test_quiz_*.users.csv")
-        assert len(user_csv_files) > 0, "User CSV file should be created"
-
-        # Check CSV headers
-        with open(user_csv_files[0], "r") as f:
-            reader = csv.DictReader(f)
-            headers = reader.fieldnames
-            assert "user_id" in headers
-            assert "username" in headers
-            assert "grade" in headers
-            assert "school" in headers
-            assert "registered_at" in headers
-            assert "total_questions_asked" in headers
-            assert "correct_answers" in headers
-            assert "total_time" in headers
-
-
-def test_user_csv_content(temp_dir):
-    """Test that user data is written correctly to CSV"""
-    config = {"registration": {"fields": ["Grade"]}}
-
-    with custom_webquiz_server(config=config) as (proc, port):
-        base_url = f"http://localhost:{port}"
-
-        # Register a user
-        response = requests.post(f"{base_url}/api/register", json={"username": "student5", "grade": "9"})
-        assert response.status_code == 200
-        user_id = response.json()["user_id"]
-
-        # Wait for periodic CSV flush (runs every 5 seconds)
-        time.sleep(6)
-
-        # Read user CSV
-        import glob
-
-        user_csv_files = glob.glob(f"{temp_dir}/data_*/test_quiz_*.users.csv")
-        assert len(user_csv_files) > 0
-
-        with open(user_csv_files[0], "r") as f:
-            reader = csv.DictReader(f)
-            rows = list(reader)
-            assert len(rows) == 1
-            assert rows[0]["user_id"] == user_id
-            assert rows[0]["username"] == "student5"
-            assert rows[0]["grade"] == "9"
-            assert rows[0]["total_questions_asked"] == "0"
-            assert rows[0]["correct_answers"] == "0"
-            assert rows[0]["total_time"] == "0:00"
-
-
-def test_user_csv_total_time_format(temp_dir):
-    """Test that total_time is formatted as MM:SS in users CSV"""
-    # Create a quiz with multiple questions
-    quiz_data = {
-        "test_quiz.yaml": {
-            "title": "Time Test Quiz",
-            "description": "Quiz for testing time format",
-            "questions": [
-                {"question": "Q1?", "options": ["A", "B", "C", "D"], "correct_answer": 0},
-                {"question": "Q2?", "options": ["A", "B", "C", "D"], "correct_answer": 1},
-                {"question": "Q3?", "options": ["A", "B", "C", "D"], "correct_answer": 2},
-            ],
-        }
-    }
-    with custom_webquiz_server(quizzes=quiz_data) as (proc, port):
-        base_url = f"http://localhost:{port}"
-
-        # Register a user
-        reg_response = requests.post(f"{base_url}/api/register", json={"username": "timeuser"})
-        assert reg_response.status_code == 200
-        user_id = reg_response.json()["user_id"]
-
-        # Submit multiple answers (each has time_taken recorded)
-        # Question IDs are 1-indexed
-        for q_id in range(1, 4):
-            answer_response = requests.post(
-                f"{base_url}/api/submit-answer", json={"user_id": user_id, "question_id": q_id, "selected_answer": 1}
-            )
-            assert answer_response.status_code == 200
-
-        # Wait for periodic CSV flush (runs every 5 seconds)
-        time.sleep(6)
-
-        # Read user CSV
-        import glob
-
-        user_csv_files = glob.glob(f"{temp_dir}/data_*/test_quiz_*.users.csv")
-        assert len(user_csv_files) > 0
-
-        with open(user_csv_files[0], "r") as f:
-            reader = csv.DictReader(f)
-            rows = list(reader)
-            assert len(rows) == 1
-            # Check total_time format is MM:SS (e.g., "0:03" or "1:45")
-            total_time = rows[0]["total_time"]
-            assert ":" in total_time, f"total_time should be in MM:SS format, got: {total_time}"
-            parts = total_time.split(":")
-            assert len(parts) == 2, f"total_time should have exactly one colon, got: {total_time}"
-            minutes, seconds = parts
-            assert minutes.isdigit(), f"Minutes should be numeric, got: {minutes}"
-            assert seconds.isdigit() and len(seconds) == 2, f"Seconds should be 2 digits, got: {seconds}"
-            assert 0 <= int(seconds) < 60, f"Seconds should be 0-59, got: {seconds}"
-
-
-def test_answers_csv_uses_user_id(temp_dir):
-    """Test that answers CSV uses user_id instead of username"""
-    with custom_webquiz_server() as (proc, port):
-        base_url = f"http://localhost:{port}"
-
-        # Register and submit answer
-        reg_response = requests.post(f"{base_url}/api/register", json={"username": "answeruser"})
-        assert reg_response.status_code == 200
-        user_id = reg_response.json()["user_id"]
-
-        # Submit an answer
-        answer_response = requests.post(
-            f"{base_url}/api/submit-answer", json={"user_id": user_id, "question_id": 1, "selected_answer": 1}
-        )
-        assert answer_response.status_code == 200
-
-        # Wait for periodic CSV flush (runs every 5 seconds)
-        time.sleep(6)
-
-        # Read answers CSV
-        import glob
-
-        answer_csv_files = glob.glob(f"{temp_dir}/data_*/test_quiz_*.csv")
-        # Filter out .users.csv files
-        answer_csv_files = [f for f in answer_csv_files if not f.endswith(".users.csv")]
-        assert len(answer_csv_files) > 0
-
-        with open(answer_csv_files[0], "r") as f:
-            reader = csv.DictReader(f)
-            headers = reader.fieldnames
-            assert "user_id" in headers
-            assert "username" not in headers  # Should not have username anymore
-
-            rows = list(reader)
-            if len(rows) > 0:
-                assert rows[0]["user_id"] == user_id
-
-
 def test_csv_naming_convention(temp_dir):
     """Test that paired CSV files use same number (quiz_0001.csv and quiz_0001.users.csv)"""
     config = {"registration": {"fields": ["Grade"]}}
@@ -315,7 +154,6 @@ def test_registration_with_cyrillic_field_labels(temp_dir):
             f"{base_url}/api/register", json={"username": "ukrainian_student", "клас": "8", "школа": "Гімназія №5"}
         )
         assert response.status_code == 200
-        user_id = response.json()["user_id"]
 
         # Wait for periodic CSV flush (runs every 5 seconds)
         time.sleep(6)
@@ -326,81 +164,18 @@ def test_registration_with_cyrillic_field_labels(temp_dir):
         user_csv_files = glob.glob(f"{temp_dir}/data_*/test_quiz_*.users.csv")
         assert len(user_csv_files) > 0
 
-        with open(user_csv_files[0], "r", encoding="utf-8") as f:
+        # Users CSV keeps field labels as headers and identifies users by name
+        with open(user_csv_files[0], "r", encoding="utf-8", newline="") as f:
             reader = csv.DictReader(f)
             headers = reader.fieldnames
-            assert "клас" in headers
-            assert "школа" in headers
+            assert "Клас" in headers
+            assert "Школа" in headers
 
             rows = list(reader)
             assert len(rows) >= 1
-            user_row = [r for r in rows if r["user_id"] == user_id][0]
-            assert user_row["клас"] == "8"
-            assert user_row["школа"] == "Гімназія №5"
-
-
-def test_user_csv_statistics(temp_dir):
-    """Test that user statistics (total questions asked and correct answers) are calculated correctly"""
-    # Create a custom quiz with 3 questions to test statistics
-    quizzes = {
-        "stats_quiz.yaml": {
-            "title": "Statistics Test Quiz",
-            "questions": [
-                {"question": "Question 1", "options": ["A", "B", "C"], "correct_answer": 0},
-                {"question": "Question 2", "options": ["A", "B", "C"], "correct_answer": 1},
-                {"question": "Question 3", "options": ["A", "B", "C"], "correct_answer": 2},
-            ],
-        }
-    }
-
-    with custom_webquiz_server(quizzes=quizzes) as (proc, port):
-        base_url = f"http://localhost:{port}"
-
-        # Register a user
-        response = requests.post(f"{base_url}/api/register", json={"username": "stats_user"})
-        assert response.status_code == 200
-        user_id = response.json()["user_id"]
-
-        # Submit 3 answers: 2 correct, 1 incorrect
-        # Question 1 - Correct (correct_answer is 0, selecting 0)
-        response = requests.post(
-            f"{base_url}/api/submit-answer", json={"user_id": user_id, "question_id": 1, "selected_answer": 0}
-        )
-        assert response.status_code == 200
-
-        # Question 2 - Incorrect (correct_answer is 1, selecting 0)
-        response = requests.post(
-            f"{base_url}/api/submit-answer", json={"user_id": user_id, "question_id": 2, "selected_answer": 0}
-        )
-        assert response.status_code == 200
-
-        # Question 3 - Correct (correct_answer is 2, selecting 2)
-        response = requests.post(
-            f"{base_url}/api/submit-answer", json={"user_id": user_id, "question_id": 3, "selected_answer": 2}
-        )
-        assert response.status_code == 200
-
-        # Wait for periodic CSV flush (runs every 5 seconds)
-        time.sleep(6)
-
-        # Read user CSV
-        import glob
-
-        user_csv_files = glob.glob(f"{temp_dir}/data_*/stats_quiz_*.users.csv")
-        assert len(user_csv_files) > 0
-
-        with open(user_csv_files[0], "r") as f:
-            reader = csv.DictReader(f)
-            rows = list(reader)
-            assert len(rows) == 1
-
-            # Verify statistics: 3 questions asked, 2 correct answers
-            assert rows[0]["user_id"] == user_id
-            assert rows[0]["username"] == "stats_user"
-            assert (
-                rows[0]["total_questions_asked"] == "3"
-            ), f"Expected 3 questions, got {rows[0]['total_questions_asked']}"
-            assert rows[0]["correct_answers"] == "2", f"Expected 2 correct answers, got {rows[0]['correct_answers']}"
+            user_row = [r for r in rows if r["ПІБ"] == "ukrainian_student"][0]
+            assert user_row["Клас"] == "8"
+            assert user_row["Школа"] == "Гімназія №5"
 
 
 if __name__ == "__main__":

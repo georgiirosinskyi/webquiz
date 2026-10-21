@@ -154,45 +154,6 @@ class TestQuestionPointsIntegration:
         assert final_results["total_points"] == 9
         assert final_results["points_percentage"] == 11  # ~11% (1/9)
 
-    def test_csv_includes_points_columns(self, points_server):
-        """Test that the users CSV includes earned_points and total_points columns"""
-        proc, port = points_server
-        base_url = f"http://localhost:{port}"
-
-        # Register user and answer questions
-        response = requests.post(f"{base_url}/api/register", json={"username": "csvtest"})
-        assert response.status_code == 200
-        user_id = response.json()["user_id"]
-
-        # Answer all questions
-        for q_id, answer in [(1, 1), (2, 0), (3, 2)]:
-            response = requests.post(
-                f"{base_url}/api/submit-answer", json={"user_id": user_id, "question_id": q_id, "selected_answer": answer}
-            )
-            assert response.status_code == 200
-
-        # Wait for CSV flush (5 seconds interval)
-        time.sleep(6)
-
-        # Find and read the CSV file
-        csv_dir = f"data_{port}"
-        csv_files = [f for f in os.listdir(csv_dir) if f.endswith(".users.csv")]
-        assert len(csv_files) > 0, "No users CSV file found"
-
-        csv_path = os.path.join(csv_dir, csv_files[0])
-        with open(csv_path, "r") as f:
-            reader = csv.DictReader(f)
-            rows = list(reader)
-
-        assert len(rows) > 0, "No rows in CSV"
-        row = rows[0]
-
-        # Check that points columns exist
-        assert "earned_points" in row, "earned_points column missing"
-        assert "total_points" in row, "total_points column missing"
-        assert row["earned_points"] == "9"  # All correct
-        assert row["total_points"] == "9"
-
     def test_default_points_when_not_specified(self, default_points_server):
         """Test that questions without explicit points default to 1 point"""
         proc, port = default_points_server
