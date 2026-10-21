@@ -209,17 +209,57 @@ def test_quizzes_found_in_subfolders(temp_dir):
             f.write("title: Sub Quiz\nquestions:\n  - question: S1\n    options: [a, b]\n    correct_answer: 0\n")
 
         cookies = get_admin_session(port)
-        listing = requests.get(f"http://localhost:{port}/api/admin/list-quizzes", cookies=cookies).json()
-        filenames = [q["filename"].replace("\\", "/") for q in listing["quizzes"]]
-        assert "grade5/math.yaml" in filenames
+        base = f"http://localhost:{port}"
+        listing = requests.get(f"{base}/api/admin/list-quizzes", cookies=cookies).json()
+        # Forward slashes on every OS, so the name matches current_quiz
+        assert [q["filename"] for q in listing["quizzes"]] == ["grade5/math.yaml", "main.yaml"]
 
-        sub_filename = next(q["filename"] for q in listing["quizzes"] if q["filename"].endswith("math.yaml"))
         response = requests.post(
-            f"http://localhost:{port}/api/admin/switch-quiz", json={"quiz_filename": sub_filename}, cookies=cookies
+            f"{base}/api/admin/switch-quiz", json={"quiz_filename": "grade5/math.yaml"}, cookies=cookies
         )
         assert response.status_code == 200, response.text
-        listing = requests.get(f"http://localhost:{port}/api/admin/list-quizzes", cookies=cookies).json()
+        assert response.json()["current_quiz"] == "grade5/math.yaml"
+        listing = requests.get(f"{base}/api/admin/list-quizzes", cookies=cookies).json()
         assert listing["current_quiz"] == "grade5/math.yaml"
+
+        # The admin page sends the name URL-encoded
+        response = requests.get(f"{base}/api/admin/quiz/grade5%2Fmath.yaml", cookies=cookies)
+        assert response.status_code == 200, response.text
+        assert response.json()["parsed"]["title"] == "Sub Quiz"
+
+        # The active quiz is recognized by its relative name and cannot be deleted
+        response = requests.delete(f"{base}/api/admin/quiz/grade5%2Fmath.yaml", cookies=cookies)
+        assert response.status_code == 400
+
+        # Saving the config restarts the active quiz; a subfolder quiz must stay active
+        with open(f"custom_config_{port}.yaml", encoding="utf-8") as f:
+            config_content = f.read()
+        response = requests.put(f"{base}/api/admin/config", json={"content": config_content}, cookies=cookies)
+        assert response.status_code == 200, response.text
+        listing = requests.get(f"{base}/api/admin/list-quizzes", cookies=cookies).json()
+        assert listing["current_quiz"] == "grade5/math.yaml"
+
+        # An inactive subfolder quiz can be deleted
+        requests.post(f"{base}/api/admin/switch-quiz", json={"quiz_filename": "main.yaml"}, cookies=cookies)
+        response = requests.delete(f"{base}/api/admin/quiz/grade5%2Fmath.yaml", cookies=cookies)
+        assert response.status_code == 200, response.text
+        assert not os.path.exists(os.path.join(sub_dir, "math.yaml"))
+
+
+def test_quiz_paths_outside_quizzes_dir_rejected(temp_dir):
+    with custom_webquiz_server(quizzes={"main.yaml": quiz()}) as (proc, port):
+        cookies = get_admin_session(port)
+        base = f"http://localhost:{port}"
+        with open("outside.yaml", "w", encoding="utf-8") as f:
+            f.write("title: Outside\nquestions: []\n")
+        for name in ("..%2Foutside.yaml", "..%2F..%2Foutside.yaml", "%2Fetc%2Fpasswd.yaml", "main.txt"):
+            response = requests.get(f"{base}/api/admin/quiz/{name}", cookies=cookies)
+            assert response.status_code in (400, 404), name
+            assert "Outside" not in response.text
+        response = requests.post(
+            f"{base}/api/admin/switch-quiz", json={"quiz_filename": "../outside.yaml"}, cookies=cookies
+        )
+        assert response.status_code != 200
 
 
 def test_quiz_page_has_fork_elements(temp_dir):

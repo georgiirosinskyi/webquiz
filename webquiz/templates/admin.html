@@ -1751,7 +1751,7 @@
             document.getElementById('quiz-filename').disabled = false;
 
             try {
-                const response = await fetch(`/api/admin/quiz/${selectedQuiz}`, {
+                const response = await fetch(`/api/admin/quiz/${encodeURIComponent(selectedQuiz)}`, {
                     credentials: 'same-origin'
                 });
 
@@ -1785,7 +1785,7 @@
 
             try {
                 // First get the original quiz content
-                const getResponse = await fetch(`/api/admin/quiz/${selectedQuiz}`, {
+                const getResponse = await fetch(`/api/admin/quiz/${encodeURIComponent(selectedQuiz)}`, {
                     credentials: 'same-origin'
                 });
 
@@ -1851,7 +1851,7 @@
 
             for (const quiz of selectedQuizzes) {
                 try {
-                    const response = await fetch(`/api/admin/quiz/${quiz}`, {
+                    const response = await fetch(`/api/admin/quiz/${encodeURIComponent(quiz)}`, {
                         method: 'DELETE',
                         credentials: 'same-origin'
                     });
@@ -2849,7 +2849,7 @@
             }
 
             try {
-                const url = isEditMode ? `/api/admin/quiz/${editingQuizName}` : '/api/admin/create-quiz';
+                const url = isEditMode ? `/api/admin/quiz/${encodeURIComponent(editingQuizName)}` : '/api/admin/create-quiz';
                 const method = isEditMode ? 'PUT' : 'POST';
 
                 const response = await fetch(url, {
@@ -2912,7 +2912,7 @@
             let success = false;
 
             try {
-                const url = isEditMode ? `/api/admin/quiz/${editingQuizName}` : '/api/admin/create-quiz';
+                const url = isEditMode ? `/api/admin/quiz/${encodeURIComponent(editingQuizName)}` : '/api/admin/create-quiz';
                 const method = isEditMode ? 'PUT' : 'POST';
 
                 const response = await fetch(url, {

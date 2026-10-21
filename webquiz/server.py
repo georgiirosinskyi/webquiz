@@ -875,12 +875,41 @@ class TestingServer:
         if not self.current_quiz_file or not os.path.exists(self.current_quiz_file):
             return
 
-        quiz_filename = os.path.basename(self.current_quiz_file)
+        quiz_filename = self._current_quiz_name()
         try:
             await self.switch_quiz(quiz_filename)
             logger.info(f"Quiz restarted after config change: {quiz_filename}")
         except Exception as e:
             logger.error(f"Failed to restart quiz after config change: {e}")
+
+    def _resolve_quiz_path(self, filename):
+        """Return the absolute path of a quiz file, or None when the name is not a quiz inside quizzes_dir.
+
+        Quizzes may live in subfolders, so the name is a relative path ("grade5/math.yaml");
+        backslashes are accepted as separators.
+        """
+        if not filename or not isinstance(filename, str):
+            return None
+        name = filename.replace("\\", "/")
+        if not name.endswith((".yaml", ".yml")) or name.startswith("/") or os.path.isabs(name):
+            return None
+        base = os.path.realpath(self.quizzes_dir)
+        path = os.path.realpath(os.path.join(base, *name.split("/")))
+        if os.path.commonpath([base, path]) != base or path == base:
+            return None
+        return path
+
+    def _quiz_relative_name(self, path):
+        """Return the quiz name relative to quizzes_dir with forward slashes."""
+        return Path(os.path.relpath(path, self.quizzes_dir)).as_posix()
+
+    def _current_quiz_name(self):
+        """Return the active quiz name relative to quizzes_dir (forward slashes), or None."""
+        return self._quiz_relative_name(self.current_quiz_file) if self.current_quiz_file else None
+
+    def _is_current_quiz(self, filename):
+        path = self._resolve_quiz_path(filename)
+        return bool(self.current_quiz_file and path) and os.path.realpath(self.current_quiz_file) == path
 
     async def list_available_quizzes(self):
         """List all available quiz files in quizzes directory with titles.
@@ -894,7 +923,7 @@ class TestingServer:
             for quiz_path in quizzes_path.rglob("*.yaml"):
                 if "imgs" in quiz_path.parts or "attach" in quiz_path.parts:
                     continue
-                filename = str(quiz_path.relative_to(quizzes_path))
+                filename = quiz_path.relative_to(quizzes_path).as_posix()
                 quiz_info = {"filename": filename, "title": None}
                 try:
                     with open(quiz_path, "r", encoding="utf-8") as f:
@@ -907,7 +936,7 @@ class TestingServer:
             for quiz_path in quizzes_path.rglob("*.yml"):
                 if "imgs" in quiz_path.parts or "attach" in quiz_path.parts:
                     continue
-                filename = str(quiz_path.relative_to(quizzes_path))
+                filename = quiz_path.relative_to(quizzes_path).as_posix()
                 if not any(q["filename"] == filename for q in quiz_files):
                     quiz_info = {"filename": filename, "title": None}
                     try:
@@ -932,9 +961,11 @@ class TestingServer:
         Raises:
             ValueError: If quiz file doesn't exist
         """
-        quiz_path = os.path.join(self.quizzes_dir, quiz_filename)
-        if not os.path.exists(quiz_path):
+        resolved_path = self._resolve_quiz_path(quiz_filename)
+        if not resolved_path or not os.path.exists(resolved_path):
             raise ValueError(f"Quiz file not found: {quiz_filename}")
+        quiz_filename = self._quiz_relative_name(resolved_path)
+        quiz_path = os.path.join(self.quizzes_dir, *quiz_filename.split("/"))
 
         # Reset server state
         self.reset_server_state()
@@ -2814,7 +2845,7 @@ class TestingServer:
         return web.json_response(
             {
                 "quizzes": quizzes,
-                "current_quiz": str(Path(self.current_quiz_file).relative_to(self.quizzes_dir)).replace("\\", "/") if self.current_quiz_file else None,
+                "current_quiz": self._current_quiz_name(),
                 "force_all_completed": self.force_all_completed,
                 "show_answers_on_completion": self.show_answers_on_completion,
             }
@@ -2839,7 +2870,7 @@ class TestingServer:
             {
                 "success": True,
                 "message": f"Switched to quiz: {quiz_filename}",
-                "current_quiz": quiz_filename,
+                "current_quiz": self._current_quiz_name(),
                 "csv_file": os.path.basename(self.csv_file),
             }
         )
@@ -3056,7 +3087,9 @@ class TestingServer:
             JSON response with quiz content (raw YAML and parsed)
         """
         filename = request.match_info["filename"]
-        quiz_path = os.path.join(self.quizzes_dir, filename)
+        quiz_path = self._resolve_quiz_path(filename)
+        if not quiz_path:
+            return web.json_response({"error": "Invalid quiz filename"}, status=400)
 
         if not os.path.exists(quiz_path):
             return web.json_response({"error": "Quiz file not found"}, status=404)
@@ -3160,8 +3193,10 @@ class TestingServer:
         if not (new_filename.endswith(".yaml") or new_filename.endswith(".yml")):
             new_filename += ".yaml"
 
-        old_path = os.path.join(self.quizzes_dir, old_filename)
-        new_path = os.path.join(self.quizzes_dir, new_filename)
+        old_path = self._resolve_quiz_path(old_filename)
+        new_path = self._resolve_quiz_path(new_filename)
+        if not old_path or not new_path:
+            return web.json_response({"error": "Invalid quiz filename"}, status=400)
 
         if not os.path.exists(old_path):
             return web.json_response({"error": "Quiz file not found"}, status=404)
@@ -3170,7 +3205,7 @@ class TestingServer:
         filename_changed = old_filename != new_filename
         if filename_changed:
             # Prevent renaming of currently active quiz
-            if self.current_quiz_file and os.path.basename(self.current_quiz_file) == old_filename:
+            if self._is_current_quiz(old_filename):
                 return web.json_response(
                     {"error": "Cannot rename active quiz. Please switch to a different quiz first."}, status=409
                 )
@@ -3222,7 +3257,7 @@ class TestingServer:
         final_filename = new_filename if filename_changed else old_filename
 
         # If this is the current quiz, reload it
-        if self.current_quiz_file and os.path.basename(self.current_quiz_file) == final_filename:
+        if self._is_current_quiz(final_filename):
             await self.switch_quiz(final_filename)
 
         logger.info(f"Updated quiz: {final_filename}")
@@ -3249,13 +3284,15 @@ class TestingServer:
             JSON response with success status and backup filename
         """
         filename = request.match_info["filename"]
-        quiz_path = os.path.join(self.quizzes_dir, filename)
+        quiz_path = self._resolve_quiz_path(filename)
+        if not quiz_path:
+            return web.json_response({"error": "Invalid quiz filename"}, status=400)
 
         if not os.path.exists(quiz_path):
             return web.json_response({"error": "Quiz file not found"}, status=404)
 
         # Don't allow deleting the current quiz
-        if self.current_quiz_file and os.path.basename(self.current_quiz_file) == filename:
+        if self._is_current_quiz(filename):
             return web.json_response({"error": "Cannot delete the currently active quiz"}, status=400)
 
         # Create backup before deletion
@@ -3322,8 +3359,8 @@ class TestingServer:
         # Load and validate all quizzes
         quizzes_data = []
         for filename in quiz_filenames:
-            quiz_path = os.path.join(self.quizzes_dir, filename)
-            if not os.path.exists(quiz_path):
+            quiz_path = self._resolve_quiz_path(filename)
+            if not quiz_path or not os.path.exists(quiz_path):
                 return web.json_response(
                     {"error": f"Quiz '{filename}' не знайдено"},
                     status=404,
@@ -4669,7 +4706,7 @@ class TestingServer:
             "questions": self.questions,
             "total_questions": len(self.questions),
             "total_points": sum_points(q.get("points", 1) for q in self.questions),
-            "current_quiz": os.path.basename(self.current_quiz_file) if self.current_quiz_file else None,
+            "current_quiz": self._current_quiz_name(),
         }
         return await self._handle_websocket_connection(request, self.websocket_clients, initial_data, "WebSocket")
 
