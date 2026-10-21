@@ -17,6 +17,7 @@ show_right_answer: false
 show_final_list: true        # false to hide question list on results screen
 randomize_questions: false  # true for randomized question order for each student
 time_limit: 300 # Time limit in seconds
+allow_skip_questions: false  # true to allow skipping questions
 questions:
   - question: "Question text"
     options:
@@ -105,6 +106,44 @@ show_final_list: false  # Only show score, hide question list
 ```
 
 > **Tip:** Use `show_final_list: false` when you want students to see only their overall score without reviewing individual questions.
+
+---
+
+#### `time_limit` (optional)
+
+Time limit for the whole test in seconds (default `0` — no limit). The student sees a countdown timer; it turns orange 3 minutes before the end and red 1 minute before the end. When the time is up the test finishes automatically: unanswered questions count as wrong. If admin approval is required, the countdown starts when the student is approved.
+
+```
+time_limit: 300  # 5 minutes
+```
+
+---
+
+#### `allow_skip_questions` (optional)
+
+Allows skipping questions and returning to them later (default `false`). A **"Skip"** button appears under the question (or **"Next"** when the next question was already viewed), and the navigation bar with question numbers shows the state of each one: grey — not opened yet, blue — answered, orange — skipped, green — current. An answered question cannot be answered again.
+
+```
+allow_skip_questions: true
+```
+
+---
+
+#### `marks` (optional)
+
+Rules that convert the percentage of correct answers into a grade. The grade is shown to the student on the results screen and written to the users CSV file. The first rule (from the highest `min_score`) whose `min_score` the percentage reaches is used; if none matches, the grade is `2`.
+
+Default:
+
+```
+marks:
+  - grade: 5
+    min_score: 95
+  - grade: 4
+    min_score: 80
+  - grade: 3
+    min_score: 60
+```
 
 ---
 
