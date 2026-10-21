@@ -2,7 +2,7 @@
 
 Covers question navigation (answering in any order), skipping questions, the time limit
 with /api/finish-test, grades (marks), the localized CSV output, recursive quiz discovery
-and the quiz page elements (timer, navigation, skip button).
+and the quiz page elements (timer, navigation, skip button), light theme only.
 """
 
 import csv
@@ -270,14 +270,25 @@ def test_quiz_page_has_fork_elements(temp_dir):
         assert 'id="skip-question-btn"' in html and "Пропустити питання" in html
         assert "img/background.png" in html
         assert "{{T_" not in html
-        # The progress bar and the theme button were removed in this fork
+        # The progress bar was removed in this fork
         assert 'id="progress-bar"' not in html
-        assert '<button class="theme-toggle"' not in html.replace("<!-- <button", "")
 
     with custom_webquiz_server(config={"language": "en"}, quizzes={"quiz.yaml": quiz()}) as (proc, port):
         html = requests.get(f"http://localhost:{port}/").text
         assert "Skip question" in html
         assert "{{T_" not in html
+
+
+def test_pages_have_only_light_theme(temp_dir):
+    with custom_webquiz_server(quizzes={"quiz.yaml": quiz()}) as (proc, port):
+        cookies = get_admin_session(port)
+        for path in ["/", "/admin/", "/live-stats/", "/files/"]:
+            response = requests.get(f"http://localhost:{port}{path}", cookies=cookies)
+            assert response.status_code == 200, path
+            html = response.text
+            assert "theme-toggle" not in html, path
+            assert "toggleTheme" not in html, path
+            assert "data-theme" not in html, path
 
 
 def test_background_images_served(temp_dir):

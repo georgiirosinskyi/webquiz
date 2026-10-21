@@ -67,7 +67,6 @@ The admin panel shows:
 - The local network URL for other devices to connect
 - Quick links to **File Manager** and **Live Stats** at the bottom
 - The current WebQuiz version and a link to the documentation
-- A theme switcher (sun/moon icon) in the top-right corner for dark/light mode
 
 ---
 

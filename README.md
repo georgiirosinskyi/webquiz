@@ -21,7 +21,7 @@ A modern web-based quiz and testing system built with Python and aiohttp that al
 - **Performance Tracking**: Server-side timing for accurate response measurement
 - **Data Export**: Automatic CSV export with quiz-prefixed filenames and unique suffixes
 - **AI Integration**: Use ChatGPT/Claude for analyzing quiz results and generating questions from existing materials
-- **Responsive UI**: Clean web interface with dark/light theme support
+- **Responsive UI**: Clean light web interface for desktop and mobile
 - **SSH Tunnel Support**: Optional public access via SSH reverse tunnel with auto-reconnect
 - **Binary Distribution**: Standalone PyInstaller executable with auto-configuration
 - **Comprehensive Testing**: 222+ tests covering all functionality with CI/CD pipeline
@@ -728,7 +728,6 @@ The admin panel automatically detects when the package has been updated while th
 ### Styling
 
 - Templates are located in `webquiz/templates/`
-- Built-in dark/light theme toggle
 - Responsive design works on mobile and desktop
 - Generated `static/index.html` can be customized (regenerates on quiz switch)
 

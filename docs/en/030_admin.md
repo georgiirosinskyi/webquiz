@@ -85,9 +85,6 @@ The main administrative panel page contains essential tools for managing quizzes
   - **Accept** — download the files as chosen. They appear in the File Manager. If a choice is not possible, an error is shown and nothing is downloaded, so you can choose again.
   - **Reject** — refuse the files. The sender sees that the request was rejected.
 
-- **Theme Switcher**
-  In the top-right corner of the page, there's a button to toggle between light and dark themes. The preference is saved in your browser and applies to all WebQuiz pages.
-
 ---
 
 ### File Manager

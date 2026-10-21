@@ -1356,7 +1356,6 @@ class TestingServer:
         html_content = html_content.replace("{{T_SUBMIT_ANSWER}}", t["submit_answer"])
         html_content = html_content.replace("{{T_CONTINUE_BUTTON}}", t["continue_button"])
         html_content = html_content.replace("{{T_SKIP_QUESTION}}", t["skip_question"])
-        html_content = html_content.replace("{{T_TOGGLE_THEME}}", t["toggle_theme"])
 
         # Write to destination
         async with aiofiles.open(index_path, "w", encoding="utf-8") as f:

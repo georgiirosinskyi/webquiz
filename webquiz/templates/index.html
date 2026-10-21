@@ -21,22 +21,6 @@
             --shadow: rgba(0,0,0,0.1);
         }
 
-        [data-theme="dark"] {
-            --bg-color: #1a1a1a;
-            --container-bg: #2d2d2d;
-            --text-color: #e0e0e0;
-            --border-color: #555;
-            --option-bg: #3a3a3a;
-            --option-border: #666;
-            --option-hover: #404040;
-            --option-selected: #1a3a52;
-            --option-selected-border: #2196f3;
-            --question-bg: #333;
-            --current-question-bg: #2a2a2a;
-            --stats-bg: #1e3a5f;
-            --shadow: rgba(0,0,0,0.3);
-        }
-
         html, body {
             height: 100%;
             margin: 0;
@@ -71,24 +55,6 @@
             display: flex;
             align-items: center;
             gap: 10px;
-        }
-        .theme-toggle {
-            background: var(--option-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 50%;
-            padding: 8px;
-            cursor: pointer;
-            font-size: 16px;
-            color: var(--text-color);
-            transition: all 0.3s ease;
-            width: 36px;
-            height: 36px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .theme-toggle:hover {
-            background: var(--option-hover);
         }
         .question {
             margin: 20px 0;
@@ -193,31 +159,6 @@
             cursor: not-allowed !important;
             opacity: 0.6 !important;
             pointer-events: none !important;
-        }
-
-        [data-theme="dark"] .option.feedback-correct {
-            background: #2d5a2d !important;
-            border-color: #4caf50 !important;
-            color: #a5d6a7 !important;
-        }
-
-        [data-theme="dark"] .option.feedback-correct.disabled {
-            background: #2d5a2d !important;
-            border-color: #4caf50 !important;
-            color: #a5d6a7 !important;
-            opacity: 1 !important;
-        }
-
-        [data-theme="dark"] .option.feedback-incorrect {
-            background: #c20909 !important;
-            border-color: #f44336 !important;
-            color: #ef9a9a !important;
-        }
-
-        [data-theme="dark"] .option.feedback-missed {
-            background: #1a237e !important;
-            border-color: #3f51b5 !important;
-            color: #9fa8da !important;
         }
         .question-image {
             max-width: 100%;
@@ -703,11 +644,6 @@
             margin: 10px 0;
             font-size: 14px;
         }
-        [data-theme="dark"] .error-message {
-            background-color: #2d1b1b;
-            color: #f8d7da;
-            border-color: #721c24;
-        }
 
         /* Shown while requests wait for the connection to come back */
         .connection-banner {
@@ -727,11 +663,6 @@
             text-align: center;
             font-size: 14px;
             z-index: 1000;
-        }
-        [data-theme="dark"] .connection-banner {
-            background-color: #3d3410;
-            color: #ffe8a1;
-            border-color: #856404;
         }
         @media screen and (max-width: 768px) {
             .connection-banner {
@@ -771,12 +702,6 @@
             border-color: #dc3545;
             background: #fff0f0;
         }
-        [data-theme="dark"] .text-answer-input.feedback-correct {
-            background: #1a3a1a;
-        }
-        [data-theme="dark"] .text-answer-input.feedback-incorrect {
-            background: #3a1a1a;
-        }
         .checker-error {
             background: #fff3cd;
             border: 1px solid #ffc107;
@@ -787,11 +712,6 @@
             font-family: monospace;
             font-size: 13px;
         }
-        [data-theme="dark"] .checker-error {
-            background: #3d3a1a;
-            border-color: #ffc107;
-            color: #ffc107;
-        }
         .correct-value-display {
             background: #d4edda;
             border: 1px solid #28a745;
@@ -801,11 +721,6 @@
             margin: 10px 0;
             font-family: monospace;
             font-size: 13px;
-        }
-        [data-theme="dark"] .correct-value-display {
-            background: #1a3a1a;
-            border-color: #28a745;
-            color: #a5d6a7;
         }
 
         .corner-image {
@@ -835,7 +750,6 @@
             <div class="user-info" id="user-info">
                 👤 <span id="username-display"></span>
             </div>
-            <!-- <button class="theme-toggle" onclick="toggleTheme()" title="{{T_TOGGLE_THEME}}">🌙</button> -->
         </div>
         <h1>{{QUIZ_TITLE}}</h1>
 
@@ -1175,30 +1089,6 @@
             }
         }
 
-        // Theme management
-        function initializeTheme() {
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            if (savedTheme === 'dark') {
-                document.body.setAttribute('data-theme', 'dark');
-                document.querySelector('.theme-toggle').textContent = '☀️';
-            }
-        }
-
-        function toggleTheme() {
-            const currentTheme = document.body.getAttribute('data-theme');
-            const toggleButton = document.querySelector('.theme-toggle');
-
-            if (currentTheme === 'dark') {
-                document.body.removeAttribute('data-theme');
-                toggleButton.textContent = '🌙';
-                localStorage.setItem('theme', 'light');
-            } else {
-                document.body.setAttribute('data-theme', 'dark');
-                toggleButton.textContent = '☀️';
-                localStorage.setItem('theme', 'dark');
-            }
-        }
-
         // Username display management
         function showUsername(username) {
             document.getElementById('username-display').textContent = username;
@@ -1298,8 +1188,7 @@
             }
         }
 
-        // Initialize theme, preload images, and check for stored user ID on page load
-        initializeTheme();
+        // Preload images and check for stored user ID on page load
         preloadQuizImages();  // Start preloading immediately while user fills registration form
         checkStoredUserId();
 
