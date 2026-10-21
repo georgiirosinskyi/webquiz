@@ -254,6 +254,132 @@ def question_start(port, user_id, question_id):
     )
 
 
+def users_csv_rows(port):
+    time.sleep(6)  # periodic flush runs every 5 seconds
+    users_csv = glob.glob(os.path.join(f"data_{port}", "*.users.csv"))
+    assert len(users_csv) == 1
+    with open(users_csv[0], encoding="utf-8", newline="") as f:
+        return list(csv.reader(f))
+
+
+MIXED_QUESTIONS = {
+    "title": "Mixed",
+    "allow_skip_questions": True,
+    "time_limit": 600,
+    "questions": [
+        {"question": "Single", "options": ["A", "B"], "correct_answer": 0},
+        {"question": "Multi", "options": ["A", "B", "C"], "correct_answer": [0, 2]},
+        {"question": "Text", "checker": "", "correct_value": "42"},
+        {"question": "Last", "options": ["A", "B"], "correct_answer": 1},
+    ],
+}
+
+
+def test_verify_returns_state_for_page_reload(temp_dir):
+    """After a reload the page needs the timer, skip permission and answered/skipped questions."""
+    with custom_webquiz_server(quizzes={"quiz.yaml": MIXED_QUESTIONS}) as (proc, port):
+        user_id = register(port)["user_id"]
+        assert submit(port, user_id, 1, 1).status_code == 200
+        assert skip(port, user_id, 2).status_code == 200
+        assert submit(port, user_id, 3, "42").status_code == 200
+
+        data = verify(port, user_id)
+        assert data["test_completed"] is False
+        assert data["time_limit"] == 600
+        assert 590 <= data["remaining_seconds"] <= 600
+        assert data["allow_skip_questions"] is True
+        assert data["answered_questions"] == {"1": 1, "3": "42"}
+        assert data["skipped_questions"] == [2]
+
+        assert submit(port, user_id, 2, [0, 2]).status_code == 200
+        assert verify(port, user_id)["answered_questions"]["2"] == [0, 2]
+
+
+def test_verify_without_time_limit(temp_dir):
+    with custom_webquiz_server(quizzes={"quiz.yaml": quiz()}) as (proc, port):
+        data = verify(port, register(port)["user_id"])
+        assert data["remaining_seconds"] is None
+        assert not data["time_limit"]
+        assert data["allow_skip_questions"] is False
+
+
+def test_answered_question_cannot_be_skipped(temp_dir):
+    with custom_webquiz_server(quizzes={"quiz.yaml": quiz(allow_skip_questions=True)}) as (proc, port):
+        user_id = register(port)["user_id"]
+        assert submit(port, user_id, 1, 0).status_code == 200
+        assert skip(port, user_id, 1).status_code == 409
+
+
+def test_time_limit_enforced_by_server(temp_dir):
+    """Answers after the limit (plus a grace period) are rejected and the test is finished.
+
+    The page may be closed or its timer delayed, so the server has to enforce the limit.
+    """
+    with custom_webquiz_server(quizzes={"quiz.yaml": quiz(time_limit=1, allow_skip_questions=True)}) as (proc, port):
+        late_user = register(port, username="late")["user_id"]
+        away_user = register(port, username="away")["user_id"]
+        assert submit(port, late_user, 1, 0).status_code == 200
+
+        time.sleep(12)  # 1 s limit + 10 s grace for slow requests
+
+        response = submit(port, late_user, 2, 1)
+        assert response.status_code == 409
+        assert response.json()["time_is_up"] is True
+        assert skip(port, late_user, 3).status_code == 409
+
+        data = verify(port, late_user)
+        assert data["test_completed"] is True
+        assert data["remaining_seconds"] == 0
+        assert data["final_results"]["total_count"] == 1
+        assert data["final_results"]["correct_count"] == 1
+
+        # A student who closed the page gets the test finished on the next visit
+        data = verify(port, away_user)
+        assert data["test_completed"] is True
+        assert data["final_results"]["total_count"] == 0
+
+
+def test_finish_after_completion_keeps_results(temp_dir):
+    """A late timeout request must not move the finish time of a completed test."""
+    with custom_webquiz_server(quizzes={"quiz.yaml": quiz(time_limit=600)}) as (proc, port):
+        user_id = register(port)["user_id"]
+        for question_id in (1, 2, 3, 4):
+            assert submit(port, user_id, question_id, 0).status_code == 200
+        before = verify(port, user_id)["final_results"]
+
+        assert finish(port, user_id, "timeout").status_code == 200
+        assert verify(port, user_id)["final_results"] == before
+
+        row = users_csv_rows(port)[1]
+        assert row[3] == "00:00:00", "Finish time must stay when the test was completed, not start + time limit"
+
+
+def test_finish_test_validation(temp_dir):
+    with custom_webquiz_server(
+        config={"registration": {"approve": True}}, quizzes={"quiz.yaml": quiz(time_limit=60)}
+    ) as (proc, port):
+        user_id = register(port)["user_id"]
+        # Not approved yet: the test has not started
+        assert finish(port, user_id).status_code == 400
+        response = requests.post(f"http://localhost:{port}/api/finish-test", json={"user_id": "000000"})
+        assert response.status_code == 404
+
+    with custom_webquiz_server(quizzes={"quiz.yaml": quiz()}) as (proc, port):
+        user_id = register(port)["user_id"]
+        # The reason is optional
+        response = requests.post(f"http://localhost:{port}/api/finish-test", json={"user_id": user_id})
+        assert response.status_code == 200
+        assert verify(port, user_id)["test_completed"] is True
+
+
+def test_total_time_ignores_unanswered_placeholders(temp_dir):
+    with custom_webquiz_server(quizzes={"quiz.yaml": quiz(time_limit=600)}) as (proc, port):
+        user_id = register(port)["user_id"]
+        assert submit(port, user_id, 1, 0).status_code == 200
+        assert finish(port, user_id).status_code == 200
+        assert verify(port, user_id)["final_results"]["total_time"] >= 0
+
+
 def test_question_time_follows_shown_question(temp_dir):
     """Time spent on another question before navigating away is not counted for the answered one."""
     with custom_webquiz_server(quizzes={"quiz.yaml": quiz(allow_skip_questions=True)}) as (proc, port):

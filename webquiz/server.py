@@ -13,6 +13,7 @@ import tempfile
 import shutil
 import random
 import secrets
+import math
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Any, Optional
@@ -126,6 +127,9 @@ def ensure_directory_exists(path: str) -> str:
 
 #: Question points may carry at most this many decimal places
 POINTS_DECIMAL_PLACES = 2
+
+#: Answers arriving this many seconds after the time limit are still accepted (slow or retried requests)
+TIME_LIMIT_GRACE_SECONDS = 10
 
 
 def normalize_points(value) -> float:
@@ -598,6 +602,8 @@ class TestingServer:
         self.show_right_answer = True  # Default setting, updated when quiz is loaded
         self.show_answers_on_completion = False  # Default setting, updated when quiz is loaded
         self.show_final_list = True  # Default setting, updated when quiz is loaded
+        self.time_limit_s = 0  # Seconds for the whole test, 0 = no limit (updated when quiz is loaded)
+        self.allow_skip_questions = False
         self.users: Dict[str, Dict[str, Any]] = {}  # user_id -> user data
         self.questions: List[Dict[str, Any]] = []
         self.user_responses: List[Dict[str, Any]] = []
@@ -2050,10 +2056,17 @@ class TestingServer:
         if not question:
             return web.json_response({"error": self.translations["server_question_not_found"]}, status=404)
 
+        if self._time_is_up(user_data):
+            await self._finish_user_test(user_id, "timeout")
+            return web.json_response({"error": self.translations["time_is_up"], "time_is_up": True}, status=409)
+
+        if any(answer.get("question_id") == question_id for answer in self.user_answers.get(user_id, [])):
+            return web.json_response({"error": self.translations["server_already_answered"]}, status=409)
+
         # Calculate time taken server-side from when question was displayed
         time_taken = self._take_question_time(user_id, question_id)
 
-        if question_id not in user_data["skipped_questions"]:
+        if question_id not in user_data.setdefault("skipped_questions", []):
             user_data["skipped_questions"].append(question_id)
 
         # Update user progress
@@ -2129,6 +2142,10 @@ class TestingServer:
         )
         if already_answered:
             return web.json_response({"error": self.translations["server_already_answered"]}, status=409)
+
+        if self._time_is_up(user_data):
+            await self._finish_user_test(user_id, "timeout")
+            return web.json_response({"error": self.translations["time_is_up"], "time_is_up": True}, status=409)
 
         # Find the question
         question = next((q for q in self.questions if q["id"] == question_id), None)
@@ -2281,9 +2298,10 @@ class TestingServer:
     async def finish_test(self, request):
         """Finish test attempt.
 
-        Finalizes the test session for a user. Marks the test as completed,
-        calculates final results and statistics, handles timeout or manual
-        completion, and broadcasts completion status to WebSocket clients.
+        Finalizes the test session for a user: unanswered questions get wrong placeholder
+        answers, final stats are calculated and the completion is broadcast to live stats.
+        A test that is already completed is left unchanged, so a late or repeated request
+        does not move the finish time.
 
         Args:
             request: aiohttp request with user_id and optional finish reason
@@ -2292,10 +2310,9 @@ class TestingServer:
         Returns:
             JSON response with success status
         """
-
         data = await request.json()
-        user_id = data["user_id"]
-        reason = data["reason"]
+        user_id = data.get("user_id")
+        reason = data.get("reason", "manual")
 
         logger.info(f"Test is finished for user_id {user_id}, reason: {reason}")
 
@@ -2303,77 +2320,10 @@ class TestingServer:
         if user_id not in self.users:
             return web.json_response({"error": self.translations["server_user_not_found"]}, status=404)
 
-        username = self.users[user_id]["username"]
-        user_data = self.users[user_id]
-        if (reason == "timeout"):
-            user_data["quiz_finish_time"] = user_data["quiz_start_time"] + timedelta(seconds=self.time_limit_s)
-        else:
-            user_data["quiz_finish_time"] = datetime.now()
+        if not self.users[user_id].get("quiz_start_time"):
+            return web.json_response({"error": self.translations["server_test_not_started"]}, status=400)
 
-        # Track answer separately for stats calculation (independent of CSV flushing)
-        if user_id not in self.user_answers:
-            self.user_answers[user_id] = []
-
-        for question in self.questions:
-            has_answer = False
-            for answer in self.user_answers[user_id]:
-                if answer["question_id"] == question["id"]:
-                    has_answer = True
-                    break
-            if has_answer:
-                continue
-
-            # Normalize file path for results (prepend /attach/ if needed)
-            file_value = question.get("file")
-            if file_value and not file_value.startswith("/attach/"):
-                file_value = f"/attach/{file_value}"
-
-            is_text_question = "checker" in question
-            if is_text_question:
-                correct_answer_text = question.get("correct_value", "")
-            else:
-                correct_answer_text = self._format_answer_text(question["correct_answer"], question.get("options"))
-
-            answer_data = {
-                "question": question.get("question", ""),  # Handle image-only questions
-                "question_id": question.get("id"),
-                "image": question.get("image"),
-                "file": file_value,
-                "selected_answer": "",
-                "correct_answer": correct_answer_text,
-                "is_correct": False,
-                "time_taken": -1,
-                "points": normalize_points(question.get("points", 1)),  # Points for this question
-                "earned_points": 0,  # Points actually earned
-            }
-
-            self.user_answers[user_id].append(answer_data)
-
-            # Update live stats: set current question state based on correctness
-            state = "fail"
-            self.update_live_stats(user_id, question.get("id"), state, 0)
-
-            await self.broadcast_to_websockets(
-                {
-                    "type": "state_update",
-                    "user_id": user_id,
-                    "username": username,
-                    "question_id": question.get("id"),
-                    "state": state,
-                    "time_taken": 0,
-                    "total_questions": len(self.questions),
-                    "total_points": sum_points(q.get("points", 1) for q in self.questions),
-                    "earned_points": 0,
-                    "question_points": normalize_points(question.get("points", 1)),
-                    "completed": True,
-                    "completed_at": user_data["quiz_finish_time"].strftime("%d.%m.%Y %H:%M:%S"),
-                }
-            )
-
-        # Test completed - calculate and store final stats
-        self.calculate_and_store_user_stats(user_id)
-        logger.info(f"Test completed for user {user_id} - final stats calculated")
-
+        await self._finish_user_test(user_id, reason)
         return web.json_response({"status": "success"})
 
     def _first_question_id(self, user_data):
@@ -2393,6 +2343,106 @@ class TestingServer:
         if start is None or (started_question_id is not None and started_question_id != question_id):
             return 0
         return (datetime.now() - start).total_seconds()
+
+    def _test_deadline(self, user_data):
+        """Return the moment the user's time runs out, or None without a time limit."""
+        time_limit = user_data.get("time_limit", self.time_limit_s)
+        start = user_data.get("quiz_start_time")
+        if not time_limit or not start:
+            return None
+        return start + timedelta(seconds=time_limit)
+
+    def _remaining_seconds(self, user_data):
+        """Return whole seconds left for the user, or None without a time limit."""
+        deadline = self._test_deadline(user_data)
+        if deadline is None:
+            return None
+        return max(0, math.ceil((deadline - datetime.now()).total_seconds()))
+
+    def _time_is_up(self, user_data):
+        """True when the time limit has passed, allowing TIME_LIMIT_GRACE_SECONDS for slow requests."""
+        deadline = self._test_deadline(user_data)
+        return deadline is not None and datetime.now() > deadline + timedelta(seconds=TIME_LIMIT_GRACE_SECONDS)
+
+    def _is_test_completed(self, user_id):
+        return len(self.user_answers.get(user_id, [])) >= len(self.questions)
+
+    async def _finish_user_test(self, user_id, reason):
+        """Complete the user's test: add wrong placeholder answers for unanswered questions.
+
+        Does nothing when the test is already completed.
+        """
+        user_data = self.users[user_id]
+        if self._is_test_completed(user_id) and user_id in self.user_stats:
+            logger.info(f"Test for user {user_id} is already completed, finish request ({reason}) ignored")
+            return
+
+        deadline = self._test_deadline(user_data)
+        if reason == "timeout" and deadline is not None:
+            user_data["quiz_finish_time"] = min(datetime.now(), deadline)
+        else:
+            user_data["quiz_finish_time"] = datetime.now()
+
+        username = user_data["username"]
+        user_answer_list = self.user_answers.setdefault(user_id, [])
+        answered_ids = {answer.get("question_id") for answer in user_answer_list}
+
+        for question in self.questions:
+            if question["id"] in answered_ids:
+                continue
+
+            # Normalize file path for results (prepend /attach/ if needed)
+            file_value = question.get("file")
+            if file_value and not file_value.startswith("/attach/"):
+                file_value = f"/attach/{file_value}"
+
+            is_text_question = "checker" in question
+            if is_text_question:
+                correct_answer_text = question.get("correct_value", "")
+            else:
+                correct_answer_text = self._format_answer_text(question["correct_answer"], question.get("options"))
+
+            # time_taken == -1 marks a placeholder for a question the student did not answer
+            user_answer_list.append(
+                {
+                    "question": question.get("question", ""),  # Handle image-only questions
+                    "question_id": question["id"],
+                    "image": question.get("image"),
+                    "file": file_value,
+                    "selected_answer": "",
+                    "correct_answer": correct_answer_text,
+                    "is_correct": False,
+                    "time_taken": -1,
+                    "points": normalize_points(question.get("points", 1)),
+                    "earned_points": 0,
+                }
+            )
+
+            self.update_live_stats(user_id, question["id"], "fail", 0)
+
+            await self.broadcast_to_websockets(
+                {
+                    "type": "state_update",
+                    "user_id": user_id,
+                    "username": username,
+                    "question_id": question["id"],
+                    "state": "fail",
+                    "time_taken": 0,
+                    "total_questions": len(self.questions),
+                    "total_points": sum_points(q.get("points", 1) for q in self.questions),
+                    "earned_points": 0,
+                    "question_points": normalize_points(question.get("points", 1)),
+                    "completed": True,
+                    "completed_at": user_data["quiz_finish_time"].strftime("%d.%m.%Y %H:%M:%S"),
+                }
+            )
+
+        self.question_start_times.pop(user_id, None)
+        self.question_start_ids.pop(user_id, None)
+
+        # Test completed - calculate and store final stats
+        self.calculate_and_store_user_stats(user_id)
+        logger.info(f"Test completed for user {user_id} ({reason}) - final stats calculated")
 
     async def question_start(self, request):
         """Handle notification that a user started viewing a question.
@@ -2493,7 +2543,8 @@ class TestingServer:
         for answer in sorted_answers:
             if answer["is_correct"]:
                 correct_count += 1
-            total_time += answer["time_taken"]
+            if answer["time_taken"] > 0:
+                total_time += answer["time_taken"]
             earned_points += answer.get("earned_points", 1 if answer["is_correct"] else 0)
             total_points += answer.get("points", 1)
 
@@ -2689,8 +2740,12 @@ class TestingServer:
         if next_question_index >= len(self.questions):
             next_question_index = len(self.questions)
 
+        # A test whose time ran out while the page was closed is finished now
+        if not self._is_test_completed(user_id) and self._time_is_up(user_data):
+            await self._finish_user_test(user_id, "timeout")
+
         # Check if test is completed
-        test_completed = len(self.user_answers.get(user_id, [])) == len(self.questions)
+        test_completed = self._is_test_completed(user_id)
 
         response_data = {
             "valid": True,
@@ -2701,7 +2756,16 @@ class TestingServer:
             "total_questions": len(self.questions),
             "last_answered_question_id": last_answered_question_id,
             "test_completed": test_completed,
-            "quiz_start_time": user_data.get("quiz_start_time", datetime.now()).isoformat()
+            "quiz_start_time": user_data.get("quiz_start_time", datetime.now()).isoformat(),
+            # State for restoring the quiz page after a reload
+            "time_limit": user_data.get("time_limit", self.time_limit_s),
+            "remaining_seconds": self._remaining_seconds(user_data),
+            "allow_skip_questions": user_data.get("allow_skip_questions", self.allow_skip_questions),
+            "answered_questions": {
+                str(question_id): result["selected_answer"]
+                for question_id, result in self.answer_results.get(user_id, {}).items()
+            },
+            "skipped_questions": user_data.get("skipped_questions", []),
         }
 
         # Include question_order if randomization is enabled

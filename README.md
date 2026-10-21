@@ -356,7 +356,7 @@ questions:
 - Default is `false` (questions appear in YAML order)
 
 **Time Limit, Skipping and Grades:**
-- `time_limit: 300` - countdown for the whole test in seconds; when time is up, the test finishes and unanswered questions count as wrong (default: `0`, no limit)
+- `time_limit: 300` - countdown for the whole test in seconds; when time is up, the test finishes and unanswered questions count as wrong (default: `0`, no limit). The server enforces it as well (10 s grace), and a page reload keeps the timer
 - `allow_skip_questions: true` - students can skip questions and return to them via the numbered navigation bar (default: `false`); an answered question cannot be answered again
 - `marks` - list of `{grade, min_score}` rules converting the percentage of correct answers into a grade shown on the results screen and in the users CSV (default: 5 from 95%, 4 from 80%, 3 from 60%, otherwise 2)
 

@@ -111,7 +111,7 @@ show_final_list: false  # Only show score, hide question list
 
 #### `time_limit` (optional)
 
-Time limit for the whole test in seconds (default `0` — no limit). The student sees a countdown timer; it turns orange 3 minutes before the end and red 1 minute before the end. When the time is up the test finishes automatically: unanswered questions count as wrong. If admin approval is required, the countdown starts when the student is approved.
+Time limit for the whole test in seconds (default `0` — no limit). The student sees a countdown timer; it turns orange 3 minutes before the end and red 1 minute before the end. When the time is up the test finishes automatically: unanswered questions count as wrong. If admin approval is required, the countdown starts when the student is approved. The server enforces the limit too: answers sent more than 10 seconds after the time is up are rejected. Reloading the page does not reset the timer, and if a student closed the page and the time ran out, the test is finished when the page is opened again.
 
 ```
 time_limit: 300  # 5 minutes

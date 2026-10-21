@@ -907,14 +907,57 @@
         });
 
         let testTimeLimitSec = null;
-        let testStartedAt = null;
+        let testDeadline = null; // Date.now() value when the time runs out
         let countdownTimer = null;
         let approvalCheckTimer = null;
         let remainingSeconds = null;
+        let finishingByTimeout = false;
 
         questions.forEach(q => {
             q.status = "unseen"
             });
+
+        // The deadline is kept as a local timestamp computed from the seconds the server reports,
+        // so a wrong clock on the student's device does not matter.
+        function setTimeLimit(timeLimit, remaining) {
+            testTimeLimitSec = timeLimit || null;
+            testDeadline = testTimeLimitSec
+                ? Date.now() + (remaining === undefined || remaining === null ? testTimeLimitSec : remaining) * 1000
+                : null;
+        }
+
+        // Restore skip permission, timer and question states from a verify-user response
+        function applyServerState(data) {
+            allowSkipQuestions = !!data.allow_skip_questions;
+            setTimeLimit(data.time_limit, data.remaining_seconds);
+
+            const answered = data.answered_questions || {};
+            const skipped = data.skipped_questions || [];
+            answeredQuestions = 0;
+            questions.forEach(q => {
+                if (Object.prototype.hasOwnProperty.call(answered, String(q.id))) {
+                    q.status = "answered";
+                    q.selectedAnswer = answered[String(q.id)];
+                    answeredQuestions++;
+                } else if (skipped.includes(q.id)) {
+                    q.status = "skipped";
+                }
+            });
+        }
+
+        // Index of the question to show: the suggested one unless it is answered, else the first
+        // unanswered question not opened yet, else the first skipped one
+        function pickQuestionIndex(suggestedIndex) {
+            if (suggestedIndex >= 0 && suggestedIndex < questions.length && questions[suggestedIndex].status !== "answered") {
+                return suggestedIndex;
+            }
+            const unseen = questions.findIndex(q => q.status === "unseen");
+            if (unseen !== -1) {
+                return unseen;
+            }
+            const unanswered = questions.findIndex(q => q.status !== "answered");
+            return unanswered !== -1 ? unanswered : Math.min(Math.max(suggestedIndex, 0), questions.length - 1);
+        }
 
         // Helper function to convert absolute paths to relative paths
         function makeRelativePath(path) {
@@ -1220,7 +1263,8 @@
                             showCompletedTestResults(data.final_results);
                         } else {
                             // Approved or no approval required - resume test
-                            currentQuestionIndex = data.next_question_index;
+                            applyServerState(data);
+                            currentQuestionIndex = pickQuestionIndex(data.next_question_index);
                             await hideLoadingShowTest();
                             await notifyQuestionStart(questions[currentQuestionIndex].id);
                         }
@@ -1300,10 +1344,7 @@
                     allowSkipQuestions = data.allow_skip_questions;
                     setCookie('user_id', currentUserId);
 
-                    if (data.time_limit) {
-                        testTimeLimitSec = data.time_limit;
-                        testStartedAt = new Date();
-                    }
+                    setTimeLimit(data.time_limit);
 
                     // Save registration data to localStorage for future use
                     saveRegistrationData(registrationData);
@@ -1430,7 +1471,7 @@
 
                         clearInterval(approvalCheckTimer);
 
-                        testStartedAt = new Date();
+                        applyServerState(data);
 
                         // Apply question order if provided (for randomization)
                         if (data.question_order) {
@@ -1690,6 +1731,10 @@
                         let errorMessage = errorText;
                         try {
                             const errorData = JSON.parse(errorText);
+                            if (errorData.time_is_up) {
+                                await showResultsAfterTimeout();
+                                return;
+                            }
                             errorMessage = errorData.error || errorText;
                         } catch (parseError) {
                             // If JSON parsing fails, use the raw text
@@ -1796,6 +1841,10 @@
                     let errorMessage = errorText;
                     try {
                         const errorData = JSON.parse(errorText);
+                        if (errorData.time_is_up) {
+                            await showResultsAfterTimeout();
+                            return;
+                        }
                         errorMessage = errorData.error || errorText;
                     } catch (parseError) {
                         // If JSON parsing fails, use the raw text
@@ -2247,11 +2296,8 @@
         }
 
         function calculateRemainingSeconds() {
-            if (!testTimeLimitSec || !testStartedAt) return null;
-
-            const now = new Date();
-            const elapsed = Math.floor((now - testStartedAt) / 1000);
-            return Math.max(0, testTimeLimitSec - elapsed);
+            if (!testDeadline) return null;
+            return Math.max(0, Math.ceil((testDeadline - Date.now()) / 1000));
         }
 
         function startCountdownIfNeeded() {
@@ -2274,7 +2320,7 @@
             updateTimerUI();
 
             countdownTimer = setInterval(() => {
-                remainingSeconds--;
+                remainingSeconds = calculateRemainingSeconds();
 
                 updateTimerUI();
 
@@ -2303,7 +2349,18 @@
             }
         }
 
+        // The server already finished the test (an answer came after the time limit)
+        async function showResultsAfterTimeout() {
+            clearInterval(countdownTimer);
+            finishingByTimeout = true;
+            await fetchAndShowFinalResults();
+        }
+
         async function finishTestByTimeout() {
+            if (finishingByTimeout) {
+                return;
+            }
+            finishingByTimeout = true;
             clearInterval(countdownTimer);
             showError('test-error', T.time_is_up);
 
