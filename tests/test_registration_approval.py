@@ -427,3 +427,37 @@ def test_timing_starts_on_approval_when_approve_true():
         data = response.json()
         # Time should be around 0.1 seconds (from approval), NOT 0.6 seconds (from registration)
         assert data["time_taken"] < 0.3  # Should be much less than 0.5+0.1=0.6 seconds
+
+
+def test_quiz_switch_clears_pending_users_on_admin_websocket():
+    """Switching (or restarting) the quiz tells the admin page to drop users waiting for approval"""
+    config = {"registration": {"approve": True}}
+
+    with custom_webquiz_server(config=config) as (proc, port):
+        ws = websocket.create_connection(f"ws://localhost:{port}/ws/admin", timeout=5)
+        try:
+            assert json.loads(ws.recv())["type"] == "initial_state"
+
+            requests.post(f"http://localhost:{port}/api/register", json={"username": "Waiting"})
+            assert json.loads(ws.recv())["type"] == "new_registration"
+
+            response = requests.post(
+                f"http://localhost:{port}/api/admin/switch-quiz",
+                json={"quiz_filename": "test_quiz.yaml"},
+                cookies=get_admin_session(port),
+            )
+            assert response.status_code == 200
+
+            message = json.loads(ws.recv())
+            assert message["type"] == "quiz_switched"
+            assert message["pending_users"] == {}
+            assert message["requires_approval"] is True
+
+            # The same student registers again in the new quiz: one pending user, not two
+            response = requests.post(f"http://localhost:{port}/api/register", json={"username": "Waiting"})
+            assert response.status_code == 200
+            message = json.loads(ws.recv())
+            assert message["type"] == "new_registration"
+            assert message["username"] == "Waiting"
+        finally:
+            ws.close()

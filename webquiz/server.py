@@ -1026,6 +1026,15 @@ class TestingServer:
                 "message": f"Quiz switched to: {quiz_filename}",
             }
         )
+        # Users were cleared, so the admin page must drop its list of users waiting for approval
+        await self.broadcast_to_admin_websockets(
+            {
+                "type": "quiz_switched",
+                "current_quiz": quiz_filename,
+                "pending_users": {},
+                "requires_approval": hasattr(self.config, "registration") and self.config.registration.approve,
+            }
+        )
 
         logger.info(f"Switched to quiz: {quiz_filename}, CSV: {self.csv_file}")
 

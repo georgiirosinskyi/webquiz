@@ -3305,6 +3305,11 @@
                 transferRequests = {};
                 (data.transfer_requests || []).forEach(request => { transferRequests[request.id] = request; });
                 displayTransferRequests();
+            } else if (data.type === 'quiz_switched') {
+                // Quiz switched or restarted: the server cleared all users
+                document.getElementById('pending-approvals-section').classList.toggle('hidden', !data.requires_approval);
+                pendingUsers = data.pending_users || {};
+                displayPendingUsers();
             } else if (data.type === 'transfer_request') {
                 transferRequests[data.request.id] = data.request;
                 displayTransferRequests();

@@ -60,7 +60,7 @@ WebQuiz - Python/aiohttp quiz system with multi-quiz management, real-time WebSo
 - `GET /files/` - File manager page
 
 **WebSockets:**
-- `WS /ws/live-stats` (local network only), `WS /ws/admin` (local network only, admin approval + tunnel status + file transfer notifications: `transfer_request`, `transfer_request_removed`, `transfer_result`)
+- `WS /ws/live-stats` (local network only), `WS /ws/admin` (local network only, admin approval + tunnel status + `quiz_switched` (clears the pending approvals list after a quiz switch/restart) + file transfer notifications: `transfer_request`, `transfer_request_removed`, `transfer_result`)
 
 ## Dev Commands
 
