@@ -242,6 +242,53 @@
             gap: 5px;
         }
 
+        /* Send files to another server (through the SSH tunnel) */
+        .transfer-panel {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: var(--light-bg);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--button-bg);
+            border-radius: 5px;
+        }
+
+        .transfer-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .transfer-row input[type="text"] {
+            flex: 1;
+            min-width: 180px;
+            max-width: 300px;
+        }
+
+        .transfer-note {
+            color: var(--text-muted);
+            font-size: 0.9em;
+        }
+
+        .transfer-outgoing-item {
+            font-size: 0.9em;
+            margin-top: 6px;
+            word-break: break-word;
+        }
+
+        .transfer-checkbox {
+            display: none;
+            margin-right: 8px;
+            width: 18px;
+            height: 18px;
+            vertical-align: middle;
+        }
+
+        .transfer-enabled .transfer-checkbox {
+            display: inline-block;
+        }
+
         .btn-small {
             padding: 6px 12px;
             font-size: 14px;
@@ -447,6 +494,15 @@
                 max-width: none;
             }
 
+            .transfer-row input[type="text"] {
+                max-width: none;
+                width: 100%;
+            }
+
+            .transfer-row button {
+                width: 100%;
+            }
+
             .tabs {
                 overflow-x: auto;
             }
@@ -514,6 +570,166 @@
         .theme-toggle:hover {
             background: var(--border-color);
         }
+
+        /* Config Form Editor */
+        .config-view-toggle {
+            display: flex;
+            gap: 0;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .config-toggle-btn {
+            padding: 10px 20px;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--tab-inactive);
+            transition: all 0.3s ease;
+            margin: 0;
+        }
+
+        .config-toggle-btn:hover {
+            background: var(--light-bg);
+            color: var(--text-color);
+        }
+
+        .config-toggle-btn.active {
+            color: var(--tab-active);
+            border-bottom-color: var(--tab-active);
+        }
+
+        .config-form-section {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            background: var(--light-bg);
+        }
+
+        .config-form-section h3 {
+            margin: 0 0 15px 0;
+            color: var(--text-color);
+            font-size: 16px;
+        }
+
+        .config-form-group {
+            margin-bottom: 15px;
+        }
+
+        .config-form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: var(--text-color);
+        }
+
+        .config-form-group input[type="text"] {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 14px;
+            box-sizing: border-box;
+            background: var(--container-bg);
+            color: var(--text-color);
+        }
+
+        .config-checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .config-checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .config-checkbox-group label {
+            font-weight: 500;
+            color: var(--text-color);
+            cursor: pointer;
+            margin-bottom: 0;
+        }
+
+        .config-list-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .config-list-item input[type="text"] {
+            flex: 1;
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 14px;
+            box-sizing: border-box;
+            background: var(--container-bg);
+            color: var(--text-color);
+        }
+
+        .config-list-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            margin: 0;
+            flex-shrink: 0;
+        }
+
+        .config-list-item.disabled input[type="text"] {
+            background: var(--disabled-bg);
+            color: var(--text-muted);
+            text-decoration: line-through;
+        }
+
+        .config-list-remove-btn {
+            background: var(--danger-red);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 6px 10px;
+            cursor: pointer;
+            font-size: 14px;
+            min-width: auto;
+            margin: 0;
+        }
+
+        .config-list-remove-btn:hover {
+            background: var(--danger-red-hover);
+        }
+
+        .config-list-add-btn {
+            background: var(--success-green);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px 0 0 0;
+        }
+
+        .config-list-add-btn:hover {
+            background: var(--success-green-hover);
+        }
+
+        @media (max-width: 768px) {
+            .config-form-section {
+                padding: 15px;
+            }
+
+            .config-view-toggle {
+                overflow-x: auto;
+            }
+        }
     </style>
 </head>
 <body>
@@ -542,6 +758,25 @@
                     <input type="text" id="search-input" placeholder="Search files..." onkeyup="filterFiles()">
                 </div>
                 <button class="refresh-btn" onclick="refreshFiles()">🔄 Refresh</button>
+            </div>
+
+            <!-- Send files to another server on the same tunnel server -->
+            <!-- Shown only while the SSH tunnel is connected -->
+            <div id="transfer-panel" class="transfer-panel hidden">
+                <strong>📤 Send files to another server</strong>
+                <div>
+                    <div class="transfer-note" style="margin-top: 5px;">
+                        Select files with the checkboxes. Images and attachments used by a quiz are sent with it.
+                        This server is <strong id="transfer-own-name"></strong>.
+                    </div>
+                    <div class="transfer-row">
+                        <span id="transfer-selected-count">0 files selected</span>
+                        <input type="text" id="transfer-target" placeholder="Name of the other server"
+                               autocapitalize="off" autocorrect="off" spellcheck="false">
+                        <button id="transfer-send-btn" onclick="sendSelectedFiles()">📤 Send</button>
+                    </div>
+                </div>
+                <div id="transfer-outgoing"></div>
             </div>
 
             <!-- Tabs -->
@@ -577,7 +812,67 @@
             <div id="config-tab" class="tab-content">
 
                 <div class="form-group">
-                    <label for="config-editor">Configuration File: <span id="config-file-path" style="font-weight: normal; color: var(--text-muted);"></span></label>
+                    <label>Configuration File: <span id="config-file-path" style="font-weight: normal; color: var(--text-muted);"></span></label>
+                </div>
+
+                <!-- View Toggle -->
+                <div class="config-view-toggle">
+                    <button class="config-toggle-btn active" data-view="form" onclick="switchConfigView('form')">Form</button>
+                    <button class="config-toggle-btn" data-view="yaml" onclick="switchConfigView('yaml')">YAML</button>
+                </div>
+
+                <!-- Form View -->
+                <div id="config-form-view">
+                    <div class="config-form-section">
+                        <h3>General</h3>
+
+                        <div class="config-form-group">
+                            <label for="cfg-language">Quiz interface language:</label>
+                            <select id="cfg-language" style="padding: 6px; border: 1px solid var(--border-color); border-radius: 4px;">
+                                <option value="uk">Ukrainian (Українська)</option>
+                                <option value="en">English</option>
+                                <option value="ru">Russian (Русский)</option>
+                            </select>
+                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+                                Controls all user-facing text (registration form, buttons, errors, results). Hot-reloadable.
+                            </div>
+                        </div>
+
+                        <div class="config-checkbox-group">
+                            <input type="checkbox" id="cfg-extra-answers-with-users-csv">
+                            <label for="cfg-extra-answers-with-users-csv">Generate extra answers-with-users CSV</label>
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-muted); margin: -4px 0 8px 24px;">
+                            When enabled, a third CSV file <code>&lt;quiz&gt;_NNNN.answers_with_users.csv</code> is created alongside the standard answers and users CSVs. Each row is a submitted answer with <code>user_id</code>, <code>username</code>, and registration fields prepended. Takes effect on next quiz switch / quiz restart.
+                        </div>
+                    </div>
+
+                    <div class="config-form-section">
+                        <h3>Registration</h3>
+
+                        <div class="config-checkbox-group">
+                            <input type="checkbox" id="cfg-reg-approve">
+                            <label for="cfg-reg-approve">Require admin approval</label>
+                        </div>
+
+                        <div class="config-form-group">
+                            <label for="cfg-reg-username-label">Username label:</label>
+                            <input type="text" id="cfg-reg-username-label" placeholder="Ім'я користувача">
+                        </div>
+
+                        <div class="config-form-group">
+                            <label>Additional registration fields:</label>
+                            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">
+                                Uncheck the box to disable a field without deleting its name. Disabled fields are kept in the config and can be re-enabled anytime.
+                            </div>
+                            <div id="cfg-reg-fields-list"></div>
+                            <button class="config-list-add-btn" onclick="addRegistrationField()">+ Add Field</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- YAML View -->
+                <div id="config-yaml-view" style="display: none;">
                     <textarea id="config-editor" rows="25" style="width: 100%; font-family: 'Courier New', monospace; font-size: 14px; padding: 10px; border: 1px solid var(--border-color); border-radius: 5px; box-sizing: border-box;"></textarea>
                 </div>
 
@@ -745,6 +1040,15 @@
 
                 if (response.ok) {
                     allFiles = data;
+                    // Forget selected files that do not exist anymore
+                    for (const key of [...selectedForTransfer]) {
+                        const slash = key.indexOf('/');
+                        const type = key.slice(0, slash);
+                        if (!(allFiles[type] || []).some(file => file.name === key.slice(slash + 1))) {
+                            selectedForTransfer.delete(key);
+                        }
+                    }
+                    updateTransferSelection();
                     displayFiles();
                 } else {
                     showMessage(data.error || 'Failed to load files', 'error');
@@ -779,26 +1083,35 @@
             files.forEach(file => {
                 const size = formatFileSize(file.size);
                 const date = formatDate(file.modified);
+                // The file name is read from the data-name attribute, so it never becomes part of JS code
+                const name = 'this.closest(\'.file-item\').dataset.name';
 
                 // Different buttons based on file type
                 let actionButtons;
                 if (type === 'quizzes') {
-                    actionButtons = `<button class="btn-small btn-view" onclick="editQuizFile('${file.name}')">✏️ Edit</button>
-                       <button class="btn-small btn-download" onclick="downloadFile('${type}', '${file.name}')">💾 Download</button>`;
+                    actionButtons = `<button class="btn-small btn-view" onclick="editQuizFile(${name})">✏️ Edit</button>
+                       <button class="btn-small btn-download" onclick="downloadFile('${type}', ${name})">💾 Download</button>`;
                 } else if (type === 'csv') {
                     // CSV files get Text and Table view buttons
-                    actionButtons = `<button class="btn-small btn-view" onclick="viewFile('${type}', '${file.name}', 'text')">📄 Text</button>
-                       <button class="btn-small btn-view" onclick="viewFile('${type}', '${file.name}', 'table')">📊 Table</button>
-                       <button class="btn-small btn-download" onclick="downloadFile('${type}', '${file.name}')">💾 Download</button>`;
+                    actionButtons = `<button class="btn-small btn-view" onclick="viewFile('${type}', ${name}, 'text')">📄 Text</button>
+                       <button class="btn-small btn-view" onclick="viewFile('${type}', ${name}, 'table')">📊 Table</button>
+                       <button class="btn-small btn-download" onclick="downloadFile('${type}', ${name})">💾 Download</button>`;
                 } else {
-                    actionButtons = `<button class="btn-small btn-view" onclick="viewFile('${type}', '${file.name}', 'text')">👁️ View</button>
-                       <button class="btn-small btn-download" onclick="downloadFile('${type}', '${file.name}')">💾 Download</button>`;
+                    actionButtons = `<button class="btn-small btn-view" onclick="viewFile('${type}', ${name}, 'text')">👁️ View</button>
+                       <button class="btn-small btn-download" onclick="downloadFile('${type}', ${name})">💾 Download</button>`;
                 }
 
+                const transferKey = `${type}/${file.name}`;
+                const checkbox = canTransfer(type, file.name)
+                    ? `<input type="checkbox" class="transfer-checkbox" title="Select to send to another server"
+                              ${selectedForTransfer.has(transferKey) ? 'checked' : ''}
+                              onchange="toggleTransferFile('${type}', ${name}, this.checked)">`
+                    : '';
+
                 html += `
-                    <div class="file-item" data-filename="${file.name.toLowerCase()}">
+                    <div class="file-item" data-filename="${escapeHtml(file.name.toLowerCase())}" data-name="${escapeHtml(file.name)}">
                         <div class="file-info">
-                            <div class="file-name">${file.name}</div>
+                            <div class="file-name">${checkbox}${escapeHtml(file.name)}</div>
                             <div class="file-meta">Size: ${size} | Modified: ${date}</div>
                         </div>
                         <div class="file-actions">
@@ -949,7 +1262,7 @@
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         async function downloadFile(type, filename) {
@@ -1042,6 +1355,11 @@
             }
         });
 
+        // Config editor state
+        let currentConfigView = 'form';
+        let formDirty = false;
+        let yamlDirty = false;
+
         // Config editor functions
         function initializeConfigEditor() {
             // Only show config tab if a config file was provided
@@ -1051,13 +1369,171 @@
                     document.getElementById('config-editor').value = CONFIG_CONTENT;
                 }
                 document.getElementById('config-file-path').textContent = CONFIG_PATH;
+
+                // Populate form from CONFIG_DATA
+                if (typeof CONFIG_DATA !== 'undefined' && CONFIG_DATA !== null) {
+                    populateGeneralForm(CONFIG_DATA);
+                    populateRegistrationForm(CONFIG_DATA.registration || {});
+                }
+
+                // Track dirty state for YAML textarea
+                document.getElementById('config-editor').addEventListener('input', function() {
+                    yamlDirty = true;
+                });
             }
         }
 
+        function populateGeneralForm(cfg) {
+            const lang = cfg && cfg.language ? cfg.language : 'uk';
+            document.getElementById('cfg-language').value = lang === 'en' ? 'en' : 'uk';
+            document.getElementById('cfg-extra-answers-with-users-csv').checked =
+                !!(cfg && cfg.extra_answers_with_users_csv);
+        }
+
+        function populateRegistrationForm(reg) {
+            document.getElementById('cfg-reg-approve').checked = !!reg.approve;
+            document.getElementById('cfg-reg-username-label').value = reg.username_label || '';
+
+            // Populate unified fields list (enabled + disabled)
+            const container = document.getElementById('cfg-reg-fields-list');
+            container.innerHTML = '';
+            if (reg.fields && Array.isArray(reg.fields)) {
+                reg.fields.forEach(function(fieldName) {
+                    addRegistrationField(fieldName, true);
+                });
+            }
+            if (reg.disabled_fields && Array.isArray(reg.disabled_fields)) {
+                reg.disabled_fields.forEach(function(fieldName) {
+                    addRegistrationField(fieldName, false);
+                });
+            }
+            formDirty = false;
+        }
+
+        function addRegistrationField(value, enabled) {
+            // New fields default to enabled when added via "+ Add Field"
+            if (enabled === undefined) enabled = true;
+
+            const container = document.getElementById('cfg-reg-fields-list');
+            const item = document.createElement('div');
+            item.className = 'config-list-item' + (enabled ? '' : ' disabled');
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = enabled;
+            checkbox.title = 'Enable/disable this field';
+            checkbox.addEventListener('change', function() {
+                item.classList.toggle('disabled', !checkbox.checked);
+                formDirty = true;
+            });
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = value || '';
+            input.placeholder = 'Field name';
+            input.addEventListener('input', function() { formDirty = true; });
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'config-list-remove-btn';
+            removeBtn.textContent = '\u2715';
+            removeBtn.onclick = function() {
+                item.remove();
+                formDirty = true;
+            };
+
+            item.appendChild(checkbox);
+            item.appendChild(input);
+            item.appendChild(removeBtn);
+            container.appendChild(item);
+            formDirty = true;
+        }
+
+        function getFormData() {
+            const reg = {};
+            reg.approve = document.getElementById('cfg-reg-approve').checked;
+            reg.username_label = document.getElementById('cfg-reg-username-label').value;
+
+            const items = document.querySelectorAll('#cfg-reg-fields-list .config-list-item');
+            reg.fields = [];
+            reg.disabled_fields = [];
+            items.forEach(function(item) {
+                const textInput = item.querySelector('input[type="text"]');
+                const checkbox = item.querySelector('input[type="checkbox"]');
+                const val = textInput.value.trim();
+                if (!val) return;
+                if (checkbox.checked) {
+                    reg.fields.push(val);
+                } else {
+                    reg.disabled_fields.push(val);
+                }
+            });
+
+            const language = document.getElementById('cfg-language').value;
+            const extraAnswersWithUsersCsv = document.getElementById('cfg-extra-answers-with-users-csv').checked;
+
+            return {
+                language: language,
+                extra_answers_with_users_csv: extraAnswersWithUsersCsv,
+                registration: reg,
+            };
+        }
+
+        function switchConfigView(view) {
+            if (view === currentConfigView) return;
+
+            // Check for unsaved changes in current view
+            const isDirty = currentConfigView === 'form' ? formDirty : yamlDirty;
+            if (isDirty) {
+                if (!confirm('You have unsaved changes. Switch anyway?')) {
+                    return;
+                }
+            }
+
+            currentConfigView = view;
+
+            // Toggle view visibility
+            document.getElementById('config-form-view').style.display = view === 'form' ? '' : 'none';
+            document.getElementById('config-yaml-view').style.display = view === 'yaml' ? '' : 'none';
+
+            // Toggle active button
+            document.querySelectorAll('.config-toggle-btn').forEach(function(btn) {
+                btn.classList.toggle('active', btn.getAttribute('data-view') === view);
+            });
+        }
+
+        function trackFormDirty() {
+            document.getElementById('cfg-language').addEventListener('change', function() { formDirty = true; });
+            document.getElementById('cfg-extra-answers-with-users-csv').addEventListener('change', function() { formDirty = true; });
+            document.getElementById('cfg-reg-approve').addEventListener('change', function() { formDirty = true; });
+            document.getElementById('cfg-reg-username-label').addEventListener('input', function() { formDirty = true; });
+        }
+
+        function updateBothViews(configContent, configData) {
+            // Update YAML textarea
+            if (configContent !== undefined) {
+                document.getElementById('config-editor').value = configContent;
+            }
+            // Update form
+            if (configData) {
+                populateGeneralForm(configData);
+                if (configData.registration !== undefined) {
+                    populateRegistrationForm(configData.registration);
+                }
+            }
+            formDirty = false;
+            yamlDirty = false;
+        }
+
         async function saveConfig() {
-            const content = document.getElementById('config-editor').value;
             const messageArea = document.getElementById('config-message-area');
             messageArea.innerHTML = '';
+
+            let body;
+            if (currentConfigView === 'form') {
+                body = { data: getFormData() };
+            } else {
+                body = { content: document.getElementById('config-editor').value };
+            }
 
             try {
                 const response = await fetch('/api/admin/config', {
@@ -1065,23 +1541,147 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ content }),
+                    body: JSON.stringify(body),
                     credentials: 'same-origin'
                 });
 
                 const data = await response.json();
 
                 if (response.ok) {
-                    messageArea.innerHTML = `<div class="message success">${data.message}</div>`;
+                    messageArea.innerHTML = '<div class="message success">' + data.message + '</div>';
+                    // Update both views from response
+                    updateBothViews(data.config_content, data.config_data);
                 } else {
                     let errorMessage = data.error || 'Failed to save configuration';
                     if (data.errors && data.errors.length > 0) {
-                        errorMessage += ':<ul>' + data.errors.map(err => `<li>${err}</li>`).join('') + '</ul>';
+                        errorMessage += ':<ul>' + data.errors.map(function(err) { return '<li>' + err + '</li>'; }).join('') + '</ul>';
                     }
-                    messageArea.innerHTML = `<div class="message error">${errorMessage}</div>`;
+                    messageArea.innerHTML = '<div class="message error">' + errorMessage + '</div>';
                 }
             } catch (error) {
-                messageArea.innerHTML = `<div class="message error">Error: ${error.message}</div>`;
+                messageArea.innerHTML = '<div class="message error">Error: ' + error.message + '</div>';
+            }
+        }
+
+        // ----- Send files to another server (through the SSH tunnel) -----
+
+        // Must match FILE_TYPES in webquiz/transfer.py
+        const TRANSFER_EXTENSIONS = { quizzes: ['.yaml', '.yml'], logs: ['.log'], csv: ['.csv'] };
+        const TRANSFER_STATUS_TEXT = {
+            waiting: '⏳ waiting for an answer',
+            accepted: '✅ accepted',
+            rejected: '❌ rejected',
+            failed: '⚠️ the other server could not download the files',
+            expired: '⌛ expired (no answer in 30 minutes)'
+        };
+        const selectedForTransfer = new Set();  // "type/name"
+        let transferStatuses = {};  // offer id -> last known status
+        let transferPollTimer = null;
+
+        function canTransfer(type, filename) {
+            const lower = filename.toLowerCase();
+            return (TRANSFER_EXTENSIONS[type] || []).some(ext => lower.endsWith(ext)) && !filename.startsWith('.');
+        }
+
+        function toggleTransferFile(type, filename, checked) {
+            const key = `${type}/${filename}`;
+            if (checked) {
+                selectedForTransfer.add(key);
+            } else {
+                selectedForTransfer.delete(key);
+            }
+            updateTransferSelection();
+        }
+
+        function updateTransferSelection() {
+            const count = selectedForTransfer.size;
+            document.getElementById('transfer-selected-count').textContent =
+                `${count} file${count === 1 ? '' : 's'} selected`;
+        }
+
+        async function loadTransferState() {
+            try {
+                const response = await fetch('/api/admin/transfer', { credentials: 'same-origin' });
+                if (!response.ok) {
+                    return;
+                }
+                const state = await response.json();
+
+                document.getElementById('files-panel').classList.toggle('transfer-enabled', state.available);
+                document.getElementById('transfer-panel').classList.toggle('hidden', !state.available);
+                document.getElementById('transfer-own-name').textContent = state.name || '';
+
+                // Tell the admin when the other server answers
+                state.outgoing.forEach(offer => {
+                    const previous = transferStatuses[offer.id];
+                    if (previous === 'waiting' && offer.status !== 'waiting') {
+                        showMessage(`${offer.to}: ${TRANSFER_STATUS_TEXT[offer.status] || offer.status}`,
+                                    offer.status === 'accepted' ? 'success' : 'error');
+                    }
+                    transferStatuses[offer.id] = offer.status;
+                });
+
+                document.getElementById('transfer-outgoing').innerHTML = state.outgoing.slice(0, 5).map(offer => {
+                    const count = offer.files.length;
+                    return `<div class="transfer-outgoing-item">→ <strong>${escapeHtml(offer.to)}</strong>:
+                        ${count} file${count === 1 ? '' : 's'}, ${TRANSFER_STATUS_TEXT[offer.status] || escapeHtml(offer.status)}</div>`;
+                }).join('');
+            } catch (error) {
+                // Ignore: the next poll will try again
+            }
+        }
+
+        async function sendSelectedFiles() {
+            const target = document.getElementById('transfer-target').value.trim();
+            if (selectedForTransfer.size === 0) {
+                showMessage('Select files with the checkboxes first', 'error');
+                return;
+            }
+            if (!target) {
+                showMessage('Enter the name of the other server', 'error');
+                return;
+            }
+
+            const files = [...selectedForTransfer].map(key => {
+                const slash = key.indexOf('/');
+                return { type: key.slice(0, slash), name: key.slice(slash + 1) };
+            });
+            const sendButton = document.getElementById('transfer-send-btn');
+            sendButton.disabled = true;
+            try {
+                const response = await fetch('/api/admin/transfer/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ to: target, files: files }),
+                    credentials: 'same-origin'
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    const media = data.offer.files.filter(file => file.type === 'images' || file.type === 'attachments').length;
+                    const mediaNote = media > 0 ? ` (plus ${media} image/attachment file${media === 1 ? '' : 's'} used by the quizzes)` : '';
+                    showMessage(`Request sent to ${target}${mediaNote}. Waiting for an answer there.`, 'success');
+                    try { localStorage.setItem('webquiz-transfer-target', target); } catch (e) {}
+                    selectedForTransfer.clear();
+                    updateTransferSelection();
+                    displayFiles();
+                    await loadTransferState();
+                } else {
+                    showMessage(data.error || 'Failed to send the request', 'error');
+                }
+            } catch (error) {
+                showMessage('Connection error: ' + error.message, 'error');
+            } finally {
+                sendButton.disabled = false;
+            }
+        }
+
+        function initializeTransfer() {
+            try {
+                document.getElementById('transfer-target').value = localStorage.getItem('webquiz-transfer-target') || '';
+            } catch (e) {}
+            loadTransferState();
+            if (!transferPollTimer) {
+                transferPollTimer = setInterval(loadTransferState, 5000);
             }
         }
 
@@ -1089,6 +1689,8 @@
         function initializePanelData() {
             loadFiles();
             initializeConfigEditor();
+            trackFormDirty();
+            initializeTransfer();
         }
 
         // Auto-authenticate function that shows files panel

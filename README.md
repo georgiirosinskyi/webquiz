@@ -13,10 +13,11 @@ A modern web-based quiz and testing system built with Python and aiohttp that al
 - **Dynamic Answer Visibility**: Optional delayed answer reveal - show correct answers only after all students complete
 - **Manual Answer Control**: Admin button to reveal answers immediately without waiting for all students
 - **Dynamic Quiz Switching**: Real-time quiz switching with automatic server state reset
-- **Config File Editor**: Web-based configuration editor with real-time validation
+- **Config File Editor**: Web-based configuration editor with Form and YAML views, real-time validation
 - **Live Statistics**: Real-time WebSocket-powered dashboard showing user progress
 - **Real-time Validation**: Server-side answer checking with immediate feedback
 - **Session Persistence**: Cookie-based user sessions for seamless experience
+- **Connection Retry**: The quiz page repeats requests when the connection drops; answers and registrations are never counted twice
 - **Performance Tracking**: Server-side timing for accurate response measurement
 - **Data Export**: Automatic CSV export with quiz-prefixed filenames and unique suffixes
 - **AI Integration**: Use ChatGPT/Claude for analyzing quiz results and generating questions from existing materials
@@ -143,6 +144,9 @@ webquiz
 # Start server with admin interface (requires master key)
 webquiz --master-key secret123
 
+# Start server on a custom port
+webquiz --port 9090
+
 # Start server with custom directories
 webquiz --quizzes-dir my_quizzes
 webquiz --logs-dir /var/log
@@ -176,6 +180,7 @@ webquiz --version
 ### Key Options
 
 - `--master-key`: Enable admin interface with authentication
+- `--port`: Port to listen on (default: `8080`)
 - `--quizzes-dir`: Directory containing quiz YAML files (default: `./quizzes`)
 - `--logs-dir`: Directory for server logs (default: current directory)
 - `--csv-dir`: Directory for CSV exports (default: current directory)
@@ -259,9 +264,12 @@ The project has **222+ tests** across **15 test files** covering:
 - **Admin API** (14 tests): Admin interface and authentication
 - **Admin Quiz Management** (18 tests): Quiz switching and management
 - **Admin Quiz Editor** (7 tests): Wizard mode quiz creation with randomize_questions and show_answers_on_completion
-- **Config Management** (16 tests): Config editor and validation
+- **Config Management** (23 tests): Config editor, validation, and form-based JSON updates
 - **Registration Approval** (20 tests): Approval workflow and timing
-- **Files Management** (32 tests): File manager interface
+- **Files Management** (38 tests): File manager interface
+- **SSH Tunnel** (31 tests): Key generation, config fetch, connect/disconnect (`test_tunnel.py`)
+- **File Transfer** (59 tests): Sending files between servers through the tunnel (`test_transfer.py`, `test_transfer_api.py`)
+- **Network Access** (22 tests): Local network restriction and proxy header handling
 - **Index Generation** (13 tests): Template generation tests
 - **Registration Fields** (12 tests): Custom registration fields
 - **Show Right Answer** (5 tests): Answer display functionality
@@ -347,6 +355,10 @@ questions:
 - Helps prevent cheating and ensures fair testing
 - Default is `false` (questions appear in YAML order)
 
+**Copy Protection:**
+- Question text and answer options cannot be selected or copied by students
+- Prevents sharing quiz content via copy-paste
+
 **Question Grouping (stick_to_the_previous):**
 - Use `stick_to_the_previous: true` on questions that should stay adjacent to their predecessor during randomization
 - Useful for reading passages followed by related questions
@@ -357,11 +369,14 @@ questions:
 
 **Question Points:**
 - Each question can have a custom point value using the `points` field (default: 1)
+- Points may be whole or decimal numbers with **at most two decimal places** (e.g. `0.5`, `1.25`, `2.75`)
+- Points must be greater than 0. A value with more than two decimals (e.g. `1.234`) is rejected when the quiz is saved
+- The admin quiz editor refuses such a value with a message naming the question, so nothing is rounded silently
 - Points are tracked and displayed in:
   - Live stats: shows earned points / total points for each user
   - Final results: displays points earned along with correct/incorrect count
   - Users CSV: includes `earned_points` and `total_points` columns
-- Questions with more than 1 point show a trophy indicator (🏆) during the quiz
+- Questions worth something other than 1 point show a trophy indicator (🏆) during the quiz
 
 Example:
 ```yaml
@@ -382,6 +397,13 @@ questions:
       - "Z"
     correct_answer: 2
     points: 3  # This question is worth 3 points
+
+  - question: "Easy question worth half a point"
+    options:
+      - "Yes"
+      - "No"
+    correct_answer: 0
+    points: 0.5  # Decimal points are allowed (up to 2 decimals)
 ```
 
 **Text Input Questions:**
@@ -410,7 +432,7 @@ questions:
 - `checker` - Required to identify as text question (can be empty for exact match)
 - `default_value` - Initial value shown in textarea (optional)
 - `correct_value` - Correct answer shown when student is wrong (optional)
-- `points` - Points for correct answer (default: 1)
+- `points` - Points for correct answer, a number > 0 with at most 2 decimals (default: 1)
 
 **Checker Code:**
 - Uses variable `user_answer` (the student's text input)
@@ -443,6 +465,8 @@ Templates appear in the admin quiz editor for easy insertion.
 Optional server configuration file (`webquiz.yaml`):
 
 ```yaml
+language: en  # Quiz interface language: "uk" (Ukrainian, default) or "en" (English)
+
 server:
   host: "0.0.0.0"
   port: 8080
@@ -450,11 +474,13 @@ server:
   url_format: "http://{IP}:{PORT}/"  # URL format for admin panel (use {IP} and {PORT} placeholders)
 
 registration:
-  approve: false  # Set to true to require admin approval
-  fields:
-    - name: "full_name"
-      label: "Full Name"
-      required: true
+  approve: false           # Set to true to require admin approval
+  username_label: ""       # Custom username field label (empty = use language default)
+  fields:                  # Extra fields shown on the registration form
+    - Grade
+    - School
+  disabled_fields:         # Fields preserved in config but hidden from the form
+    - Teacher              # Toggle on/off from the file manager Config tab
 
 quiz:
   show_right_answer: false          # Show correct answer after submission
@@ -462,6 +488,15 @@ quiz:
 ```
 
 All configuration sections are optional and have sensible defaults.
+
+### Language
+
+The quiz interface language can be set via the `language` option in `webquiz.yaml`:
+
+- `language: uk` (default) — Ukrainian interface
+- `language: en` — English interface
+
+This affects all user-facing text: registration form, quiz buttons, progress indicators, error messages, and results display. The setting is hot-reloadable — changes are applied immediately when saved via the admin panel without requiring a server restart.
 
 ### Answer Visibility Options
 
@@ -477,6 +512,34 @@ WebQuiz offers flexible control over when students can see correct answers:
   - In approval mode, only approved students count toward completion
 
 **Example Use Case**: Useful for collaborative learning environments where you want students to discuss answers together after everyone has completed the quiz independently.
+
+### Final Results Display
+
+By default, the results screen shows the score summary and a table listing each question with the student's answer. You can hide the question list:
+
+- **`show_final_list: true`** (default): Shows score summary and question-by-question results table
+- **`show_final_list: false`**: Shows only the score summary (e.g., "3/5 (60%)")
+
+This is a quiz-level setting configured in the quiz YAML file:
+```yaml
+show_final_list: false
+```
+
+### Connection Drops
+
+The student quiz page keeps working through short network drops (unstable classroom Wi-Fi, a tunnel that reconnects):
+
+- A request that fails because of the connection (network error, no response within 15 seconds, or `502`/`503`/`504` from a proxy or the tunnel) is repeated after 1, 2 and 4 seconds, then every 5 seconds, until the server answers
+- While the page waits, a yellow banner at the top says the connection is lost; it disappears once the request gets through
+- The chosen answer is locked while it is being sent, so the repeated request always carries the same answer
+- A page opened or reloaded while the server is unreachable waits on the loading screen instead of showing the registration form
+- The answer waits for the question-start request of the same question, so question timing stays correct
+
+Repeated requests are safe on the server side, even when the first attempt got through and only the response was lost:
+
+- **`POST /api/submit-answer`**: the same answer to an already answered question returns the stored result (same `is_correct`, `time_taken`, and so on) without recording anything; a different answer to an answered question is rejected with `409` (or `403`/`400` in randomized quizzes, as before)
+- **`POST /api/register`**: the page sends a random `registration_token`; a repeated registration with the same token returns the user created by the first attempt instead of failing with "username already exists"
+- **`POST /api/question-start`**: a notice for a question the student already answered is ignored, so it cannot restart timing
 
 ### SSH Tunnel for Public Access
 
@@ -532,6 +595,39 @@ tunnel:
 - Keys are stored with proper permissions (600 for private key)
 - Connection is admin-initiated (no auto-connect on startup)
 - Connection status is shown in real-time via WebSocket
+- Tunnel traffic reaches WebQuiz from `127.0.0.1`. Proxy headers (`X-Forwarded-For`, `X-Real-IP`) are trusted only from loopback connections, and the **last** `X-Forwarded-For` entry is used, because the proxy appends the real address. Visitors through the tunnel therefore count as public IPs and cannot open admin pages.
+- With a fixed `socket_name`, a reconnect can fail for a few minutes: the tunnel server keeps the old socket file until its cleanup job removes it (every 5 minutes). Setting `StreamLocalBindUnlink yes` in the server's sshd config avoids this.
+
+### Sending Files Between Servers
+
+Servers connected to the **same tunnel server with the same SSH user** (one socket directory, e.g. all computers of one school) can send quiz, log and CSV files to each other through the tunnel.
+
+1. Give every server a fixed, unique `socket_name` (e.g. `room-12`) and connect the tunnel on both.
+2. **Sender**: open the File Manager (`/files/`), tick the files, type the name of the other server and click **Send**. Only a list of the files is sent at this point. The **Send files to another server** panel is shown only while the tunnel is connected.
+3. **Receiver**: the admin panel shows the request. For every file it shows what is already there and lets the admin choose what to do (see below), then **Accept** / **Reject**.
+4. On **Accept**, the receiver downloads the files from the sender as chosen. The sender's File Manager shows the answer.
+
+Images and attachments used by a quiz (`image`, image `options` and `file` fields, from `quizzes/imgs/` and `quizzes/attach/`) are added to the request automatically. Files that a quiz references but that do not exist on the sender are skipped.
+
+Choosing what happens to each file:
+- Quizzes, images and attachments are saved under their own name. Logs and CSV files are saved with the sender name (`room-12_0001.log`, `room-12_math_0001.csv`), because every server uses the same names.
+- For every file the receiver shows one case and a default action. The sender sends a SHA-256 checksum of every file, so the receiver can tell whether its own file has the same content.
+
+| Case | Possible actions | Default |
+|---|---|---|
+| New file (no file with this name) | Save, Rename, Skip | Save |
+| The same file already exists | Replace, Rename, Skip | Skip |
+| A different file with this name exists | Replace, Rename, Skip | Rename |
+| The running server uses this file (current log, current CSV files, active quiz) | Rename, Skip | Rename |
+
+- **Rename** suggests a free name (`room-12_map.png`, then `_2`, `_3`, …); the admin can change it.
+- Choices are checked before anything is downloaded. If a choice is not possible (for example, the new name already exists), nothing is saved and the request stays open.
+- If an image or attachment is saved under a new name, the received quiz is updated to point to it (comments and formatting are kept). A skipped image keeps the quiz's original reference.
+
+Rules and limits:
+- Both servers must stay connected until the receiver accepts. A request expires after 30 minutes.
+- Only `.yaml`/`.yml` quizzes, `.log` logs, `.csv` files and the images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.svg`, `.webp`) and attachments of sent quizzes; at most 100 files per request (images and attachments included) and 50 MB per file.
+- All traffic goes through the public tunnel URL (`https://[server]/start/[name]/api/transfer/...`). A request carries a random token; the sender serves only the offered files, only with this token, and only until the request is answered or expires. The receiver downloads only from its own tunnel server, so files can only come from a server connected with a key of the same SSH user.
 
 ## 📊 Data Export
 
@@ -555,6 +651,26 @@ user_id,username,registered_at,total_questions_asked,correct_answers,earned_poin
 - `total_time` - Total quiz completion time in `MM:SS` format (minutes:seconds)
 - `earned_points` - Points earned from correct answers
 - `total_points` - Maximum possible points for questions answered
+
+### Extra answers-with-users CSV (per-answer rows with user info)
+
+If you set `extra_answers_with_users_csv: true` in `webquiz.yaml`, a **third**
+CSV file is generated with the suffix `.answers_with_users.csv`. It has one row
+per submitted answer (like the answers CSV) but the user-identifying columns
+(`user_id`, `username`, and any registration fields configured under
+`registration.fields`) are prepended to each row. This avoids having to join
+the two existing CSVs in a spreadsheet or analysis tool.
+
+**Example:** `math_quiz_0001.answers_with_users.csv`
+
+```csv
+user_id,username,school,question,selected_answer,correct_answer,is_correct,time_taken_seconds
+123456,student1,Lyceum 1,"What is 2 + 2?","4","4",True,3.45
+123456,student1,Lyceum 1,"What is 5 × 3?","15","15",True,2.87
+```
+
+The option is hot-reloadable — toggling it on or off takes effect on the next
+quiz switch or quiz restart.
 
 CSV files are created with proper escaping and include all user response data. Files are flushed periodically (every 5 seconds) to ensure data persistence.
 

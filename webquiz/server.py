@@ -3,6 +3,7 @@ import httpx
 import json
 import csv
 import yaml
+from ruamel.yaml import YAML as RuamelYAML
 import os
 import socket
 import subprocess
@@ -23,7 +24,9 @@ import ipaddress
 from importlib import resources
 
 from .config import WebQuizConfig, load_config_from_yaml
+from .translations import get_translations
 from .tunnel import TunnelManager
+from .transfer import TransferManager, TransferError
 
 from webquiz import __version__ as package_version
 from webquiz import checker as checker_module
@@ -119,6 +122,42 @@ def ensure_directory_exists(path: str) -> str:
     """
     os.makedirs(path, exist_ok=True)
     return path
+
+
+#: Question points may carry at most this many decimal places
+POINTS_DECIMAL_PLACES = 2
+
+
+def normalize_points(value) -> float:
+    """Round a points value to POINTS_DECIMAL_PLACES, returning an int when whole.
+
+    Points can be decimals (e.g. 0.5, 1.25), so sums of them accumulate binary
+    floating point error: 0.1 + 0.2 would otherwise be reported as
+    0.30000000000000004. Rounding keeps scores exact to two decimals, and whole
+    values stay ints so they serialize as `3` rather than `3.0`.
+
+    Args:
+        value: A points value or a sum of them
+
+    Returns:
+        int if the rounded value is whole, otherwise float
+    """
+    rounded = round(float(value), POINTS_DECIMAL_PLACES)
+    if rounded == int(rounded):
+        return int(rounded)
+    return rounded
+
+
+def sum_points(values) -> float:
+    """Sum points values and normalize the result.
+
+    Args:
+        values: Iterable of points values
+
+    Returns:
+        Normalized sum (int when whole, otherwise float rounded to 2 decimals)
+    """
+    return normalize_points(sum(values))
 
 
 def get_default_config_path() -> Optional[str]:
@@ -288,8 +327,15 @@ def log_startup_environment(config: WebQuizConfig):
     # Registration configuration
     logger.info("Registration Configuration:")
     logger.info(f"  Approval required: {config.registration.approve}")
-    logger.info(f"  Username label: {config.registration.username_label}")
+    logger.info(
+        f"  Username label: {config.registration.username_label or get_translations(config.language)['username_label']}"
+    )
     logger.info(f"  Custom fields: {config.registration.fields}")
+
+    # CSV configuration
+    logger.info(
+        f"Extra answers-with-users CSV (per-answer + user info): {config.extra_answers_with_users_csv}"
+    )
 
     # Tunnel configuration
     if config.tunnel.server:
@@ -322,7 +368,14 @@ def log_startup_environment(config: WebQuizConfig):
 def get_client_ip(request):
     """Extract client IP address from request, handling proxies.
 
-    Checks X-Forwarded-For and X-Real-IP headers for proxied requests.
+    Proxy headers are trusted only when the connection itself comes from a
+    loopback address: a reverse proxy on the same machine, or the SSH tunnel,
+    which forwards public traffic to 127.0.0.1. A client connecting directly
+    over the network cannot fake its address with headers.
+
+    From X-Forwarded-For the LAST entry is used: a proxy appends the address
+    it saw, while earlier entries may come from the client
+    (e.g. nginx `$proxy_add_x_forwarded_for`).
 
     Args:
         request: aiohttp request object
@@ -331,11 +384,15 @@ def get_client_ip(request):
         Client IP address as string, defaults to "127.0.0.1"
     """
     client_ip = request.remote or "127.0.0.1"
-    if "X-Forwarded-For" in request.headers:
-        # Handle proxy/load balancer forwarded IPs (take the first one)
-        client_ip = request.headers["X-Forwarded-For"].split(",")[0].strip()
-    elif "X-Real-IP" in request.headers:
-        client_ip = request.headers["X-Real-IP"]
+    if not is_loopback_address(client_ip):
+        return client_ip
+
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    forwarded_ips = [ip.strip() for ip in forwarded_for.split(",") if ip.strip()]
+    if forwarded_ips:
+        return forwarded_ips[-1]
+    if request.headers.get("X-Real-IP", "").strip():
+        return request.headers["X-Real-IP"].strip()
     return client_ip
 
 
@@ -436,10 +493,10 @@ def admin_auth_required(func):
         try:
             ip_obj = ipaddress.ip_address(client_ip)
             if not ip_obj.is_private:
-                return web.json_response({"error": "Доступ заборонено: тільки для локальної мережі"}, status=403)
+                return web.json_response({"error": self.translations["server_access_denied_local"]}, status=403)
         except ValueError:
             # Invalid IP format - deny access
-            return web.json_response({"error": "Доступ заборонено: невірна IP адреса"}, status=403)
+            return web.json_response({"error": self.translations["server_access_denied_ip"]}, status=403)
 
         # Check if it's in trusted list (bypass authentication)
         if hasattr(self, "admin_config") and client_ip in self.admin_config.trusted_ips:
@@ -454,7 +511,7 @@ def admin_auth_required(func):
         if session_token and hasattr(self, "admin_sessions") and session_token in self.admin_sessions:
             return await func(self, request)
 
-        return web.json_response({"error": "Недійсний або відсутній сеанс"}, status=401)
+        return web.json_response({"error": self.translations["server_invalid_session"]}, status=401)
 
     return wrapper
 
@@ -481,10 +538,10 @@ def local_network_only(func):
 
             # Check if IP is private/local
             if not ip_obj.is_private:
-                return web.json_response({"error": "Доступ заборонено: тільки для локальної мережі"}, status=403)
+                return web.json_response({"error": self.translations["server_access_denied_local"]}, status=403)
         except ValueError:
             # Invalid IP format - deny access
-            return web.json_response({"error": "Доступ заборонено: невірна IP адреса"}, status=403)
+            return web.json_response({"error": self.translations["server_access_denied_ip"]}, status=403)
 
         return await func(self, request)
 
@@ -534,9 +591,13 @@ class TestingServer:
         self.log_file = None  # Will be set during initialization
         self.csv_file = None  # Will be set when quiz is selected (answers CSV)
         self.user_csv_file = None  # Will be set when quiz is selected (users CSV)
+        # Optional third CSV: per-answer rows with user_id, username and registration
+        # fields prepended. Generated only when ``extra_answers_with_users_csv`` is set.
+        self.answers_with_users_csv_file = None
         self.quiz_title = "Система Тестування"  # Default title, updated when quiz is loaded
         self.show_right_answer = True  # Default setting, updated when quiz is loaded
         self.show_answers_on_completion = False  # Default setting, updated when quiz is loaded
+        self.show_final_list = True  # Default setting, updated when quiz is loaded
         self.users: Dict[str, Dict[str, Any]] = {}  # user_id -> user data
         self.questions: List[Dict[str, Any]] = []
         self.user_responses: List[Dict[str, Any]] = []
@@ -544,6 +605,9 @@ class TestingServer:
         self.question_start_times: Dict[str, datetime] = {}  # user_id -> question_start_time
         self.user_stats: Dict[str, Dict[str, Any]] = {}  # user_id -> final stats for completed users
         self.user_answers: Dict[str, List[Dict[str, Any]]] = {}  # user_id -> list of answers for stats calculation
+        # user_id -> {question_id: {"selected_answer", "response"}}, answers a retried submit with the stored result
+        self.answer_results: Dict[str, Dict[int, Dict[str, Any]]] = {}
+        self.registration_tokens: Dict[str, str] = {}  # registration_token -> user_id, for retried registrations
         self.force_all_completed: bool = False  # Admin-triggered flag to force show answers
 
         # Live stats WebSocket infrastructure
@@ -554,8 +618,31 @@ class TestingServer:
         # SSH Tunnel infrastructure
         self.tunnel_manager = None  # Will be initialized if tunnel is configured
 
+        # File transfer between servers connected to the same tunnel server
+        self.transfer = TransferManager(
+            get_directories=lambda: {
+                "quizzes": self.quizzes_dir,
+                "logs": self.logs_dir,
+                "csv": self.csv_dir,
+                "images": os.path.join(self.quizzes_dir, "imgs"),
+                "attachments": os.path.join(self.quizzes_dir, "attach"),
+            },
+            get_endpoint=lambda: self.tunnel_manager.get_public_endpoint() if self.tunnel_manager else None,
+            notify=self.broadcast_to_admin_websockets,
+            get_files_in_use=lambda: [
+                self.log_file,
+                self.csv_file,
+                self.user_csv_file,
+                self.answers_with_users_csv_file,
+                self.current_quiz_file,
+            ],
+        )
+
         # Admin session storage for cookie-based authentication
         self.admin_sessions: Dict[str, datetime] = {}  # session_token -> creation_time
+
+        # Load translations based on language config
+        self.translations = get_translations(config.language)
 
         # Preload templates
         self.templates = self._load_templates()
@@ -606,14 +693,17 @@ class TestingServer:
     def generate_csv_path(self, quiz_name: str, csv_type: str = "answers") -> str:
         """Generate CSV file path in CSV directory with quiz name and numeric naming.
 
-        Ensures both answers and users CSVs use the same numeric suffix.
+        Ensures all three CSV types use the same numeric suffix.
 
         Args:
             quiz_name: Name of the quiz file
-            csv_type: Type of CSV - 'answers' or 'users'
+            csv_type: Type of CSV - 'answers', 'users', or 'answers_with_users'
 
         Returns:
-            Path to CSV file (answers: quiz_0001.csv, users: quiz_0001.users.csv)
+            Path to CSV file:
+              - answers:             quiz_0001.csv
+              - users:               quiz_0001.users.csv
+              - answers_with_users:  quiz_0001.answers_with_users.csv
         """
         ensure_directory_exists(self.csv_dir)
 
@@ -624,16 +714,25 @@ class TestingServer:
         # Find the next available number for this quiz
         suffix = 1
         while True:
-            if csv_type == "users":
-                csv_path = os.path.join(self.csv_dir, f"{quiz_prefix}_{suffix:04d}.users.csv")
-            else:  # answers
-                csv_path = os.path.join(self.csv_dir, f"{quiz_prefix}_{suffix:04d}.csv")
-
-            # Check both files to ensure they use the same number
             answers_csv = os.path.join(self.csv_dir, f"{quiz_prefix}_{suffix:04d}.csv")
             users_csv = os.path.join(self.csv_dir, f"{quiz_prefix}_{suffix:04d}.users.csv")
+            answers_with_users_csv = os.path.join(
+                self.csv_dir, f"{quiz_prefix}_{suffix:04d}.answers_with_users.csv"
+            )
 
-            if not os.path.exists(answers_csv) and not os.path.exists(users_csv):
+            if csv_type == "users":
+                csv_path = users_csv
+            elif csv_type == "answers_with_users":
+                csv_path = answers_with_users_csv
+            else:  # answers
+                csv_path = answers_csv
+
+            # Use the same numeric suffix across all three file types
+            if (
+                not os.path.exists(answers_csv)
+                and not os.path.exists(users_csv)
+                and not os.path.exists(answers_with_users_csv)
+            ):
                 return csv_path
             suffix += 1
 
@@ -648,6 +747,8 @@ class TestingServer:
         self.question_start_times.clear()
         self.user_stats.clear()
         self.user_answers.clear()
+        self.answer_results.clear()
+        self.registration_tokens.clear()
         self.live_stats.clear()
         self.force_all_completed = False
         logger.info("Server state reset for new quiz")
@@ -716,6 +817,13 @@ class TestingServer:
         Args:
             new_config: New configuration loaded from file
         """
+        # Update language and translations
+        self.config.language = new_config.language
+        self.translations = get_translations(new_config.language)
+
+        # Update extra_answers_with_users_csv flag (takes effect on next quiz switch / quiz restart)
+        self.config.extra_answers_with_users_csv = new_config.extra_answers_with_users_csv
+
         # Update registration config
         self.config.registration = new_config.registration
 
@@ -813,10 +921,14 @@ class TestingServer:
         # Reset server state
         self.reset_server_state()
 
-        # Update current quiz and CSV filenames (both answers and users)
+        # Update current quiz and CSV filenames (answers, users, optional extra)
         self.current_quiz_file = quiz_path
         self.csv_file = self.generate_csv_path(quiz_filename, "answers")
         self.user_csv_file = self.generate_csv_path(quiz_filename, "users")
+        if self.config.extra_answers_with_users_csv:
+            self.answers_with_users_csv_file = self.generate_csv_path(quiz_filename, "answers_with_users")
+        else:
+            self.answers_with_users_csv_file = None
 
         # Load new questions
         await self.load_questions_from_file(quiz_path)
@@ -1002,6 +1114,9 @@ class TestingServer:
 
             print(self.marks)
 
+            # Store show_final_list setting (default: True)
+            self.show_final_list = data.get("show_final_list", True)
+
             # Add automatic IDs based on array index (for quiz execution only)
             for i, question in enumerate(self.questions):
                 question["id"] = i + 1
@@ -1010,7 +1125,8 @@ class TestingServer:
                 f"Loaded {len(self.questions)} questions from {quiz_file_path}, "
                 f"show_right_answer: {self.show_right_answer}, randomize_questions: {self.randomize_questions}, "
                 f"show_answers_on_completion: {self.show_answers_on_completion}, "
-                f"time_limit: {self.time_limit_s}"
+                f"time_limit: {self.time_limit_s}, "
+                f"show_final_list: {self.show_final_list}"
             )
 
     async def load_questions(self):
@@ -1071,7 +1187,7 @@ class TestingServer:
                     "id": q["id"],
                     "type": "text",
                     "default_value": q.get("default_value", ""),
-                    "points": q.get("points", 1),
+                    "points": normalize_points(q.get("points", 1)),
                 }
             else:
                 # Choice question
@@ -1079,7 +1195,7 @@ class TestingServer:
                     "id": q["id"],
                     "options": q["options"],
                     "is_multiple_choice": isinstance(q["correct_answer"], list),
-                    "points": q.get("points", 1),  # Default 1 point per question
+                    "points": normalize_points(q.get("points", 1)),  # Default 1 point per question
                 }
                 # Include min_correct for multiple choice questions
                 if isinstance(q["correct_answer"], list):
@@ -1108,10 +1224,11 @@ class TestingServer:
         # Generate registration fields HTML as a table (always include username)
         registration_fields_html = '<table class="registration-table">'
 
-        # Get username label from config
-        username_label = "Ім'я користувача"
+        # Get username label from config; fall back to translation if not customized
+        username_label = self.translations["username_label"]
         if hasattr(self.config, "registration") and hasattr(self.config.registration, "username_label"):
-            username_label = self.config.registration.username_label
+            if self.config.registration.username_label:
+                username_label = self.config.registration.username_label
 
         # Add username field as first row
         registration_fields_html += f"""
@@ -1142,7 +1259,28 @@ class TestingServer:
         html_content = html_content.replace("{{REGISTRATION_FIELDS}}", registration_fields_html)
         html_content = html_content.replace("{{USERNAME_LABEL}}", username_label)
         html_content = html_content.replace("{{SHOW_RIGHT_ANSWER}}", "true" if self.show_right_answer else "false")
+        html_content = html_content.replace("{{SHOW_FINAL_LIST}}", "true" if self.show_final_list else "false")
         html_content = html_content.replace("{{WEBQUIZ_VERSION}}", get_package_version())
+
+        # Inject translations as JSON for JS and as individual placeholders for HTML/CSS
+        t = self.translations
+        html_content = html_content.replace("{{TRANSLATIONS_JSON}}", json.dumps(t, ensure_ascii=False))
+        html_content = html_content.replace("{{T_CORRECT_ANSWER_LABEL}}", t["correct_answer_label"])
+        html_content = html_content.replace("{{T_YOUR_ANSWER_LABEL}}", t["your_answer_label"])
+        html_content = html_content.replace("{{T_ALSO_CORRECT_LABEL}}", t["also_correct_label"])
+        html_content = html_content.replace("{{T_LOADING}}", t["loading"])
+        html_content = html_content.replace("{{T_CHECKING_DATA}}", t["checking_data"])
+        html_content = html_content.replace("{{T_REGISTER_TITLE}}", t["register_title"])
+        html_content = html_content.replace("{{T_REGISTER_BUTTON}}", t["register_button"])
+        html_content = html_content.replace("{{T_WAITING_TITLE}}", t["waiting_title"])
+        html_content = html_content.replace("{{T_WAITING_DESCRIPTION}}", t["waiting_description"])
+        html_content = html_content.replace("{{T_WAITING_HINT}}", t["waiting_hint"])
+        html_content = html_content.replace("{{T_SAVE_CHANGES}}", t["save_changes"])
+        html_content = html_content.replace("{{T_CHECK_STATUS}}", t["check_status"])
+        html_content = html_content.replace("{{T_SUBMIT_ANSWER}}", t["submit_answer"])
+        html_content = html_content.replace("{{T_CONTINUE_BUTTON}}", t["continue_button"])
+        html_content = html_content.replace("{{T_SKIP_QUESTION}}", t["skip_question"])
+        html_content = html_content.replace("{{T_TOGGLE_THEME}}", t["toggle_theme"])
 
         # Write to destination
         async with aiofiles.open(index_path, "w", encoding="utf-8") as f:
@@ -1153,6 +1291,10 @@ class TestingServer:
 
         Writes accumulated responses to CSV, creating file with headers if needed.
         Clears in-memory responses after writing.
+
+        When ``extra_answers_with_users_csv`` is enabled, the same rows are also
+        appended to a third CSV that prepends user info (user_id, username,
+        registration fields) to each per-answer row.
         """
         if not self.user_responses:
             return
@@ -1187,6 +1329,9 @@ class TestingServer:
                 ]
             )
 
+        # Snapshot responses for the answers_with_users CSV before clearing
+        responses_snapshot = list(self.user_responses) if self.answers_with_users_csv_file else None
+
         # Write buffer content to file
         csv_content = csv_buffer.getvalue()
         csv_buffer.close()
@@ -1201,6 +1346,74 @@ class TestingServer:
 
         action = "Created" if not file_exists else "Updated"
         logger.info(f"{action} CSV file with {total_responses} responses: {self.csv_file}")
+
+        # Also write the answers_with_users CSV (per-answer rows enriched with user info)
+        if self.answers_with_users_csv_file and responses_snapshot:
+            await self._append_answers_with_users_csv(responses_snapshot)
+
+    async def _append_answers_with_users_csv(self, responses):
+        """Append per-answer rows enriched with user info to the answers_with_users CSV.
+
+        Headers (written once when the file is first created):
+            user_id, username, [registration_fields...], question,
+            selected_answer, correct_answer, is_correct, time_taken_seconds
+
+        Args:
+            responses: List of response dicts (as stored in ``self.user_responses``)
+        """
+        if not responses:
+            return
+
+        registration_fields = []
+        if hasattr(self.config, "registration") and self.config.registration.fields:
+            registration_fields = list(self.config.registration.fields)
+
+        file_exists = os.path.exists(self.answers_with_users_csv_file)
+
+        csv_buffer = StringIO()
+        csv_writer = csv.writer(csv_buffer)
+
+        if not file_exists:
+            headers = ["user_id", "username"]
+            for field_label in registration_fields:
+                headers.append(field_label.lower().replace(" ", "_"))
+            headers.extend(
+                ["question", "selected_answer", "correct_answer", "is_correct", "time_taken_seconds"]
+            )
+            csv_writer.writerow(headers)
+
+        for response in responses:
+            user_id = response["user_id"]
+            user_data = self.users.get(user_id, {})
+            row = [user_id, user_data.get("username", response.get("username", ""))]
+            for field_label in registration_fields:
+                field_name = field_label.lower().replace(" ", "_")
+                row.append(user_data.get(field_name, ""))
+            row.extend(
+                [
+                    response["question"],
+                    response["selected_answer"],
+                    response["correct_answer"],
+                    response["is_correct"],
+                    response["time_taken_seconds"],
+                ]
+            )
+            csv_writer.writerow(row)
+
+        csv_content = csv_buffer.getvalue()
+        csv_buffer.close()
+
+        mode = "w" if not file_exists else "a"
+        async with aiofiles.open(self.answers_with_users_csv_file, mode, encoding="utf-8") as f:
+            await f.write(csv_content)
+            await f.flush()
+            os.fsync(f.fileno())
+
+        action = "Created" if not file_exists else "Updated"
+        logger.info(
+            f"{action} answers_with_users CSV file with {len(responses)} rows: "
+            f"{self.answers_with_users_csv_file}"
+        )
 
     async def flush_users_to_csv(self):
         """Flush user registration data to separate CSV file.
@@ -1610,13 +1823,23 @@ class TestingServer:
         data = await request.json()
         username = data["username"].strip()
 
+        # The quiz page sends a random token with each registration and repeats the request
+        # when the connection drops. If the first attempt got through, return that user.
+        registration_token = data.get("registration_token")
+        if not isinstance(registration_token, str) or not registration_token:
+            registration_token = None
+        if registration_token and self.registration_tokens.get(registration_token) in self.users:
+            user_id = self.registration_tokens[registration_token]
+            logger.info(f"Repeated registration for user {user_id}, returning the existing user")
+            return web.json_response(self._registration_response(user_id))
+
         if not username:
-            return web.json_response({"error": "Ім'я користувача не може бути порожнім"}, status=400)
+            return web.json_response({"error": self.translations["server_username_empty"]}, status=400)
 
         # Check if username already exists
         for existing_user in self.users.values():
             if existing_user["username"] == username:
-                return web.json_response({"error": "Ім'я користувача вже існує"}, status=400)
+                return web.json_response({"error": self.translations["server_username_exists"]}, status=400)
 
         # Generate unique 6-digit user ID
         max_attempts = 100
@@ -1625,7 +1848,7 @@ class TestingServer:
             if user_id not in self.users:
                 break
         else:
-            return web.json_response({"error": "Could not generate unique user ID"}, status=500)
+            return web.json_response({"error": self.translations["server_user_id_generation_failed"]}, status=500)
 
         # Check if approval is required
         requires_approval = hasattr(self.config, "registration") and self.config.registration.approve
@@ -1649,7 +1872,7 @@ class TestingServer:
                 # Get value from request data
                 field_value = data.get(field_name, "").strip()
                 if not field_value:
-                    return web.json_response({"error": f'Поле "{field_label}" не може бути порожнім'}, status=400)
+                    return web.json_response({"error": self.translations["server_field_empty"].format(field=field_label)}, status=400)
                 user_data[field_name] = field_value
 
         # Generate random question order if randomization is enabled
@@ -1658,6 +1881,8 @@ class TestingServer:
             logger.info(f"Generated random question order for user {user_id}: {user_data['question_order']}")
 
         self.users[user_id] = user_data
+        if registration_token:
+            self.registration_tokens[registration_token] = user_id
 
         # If approval not required, start timing and live stats immediately
         if not requires_approval:
@@ -1682,7 +1907,7 @@ class TestingServer:
                         "state": "think",
                         "time_taken": None,
                         "total_questions": len(self.questions),
-                        "total_points": sum(q.get("points", 1) for q in self.questions),
+                        "total_points": sum_points(q.get("points", 1) for q in self.questions),
                     }
                 )
         else:
@@ -1698,9 +1923,21 @@ class TestingServer:
 
         logger.info(f"Registered user: {username} with ID: {user_id}, requires_approval: {requires_approval}")
 
-        # Build response
+        return web.json_response(self._registration_response(user_id))
+
+    def _registration_response(self, user_id):
+        """Build the register response for a registered user.
+
+        Args:
+            user_id: User identifier
+
+        Returns:
+            Dictionary with user_id, username, approval status and question order
+        """
+        user_data = self.users[user_id]
+        requires_approval = hasattr(self.config, "registration") and self.config.registration.approve
         response_data = {
-            "username": username,
+            "username": user_data["username"],
             "user_id": user_id,
             "message": "User registered successfully",
             "requires_approval": requires_approval,
@@ -1714,7 +1951,7 @@ class TestingServer:
         if self.randomize_questions and "question_order" in user_data:
             response_data["question_order"] = user_data["question_order"]
 
-        return web.json_response(response_data)
+        return response_data
 
     async def update_registration(self, request):
         """Update registration data for a user (only if not approved yet).
@@ -1733,13 +1970,13 @@ class TestingServer:
 
         # Check if user exists
         if user_id not in self.users:
-            return web.json_response({"error": "User not found"}, status=404)
+            return web.json_response({"error": self.translations["server_update_not_found"]}, status=404)
 
         user_data = self.users[user_id]
 
         # Check if user is already approved
         if user_data.get("approved", False):
-            return web.json_response({"error": "Cannot update registration data after approval"}, status=400)
+            return web.json_response({"error": self.translations["server_update_after_approval"]}, status=400)
 
         # Update username if provided
         username = data.get("username", "").strip()
@@ -1747,7 +1984,7 @@ class TestingServer:
             # Check if new username already exists (exclude current user)
             for existing_user_id, existing_user in self.users.items():
                 if existing_user_id != user_id and existing_user["username"] == username:
-                    return web.json_response({"error": "Ім'я користувача вже існує"}, status=400)
+                    return web.json_response({"error": self.translations["server_username_exists"]}, status=400)
             user_data["username"] = username
 
         # Update additional registration fields if configured
@@ -1792,7 +2029,7 @@ class TestingServer:
         """
 
         if not self.allow_skip_questions:
-            return web.json_response({"error": "Пропуск питань заборонено"}, status=403)
+            return web.json_response({"error": self.translations["server_skip_forbidden"]}, status=403)
 
         data = await request.json()
         user_id = data["user_id"]
@@ -1800,7 +2037,7 @@ class TestingServer:
 
         # Find user by user_id
         if user_id not in self.users:
-            return web.json_response({"error": "Користувача не знайдено"}, status=404)
+            return web.json_response({"error": self.translations["server_user_not_found"]}, status=404)
 
         username = self.users[user_id]["username"]
         user_data = self.users[user_id]
@@ -1808,7 +2045,7 @@ class TestingServer:
         # Find the question
         question = next((q for q in self.questions if q["id"] == question_id), None)
         if not question:
-            return web.json_response({"error": "Питання не знайдено"}, status=404)
+            return web.json_response({"error": self.translations["server_question_not_found"]}, status=404)
 
         # Calculate time taken server-side from when question was displayed
         time_taken = 0
@@ -1817,7 +2054,8 @@ class TestingServer:
             # Clean up the start time
             del self.question_start_times[user_id]
 
-        user_data["skipped_questions"].append(question_id);
+        if question_id not in user_data["skipped_questions"]:
+            user_data["skipped_questions"].append(question_id)
 
         # Update user progress
         self.user_progress[user_id] = question_id
@@ -1836,7 +2074,7 @@ class TestingServer:
                 "state": state,
                 "time_taken": time_taken,
                 "total_questions": len(self.questions),
-                "total_points": sum(q.get("points", 1) for q in self.questions),
+                "total_points": sum_points(q.get("points", 1) for q in self.questions),
                 "earned_points": 0,
                 "question_points": 0,
                 "completed": False,
@@ -1873,15 +2111,30 @@ class TestingServer:
 
         # Find user by user_id
         if user_id not in self.users:
-            return web.json_response({"error": "Користувача не знайдено"}, status=404)
+            return web.json_response({"error": self.translations["server_user_not_found"]}, status=404)
 
         username = self.users[user_id]["username"]
         user_data = self.users[user_id]
 
+        # The quiz page repeats the request when the connection drops. If the first attempt
+        # got through and only the response was lost, return the stored result.
+        previous_result = self.answer_results.get(user_id, {}).get(question_id)
+        if previous_result is not None and previous_result["selected_answer"] == selected_answer:
+            logger.info(f"Repeated answer from user {user_id} for question {question_id}, returning stored result")
+            return web.json_response(previous_result["response"])
+
+        # Questions may be answered in any order (navigation and skipping), but only once.
+        # This also covers placeholders added by finish_test for unanswered questions.
+        already_answered = previous_result is not None or any(
+            answer.get("question_id") == question_id for answer in self.user_answers.get(user_id, [])
+        )
+        if already_answered:
+            return web.json_response({"error": self.translations["server_already_answered"]}, status=409)
+
         # Find the question
         question = next((q for q in self.questions if q["id"] == question_id), None)
         if not question:
-            return web.json_response({"error": "Питання не знайдено"}, status=404)
+            return web.json_response({"error": self.translations["server_question_not_found"]}, status=404)
 
         # Calculate time taken server-side from when question was displayed
         time_taken = 0
@@ -1939,8 +2192,8 @@ class TestingServer:
         if file_value and not file_value.startswith("/attach/"):
             file_value = f"/attach/{file_value}"
 
-        # Get points for this question (default: 1)
-        question_points = question.get("points", 1)
+        # Get points for this question (default: 1, may be a decimal)
+        question_points = normalize_points(question.get("points", 1))
         earned_points = question_points if is_correct else 0
 
         answer_data = {
@@ -1981,29 +2234,6 @@ class TestingServer:
             completion_time = self.user_stats.get(user_id, {}).get("completed_at").strftime("%d.%m.%Y %H:%M:%S")
             logger.info(f"Test completed for user {user_id} - final stats calculated")
 
-        # Broadcast current question result with completion status
-        await self.broadcast_to_websockets(
-            {
-                "type": "state_update",
-                "user_id": user_id,
-                "username": username,
-                "question_id": question_id,
-                "state": state,
-                "time_taken": time_taken,
-                "total_questions": len(self.questions),
-                "total_points": sum(q.get("points", 1) for q in self.questions),
-                "earned_points": earned_points,
-                "question_points": question_points,
-                "completed": test_completed,
-                "completed_at": completion_time,
-            }
-        )
-
-        logger.info(
-            f"Answer submitted by {username} (ID: {user_id}) for question {question_id}: {'Correct' if is_correct else 'Incorrect'} (took {time_taken}s)"
-        )
-        logger.info(f"Updated progress for user {user_id}: last answered question = {question_id}")
-
         # Prepare response data
         response_data = {"time_taken": time_taken, "message": "Answer submitted successfully"}
 
@@ -2021,6 +2251,35 @@ class TestingServer:
                 # Choice question response
                 response_data["correct_answer"] = question["correct_answer"]
                 response_data["is_multiple_choice"] = isinstance(question["correct_answer"], list)
+
+        # Stored before the broadcast below awaits, so a retry arriving meanwhile gets this result
+        self.answer_results.setdefault(user_id, {})[question_id] = {
+            "selected_answer": selected_answer,
+            "response": response_data,
+        }
+
+        # Broadcast current question result with completion status
+        await self.broadcast_to_websockets(
+            {
+                "type": "state_update",
+                "user_id": user_id,
+                "username": username,
+                "question_id": question_id,
+                "state": state,
+                "time_taken": time_taken,
+                "total_questions": len(self.questions),
+                "total_points": sum_points(q.get("points", 1) for q in self.questions),
+                "earned_points": earned_points,
+                "question_points": question_points,
+                "completed": test_completed,
+                "completed_at": completion_time,
+            }
+        )
+
+        logger.info(
+            f"Answer submitted by {username} (ID: {user_id}) for question {question_id}: {'Correct' if is_correct else 'Incorrect'} (took {time_taken}s)"
+        )
+        logger.info(f"Updated progress for user {user_id}: last answered question = {question_id}")
 
         return web.json_response(response_data)
 
@@ -2047,7 +2306,7 @@ class TestingServer:
 
         # Find user by user_id
         if user_id not in self.users:
-            return web.json_response({"error": "Користувача не знайдено"}, status=404)
+            return web.json_response({"error": self.translations["server_user_not_found"]}, status=404)
 
         username = self.users[user_id]["username"]
         user_data = self.users[user_id]
@@ -2089,7 +2348,7 @@ class TestingServer:
                 "correct_answer": correct_answer_text,
                 "is_correct": False,
                 "time_taken": -1,
-                "points": question.get("points", 1),  # Points for this question
+                "points": normalize_points(question.get("points", 1)),  # Points for this question
                 "earned_points": 0,  # Points actually earned
             }
 
@@ -2108,9 +2367,9 @@ class TestingServer:
                     "state": state,
                     "time_taken": 0,
                     "total_questions": len(self.questions),
-                    "total_points": sum(q.get("points", 1) for q in self.questions),
+                    "total_points": sum_points(q.get("points", 1) for q in self.questions),
                     "earned_points": 0,
-                    "question_points": question.get("points", 1),
+                    "question_points": normalize_points(question.get("points", 1)),
                     "completed": True,
                     "completed_at": user_data["quiz_finish_time"].strftime("%d.%m.%Y %H:%M:%S"),
                 }
@@ -2136,11 +2395,16 @@ class TestingServer:
         data = await request.json()
         user_id = data["user_id"]
         question_id = data["question_id"]
-        username = self.users[user_id]["username"]
 
         # Verify user exists
         if user_id not in self.users:
-            return web.json_response({"error": "Користувача не знайдено"}, status=404)
+            return web.json_response({"error": self.translations["server_user_not_found"]}, status=404)
+
+        username = self.users[user_id]["username"]
+
+        # A repeated notice that arrives after the answer must not start timing again
+        if question_id in self.answer_results.get(user_id, {}):
+            return web.json_response({"status": "success"})
 
         if user_id not in self.question_start_times:
             self.question_start_times[user_id] = datetime.now()
@@ -2148,7 +2412,7 @@ class TestingServer:
 
         # Get points for current question
         question = next((q for q in self.questions if q["id"] == question_id), None)
-        question_points = question.get("points", 1) if question else 1
+        question_points = normalize_points(question.get("points", 1)) if question else 1
 
         await self.broadcast_to_websockets(
             {
@@ -2159,7 +2423,7 @@ class TestingServer:
                 "state": "think",
                 "time_taken": None,
                 "total_questions": len(self.questions),
-                "total_points": sum(q.get("points", 1) for q in self.questions),
+                "total_points": sum_points(q.get("points", 1) for q in self.questions),
                 "question_points": question_points,
             }
         )
@@ -2216,6 +2480,10 @@ class TestingServer:
             total_time += answer["time_taken"]
             earned_points += answer.get("earned_points", 1 if answer["is_correct"] else 0)
             total_points += answer.get("points", 1)
+
+        # Points can be decimals, so round the running sums back to 2 decimals
+        earned_points = normalize_points(earned_points)
+        total_points = normalize_points(total_points)
 
         total_count = len(sorted_answers)
         percentage = round((correct_count / total_count) * 100) if total_count > 0 else 0
@@ -2509,7 +2777,7 @@ class TestingServer:
                 logger.exception(f"Unexpected error reading admin auth request body: {e}")
 
             if not provided_key or provided_key != self.master_key:
-                return web.json_response({"error": "Недійсний або відсутній головний ключ"}, status=401)
+                return web.json_response({"error": self.translations["server_invalid_master_key"]}, status=401)
 
         # Generate a new session token
         session_token = secrets.token_urlsafe(32)
@@ -2628,7 +2896,7 @@ class TestingServer:
                     "state": "think",
                     "time_taken": None,
                     "total_questions": len(self.questions),
-                    "total_points": sum(q.get("points", 1) for q in self.questions),
+                    "total_points": sum_points(q.get("points", 1) for q in self.questions),
                 }
             )
 
@@ -2993,6 +3261,7 @@ class TestingServer:
             "randomize_questions",
             "min_correct",
             "show_answers_on_completion",
+            "show_final_list",
         ]
         for field in optional_fields:
             if field in quizzes_data[0]:
@@ -3135,11 +3404,6 @@ class TestingServer:
                     except SyntaxError as e:
                         errors.append(f"Question {i+1} checker has invalid Python syntax: {e.msg} (line {e.lineno})")
 
-                # Validate points if specified
-                if "points" in question:
-                    points = question["points"]
-                    if not isinstance(points, int) or points < 1:
-                        errors.append(f"Question {i+1} points must be a positive integer")
             else:
                 # Choice question validation
                 # Validate required fields
@@ -3195,6 +3459,16 @@ class TestingServer:
                 elif min_correct > len(question["correct_answer"]):
                     errors.append(f"Question {i+1} min_correct cannot exceed number of correct answers")
 
+            # Validate points (valid for all question types)
+            if "points" in question:
+                points = question["points"]
+                if isinstance(points, bool) or not isinstance(points, (int, float)):
+                    errors.append(f"Question {i+1} points must be a positive number")
+                elif points <= 0:
+                    errors.append(f"Question {i+1} points must be greater than 0")
+                elif round(points, POINTS_DECIMAL_PLACES) != points:
+                    errors.append(f"Question {i+1} points can have at most {POINTS_DECIMAL_PLACES} decimal places")
+
             # Validate stick_to_the_previous (valid for all question types)
             if "stick_to_the_previous" in question:
                 stick_value = question["stick_to_the_previous"]
@@ -3211,6 +3485,9 @@ class TestingServer:
 
         if "randomize_questions" in data and not isinstance(data["randomize_questions"], bool):
             errors.append("'randomize_questions' must be a boolean (true or false)")
+
+        if "show_final_list" in data and not isinstance(data["show_final_list"], bool):
+            errors.append("'show_final_list' must be a boolean (true or false)")
 
         if "title" in data and not isinstance(data["title"], str):
             errors.append("'title' must be a string")
@@ -3240,6 +3517,18 @@ class TestingServer:
         if not isinstance(data, dict):
             errors.append("Config must be a dictionary")
             return False
+
+        # Validate language (optional)
+        if "language" in data:
+            if data["language"] == "ru":
+                errors.append("російська мова не підтримується, але ти москалику попався")
+            elif data["language"] not in ("uk", "en"):
+                errors.append("'language' must be 'uk' or 'en'")
+
+        # Validate extra_answers_with_users_csv (optional)
+        if "extra_answers_with_users_csv" in data:
+            if not isinstance(data["extra_answers_with_users_csv"], bool):
+                errors.append("'extra_answers_with_users_csv' must be a boolean")
 
         # Validate server section (optional)
         if "server" in data:
@@ -3292,6 +3581,11 @@ class TestingServer:
                         errors.append("'registration.fields' must be a list")
                     elif not all(isinstance(field, str) for field in registration["fields"]):
                         errors.append("'registration.fields' must contain only strings")
+                if "disabled_fields" in registration:
+                    if not isinstance(registration["disabled_fields"], list):
+                        errors.append("'registration.disabled_fields' must be a list")
+                    elif not all(isinstance(field, str) for field in registration["disabled_fields"]):
+                        errors.append("'registration.disabled_fields' must contain only strings")
                 if "approve" in registration:
                     if not isinstance(registration["approve"], bool):
                         errors.append("'registration.approve' must be a boolean")
@@ -3534,14 +3828,17 @@ class TestingServer:
         Validates YAML syntax and structure, writes to file, then hot-reloads
         configuration and restarts current quiz if one is active.
 
+        Accepts two formats:
+        - {"content": "yaml string"} — direct YAML content (existing flow)
+        - {"data": {section: {...}}} — JSON partial update (merges into existing config)
+
         Args:
             request: aiohttp request with config content
 
         Returns:
-            JSON response with success status
+            JSON response with success status, config_content and config_data
         """
-        data = await request.json()
-        content = data.get("content", "").strip()
+        request_data = await request.json()
 
         # Get config file path (use the actual path that was loaded)
         config_path = self.config.config_path
@@ -3549,6 +3846,49 @@ class TestingServer:
             return web.json_response(
                 {"error": "No config file was specified. Server started without --config parameter."}, status=400
             )
+
+        # Determine format: JSON data merge or direct YAML content
+        if "data" in request_data:
+            # JSON partial update: merge into existing config
+            merge_data = request_data["data"]
+            if not isinstance(merge_data, dict):
+                return web.json_response({"error": "data must be a dictionary"}, status=400)
+
+            # Use ruamel.yaml in round-trip mode so comments and blank lines
+            # between sections survive partial saves from the admin web form.
+            rt_yaml = RuamelYAML()
+            rt_yaml.preserve_quotes = True
+            rt_yaml.allow_unicode = True
+            rt_yaml.indent(mapping=2, sequence=4, offset=2)
+
+            # Read current config preserving comments/structure
+            current_config = None
+            if os.path.exists(config_path):
+                try:
+                    async with aiofiles.open(config_path, "r", encoding="utf-8") as f:
+                        current_content = await f.read()
+                    if current_content.strip():
+                        current_config = rt_yaml.load(current_content)
+                except Exception:
+                    current_config = None
+
+            if not isinstance(current_config, dict):
+                current_config = rt_yaml.load("{}\n") or {}
+
+            # Shallow-merge each section so existing keys/comments inside a
+            # section are kept when the form only sets some of them.
+            for section_key, section_value in merge_data.items():
+                if isinstance(section_value, dict) and isinstance(current_config.get(section_key), dict):
+                    for k, v in section_value.items():
+                        current_config[section_key][k] = v
+                else:
+                    current_config[section_key] = section_value
+
+            buf = StringIO()
+            rt_yaml.dump(current_config, buf)
+            content = buf.getvalue()
+        else:
+            content = request_data.get("content", "").strip()
 
         # Validate YAML syntax
         try:
@@ -3618,12 +3958,37 @@ class TestingServer:
         else:
             message = "Configuration saved and applied."
 
+        # Read back saved content and parse for response
+        saved_content = ""
+        saved_data = {
+            "language": self.config.language,
+            "extra_answers_with_users_csv": self.config.extra_answers_with_users_csv,
+            "registration": {},
+        }
+        try:
+            async with aiofiles.open(config_path, "r", encoding="utf-8") as f:
+                saved_content = await f.read()
+            parsed = yaml.safe_load(saved_content) if saved_content.strip() else {}
+            if parsed and isinstance(parsed, dict):
+                registration = parsed.get("registration", {})
+                if not isinstance(registration, dict):
+                    registration = {}
+                saved_data = {
+                    "language": parsed.get("language", "uk"),
+                    "extra_answers_with_users_csv": bool(parsed.get("extra_answers_with_users_csv", False)),
+                    "registration": registration,
+                }
+        except Exception:
+            pass
+
         return web.json_response(
             {
                 "success": True,
                 "message": message,
                 "config_path": config_path,
                 "restart_required": restart_reasons,
+                "config_content": saved_content,
+                "config_data": saved_data,
             }
         )
 
@@ -3666,6 +4031,59 @@ class TestingServer:
         logger.info("Tunnel disconnected")
         return web.json_response({"success": True})
 
+    @admin_auth_required
+    async def admin_transfer_state(self, request):
+        """Get file transfer state: own server name, sent offers, incoming requests."""
+        return web.json_response(self.transfer.get_state())
+
+    @admin_auth_required
+    async def admin_transfer_send(self, request):
+        """Offer files to another server on the same tunnel server.
+
+        Body: {"to": "socket-name", "files": [{"type": "quizzes|logs|csv", "name": "..."}]}
+        """
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"error": "Invalid JSON"}, status=400)
+        if not isinstance(data, dict):
+            return web.json_response({"error": "Invalid request"}, status=400)
+        try:
+            offer = await self.transfer.send_offer(data.get("to"), data.get("files"))
+        except TransferError as e:
+            return web.json_response({"error": e.message}, status=e.status)
+        return web.json_response({"success": True, "offer": offer})
+
+    @admin_auth_required
+    async def admin_transfer_accept(self, request):
+        """Accept an incoming transfer request and download its files.
+
+        Optional body: {"files": [{"type", "name", "action": "save|replace|rename|skip", "new_name"}]}
+        Files without a choice get their default action. On invalid choices
+        nothing is downloaded and the request stays open (400).
+        """
+        choices = None
+        if request.can_read_body:
+            try:
+                data = await request.json()
+            except Exception:
+                return web.json_response({"error": "Invalid JSON"}, status=400)
+            choices = data.get("files") if isinstance(data, dict) else None
+        try:
+            result = await self.transfer.accept(request.match_info["request_id"], choices)
+        except TransferError as e:
+            return web.json_response({"error": e.message}, status=e.status)
+        return web.json_response({"success": True, **result})
+
+    @admin_auth_required
+    async def admin_transfer_reject(self, request):
+        """Reject an incoming transfer request."""
+        try:
+            await self.transfer.reject(request.match_info["request_id"])
+        except TransferError as e:
+            return web.json_response({"error": e.message}, status=e.status)
+        return web.json_response({"success": True})
+
     @local_network_only
     async def serve_files_page(self, request):
         """Serve the files management page.
@@ -3684,10 +4102,28 @@ class TestingServer:
         # Read config file content (only if config file was provided)
         config_path = self.config.config_path
         config_content = ""
+        config_data_json = "null"
         if config_path and os.path.exists(config_path):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     config_content = f.read()
+                # Parse config to provide structured JSON data for form editor
+                parsed = yaml.safe_load(config_content) if config_content.strip() else {}
+                if parsed and isinstance(parsed, dict):
+                    registration = parsed.get("registration", {})
+                    if not isinstance(registration, dict):
+                        registration = {}
+                    config_data_json = json.dumps(
+                        {
+                            "language": parsed.get("language", "uk"),
+                            "extra_answers_with_users_csv": bool(parsed.get("extra_answers_with_users_csv", False)),
+                            "registration": registration,
+                        }
+                    )
+                else:
+                    config_data_json = json.dumps(
+                        {"language": "uk", "extra_answers_with_users_csv": False, "registration": {}}
+                    )
             except Exception as e:
                 logger.warning(f"Could not read config file: {e}")
 
@@ -3696,6 +4132,7 @@ class TestingServer:
             const IS_TRUSTED_IP = {str(is_trusted_ip).lower()};
             const CONFIG_CONTENT = {json.dumps(config_content) if config_path else 'null'};
             const CONFIG_PATH = {json.dumps(config_path) if config_path else 'null'};
+            const CONFIG_DATA = {config_data_json if config_path else 'null'};
         """
 
         # Inject the JavaScript variables before </head>
@@ -4132,7 +4569,7 @@ class TestingServer:
             "completion_times": completion_times,
             "questions": self.questions,
             "total_questions": len(self.questions),
-            "total_points": sum(q.get("points", 1) for q in self.questions),
+            "total_points": sum_points(q.get("points", 1) for q in self.questions),
             "current_quiz": os.path.basename(self.current_quiz_file) if self.current_quiz_file else None,
         }
         return await self._handle_websocket_connection(request, self.websocket_clients, initial_data, "WebSocket")
@@ -4172,6 +4609,7 @@ class TestingServer:
             "pending_users": pending_users,
             "requires_approval": hasattr(self.config, "registration") and self.config.registration.approve,
             "tunnel": tunnel_info,
+            "transfer_requests": self.transfer.list_incoming(),
         }
         return await self._handle_websocket_connection(
             request, self.admin_websocket_clients, initial_data, "admin WebSocket"
@@ -4242,6 +4680,16 @@ async def create_app(config: WebQuizConfig):
     # Tunnel routes
     app.router.add_post("/api/admin/tunnel/connect", server.tunnel_connect)
     app.router.add_post("/api/admin/tunnel/disconnect", server.tunnel_disconnect)
+
+    # File transfer between servers on the same tunnel server
+    app.router.add_get("/api/admin/transfer", server.admin_transfer_state)
+    app.router.add_post("/api/admin/transfer/send", server.admin_transfer_send)
+    app.router.add_post("/api/admin/transfer/{request_id}/accept", server.admin_transfer_accept)
+    app.router.add_post("/api/admin/transfer/{request_id}/reject", server.admin_transfer_reject)
+    # Called by other servers through the tunnel (protected by the offer token, not by IP)
+    app.router.add_post("/api/transfer/offer", server.transfer.handle_offer)
+    app.router.add_get("/api/transfer/download/{token}/{type}/{filename}", server.transfer.handle_download)
+    app.router.add_post("/api/transfer/result", server.transfer.handle_result)
 
     app.router.add_get("/ws/admin", server.websocket_admin)
 

@@ -1,5 +1,34 @@
 ## Server Configuration File
 
+### Language
+
+```
+language: en
+```
+
+- **language** — quiz interface language. Supported values: `"uk"` (Ukrainian, default) and `"en"` (English).
+  This setting controls all user-facing text: registration form labels, quiz buttons, progress indicators, validation error messages, and results display.
+  Hot-reloadable — changes are applied immediately when saved via the admin panel.
+
+### Extra answers-with-users CSV export
+
+```
+extra_answers_with_users_csv: true
+```
+
+- **extra_answers_with_users_csv** — when set to `true`, the server generates
+  a **third** CSV file alongside the standard answers and users CSVs. The
+  `extra_` prefix signals that this is generated in addition to the two
+  default files; `answers_with_users` describes exactly what is combined.
+  The file is named `<quiz>_<NNNN>.answers_with_users.csv` and has one row
+  per submitted answer, with `user_id`, `username`, and any registration
+  fields configured under `registration.fields` prepended to the usual
+  answer columns. This makes downstream analysis easier — you don't have to
+  join the two existing CSVs yourself.
+  Default is `false`. Hot-reloadable — the change takes effect on the next
+  quiz switch or quiz restart.
+
+---
 
 ### Section `server`
 
@@ -17,6 +46,7 @@ server:
   Use `"0.0.0.0"` if other devices on your local network will be connecting to the quiz.
 - **port** — the port on which the server runs.
   By default, `8080` is used. If this port is occupied, you can change it to another, such as `8000`.
+  You can also set it on the command line with `webquiz --port 8000`, which overrides the config file.
 - **include_ipv6** — whether to include IPv6 addresses in the network interfaces list.
   Default is `false`. If set to `true`, IPv6 addresses will be shown in the list of URLs for accessing from other devices.
 - **url_format** — URL format for displaying in the admin panel.
@@ -49,10 +79,11 @@ The `paths` section defines the location of service folders. If the specified di
 
 - **csv_dir: "data"**
   Directory where quiz results are stored in CSV format.
-  For each quiz, two files are created:
+  For each quiz, two files are created (three when `extra_answers_with_users_csv: true`):
   - `default_0001.csv` — user answers without personal data;
-  - `default_0001.users.csv` — user data with registration fields, including total quiz completion time in `MM:SS` format (minutes:seconds).
-  Both files can be opened in any spreadsheet editor (Excel, Google Sheets).
+  - `default_0001.users.csv` — user data with registration fields, including total quiz completion time in `MM:SS` format (minutes:seconds);
+  - `default_0001.answers_with_users.csv` — only when `extra_answers_with_users_csv: true`: per-answer rows with `user_id`, `username`, and registration fields prepended to each answer.
+  All files can be opened in any spreadsheet editor (Excel, Google Sheets).
 
 - **static_dir: "static"**
   Directory with static web files.
@@ -83,6 +114,9 @@ registration:
   fields:
     - Grade
     - School
+  disabled_fields:
+    - Teacher
+    - City
 ```
 
 This section defines how users register before taking quizzes.
@@ -93,7 +127,7 @@ This section defines how users register before taking quizzes.
 
 - **username_label**
   Customizes the label text for the username input field in the registration form.
-  Default: `"Ім'я користувача"` (Ukrainian for "Username").
+  Default: follows the `language` setting — `"Ім'я користувача"` for `uk`, `"Username"` for `en`.
   Usage examples:
   ```
   username_label: "Full Name"
@@ -113,6 +147,11 @@ This section defines how users register before taking quizzes.
     - City
   ```
   All collected data is automatically saved to the CSV results file.
+
+- **disabled_fields**
+  Additional registration fields that are kept in the config but are not shown on the registration form. Use this to "park" fields you toggle on and off often without losing their names.
+
+  In the admin file manager (Config → Form view), every additional field shows a checkbox: uncheck it to move the field from `fields` to `disabled_fields`, check it to move the field back. Saving the form simply shuffles each field between the two lists — nothing is deleted, so you can re-enable a field in one click later.
 
 ---
 
@@ -178,6 +217,9 @@ The `tunnel` section allows you to configure an SSH tunnel for public access to 
 - **socket_name** (optional) — fixed socket name instead of random generation.
   Allows having a predictable URL for public access through the tunnel.
   If not specified, a random identifier of 6-8 characters is generated.
+  Required for sending files between servers: it is the name other servers use to reach this one.
+  Use letters, digits, `-`, `_` and `.`.
+  After a disconnect, the same name may be busy for up to 5 minutes, until the tunnel server removes the old socket file.
   Example: `"my-quiz-socket"`
 
 - **config** (optional subsection) — local tunnel configuration.

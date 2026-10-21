@@ -14,6 +14,7 @@ The basic structure of a test file looks like this:
 title: "Test Title"
 description: "Test description (optional)"
 show_right_answer: false
+show_final_list: true        # false to hide question list on results screen
 randomize_questions: false  # true for randomized question order for each student
 time_limit: 300 # Time limit in seconds
 questions:
@@ -89,6 +90,21 @@ show_answers_on_completion: true    # Reveal after all complete
 > **Manual Control:** Administrators can force reveal answers without waiting for stragglers using the "Show Answers for All" button in the admin panel. See the "Administrative Interface" section for details.
 
 > ⚠️ **Important:** If approval mode is enabled (`registration.approve: true`), only **approved** students are counted. Students waiting for approval do not affect answer visibility.
+
+---
+
+#### `show_final_list` (optional)
+
+Controls whether the question-by-question results table is displayed on the final results screen.
+
+- **`true`** (default) — shows the score summary and a table with each question, the student's answer, and correctness
+- **`false`** — shows only the score summary (e.g., "3/5 (60%)")
+
+```
+show_final_list: false  # Only show score, hide question list
+```
+
+> **Tip:** Use `show_final_list: false` when you want students to see only their overall score without reviewing individual questions.
 
 ---
 
@@ -191,11 +207,35 @@ By default, each question is worth **1 point**.
   points: 3  # This question is worth 3 points
 ```
 
+Points can also be decimal numbers with **at most two decimal places**:
+
+```yaml
+- question: "Worth half a point"
+  options:
+    - "A"
+    - "B"
+  correct_answer: 0
+  points: 0.5
+
+- question: "Worth one and a quarter points"
+  options:
+    - "A"
+    - "B"
+  correct_answer: 1
+  points: 1.25
+```
+
+**Rules for `points`:**
+- Must be a number greater than 0
+- At most two decimal places. `1.234` is rejected when the quiz is saved
+- The admin quiz editor shows an error naming the question instead of rounding the value for you
+- The default is `1`
+
 **Features:**
 - Points are displayed in **live stats** as earned/total points
 - **Final results** show earned points
 - **Users CSV file** includes `earned_points` and `total_points` columns
-- Questions worth more than 1 point show a 🏆 indicator during the quiz
+- Questions whose value is not 1 point show a 🏆 indicator during the quiz
 
 ---
 
@@ -368,7 +408,7 @@ In addition to multiple choice questions, WebQuiz supports text input questions 
 - **checker** — required to identify as text question (can be empty for exact match)
 - **default_value** — initial value shown in the textarea (optional)
 - **correct_value** — correct answer shown when student is wrong (optional)
-- **points** — points for correct answer (default: 1)
+- **points** — points for correct answer, a number with at most 2 decimals (default: 1)
 
 **Checker Code:**
 - Uses variable `user_answer` (the student's text input)
@@ -789,6 +829,7 @@ The YAML format for tests in **WebQuiz** allows:
 ✅ Setting minimum number of correct answers
 ✅ Showing or hiding correct answers after completion
 ✅ Randomizing question order for each student to prevent cheating
+✅ Copy protection — students cannot select or copy question text
 ✅ Setting different point values for each question
 ✅ Using checker templates for text questions
 ✅ Easily editing tests in web interface with automatic validation

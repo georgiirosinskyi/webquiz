@@ -71,6 +71,18 @@ The main administrative panel page contains essential tools for managing quizzes
 
   When connected, a public URL appears in the "URL for Access from Other Devices" section with a green background, allowing participants outside your local network to join the quiz.
 
+- **File Transfer Requests**
+  This panel appears when another WebQuiz server on the same tunnel server wants to send files (see [Sending Files to Another Server](#sending-files-to-another-server)).
+  It shows the name of the sending server and every file with its case:
+  - **New file** — there is no file with this name. Choose **Save**, **Rename** or **Skip**.
+  - **The same file already exists** — choose **Skip** (default), **Replace** or **Rename**.
+  - **A different file with this name exists** — choose **Rename** (default), **Replace** or **Skip**.
+  - **The file is used by the server now** (current log, current CSV files, active quiz) — choose **Rename** or **Skip**. It cannot be replaced.
+
+  For **Rename**, a free name is suggested; you can change it. Then click:
+  - **Accept** — download the files as chosen. They appear in the File Manager. If a choice is not possible, an error is shown and nothing is downloaded, so you can choose again.
+  - **Reject** — refuse the files. The sender sees that the request was rejected.
+
 - **Theme Switcher**
   In the top-right corner of the page, there's a button to toggle between light and dark themes. The preference is saved in your browser and applies to all WebQuiz pages.
 
@@ -103,6 +115,26 @@ At the top of the page, there's a **search field** to filter files by name, and 
 - **Config** — the server configuration file (`webquiz.yaml`).
   You can edit the configuration directly in the browser with syntax highlighting.
 
+#### Sending Files to Another Server
+
+You can send quiz, log and CSV files to another WebQuiz server, for example from one classroom computer to another. Both servers must:
+- be connected to the **same tunnel server** with keys of the **same SSH user**;
+- have a fixed, different `socket_name` (see [Configuration](040_config.md));
+- have the SSH tunnel connected on the admin panel.
+
+The **Send files to another server** panel appears only while the tunnel is connected. It shows the name of this server, and a checkbox appears next to every quiz, log and CSV file.
+
+1. Tick the files on any tab.
+2. Type the name of the other server (its `socket_name`) and click **Send**.
+3. The other server's admin panel shows the request. After **Accept**, the files are downloaded.
+4. Below the panel you see the status of your requests: waiting, accepted, rejected or expired.
+
+Notes:
+- A request expires if it is not answered in 30 minutes. Keep both servers connected until then.
+- Images and attached files used by a sent quiz (from `quizzes/imgs/` and `quizzes/attach/`) are sent with it automatically. You do not need to select them.
+- On the other server, the admin chooses for every file: save, replace, rename or skip (see [File Transfer Requests](#main-panel-elements)). Logs and CSV files are saved with the sender name (`room-12_0001.log`).
+- If an image or attachment is saved under a new name, the received quiz is changed to use it, so the quiz shows the right image.
+
 #### Table View
 
 ![CSV Table View](../imgs/file_manager_table.png)
@@ -121,8 +153,17 @@ This view makes it easy to analyze quiz results without downloading the file.
 
 ![Config Tab](../imgs/file_manager_config.png)
 
-The **Config** tab displays the server configuration file in a YAML editor. You can:
-- View and edit all configuration settings
+The **Config** tab provides two ways to edit the server configuration:
+
+**Form view** (default) — a structured form for editing registration settings:
+- **Require admin approval** — checkbox to enable/disable approval workflow
+- **Username label** — customize the label for the username field
+- **Additional registration fields** — add/remove extra fields (e.g., Grade, School)
+
+**YAML view** — a text editor for direct YAML editing with full access to all configuration options.
+
+Use the **Form** / **YAML** toggle to switch between views. If you have unsaved changes, you will be asked to confirm before switching. After saving, both views are automatically updated.
+
 - Click **Save Configuration** to save changes
 - Changes are validated before saving, and a backup is created automatically
 

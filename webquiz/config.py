@@ -82,12 +82,15 @@ class RegistrationConfig:
     """Registration configuration data class"""
 
     fields: List[str] = None
+    disabled_fields: List[str] = None
     approve: bool = False
-    username_label: str = "Ім'я користувача"
+    username_label: str = ""  # Empty = use translation for current language
 
     def __post_init__(self):
         if self.fields is None:
             self.fields = []
+        if self.disabled_fields is None:
+            self.disabled_fields = []
 
 
 @dataclass
@@ -160,6 +163,8 @@ class TunnelConfig:
 class WebQuizConfig:
     """Main configuration data class"""
 
+    language: str = "uk"
+    extra_answers_with_users_csv: bool = False
     server: ServerConfig = field(default_factory=ServerConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
     admin: AdminConfig = field(default_factory=AdminConfig)
@@ -223,7 +228,18 @@ def load_config_from_yaml(config_path: str) -> WebQuizConfig:
                 checker_templates.append(CheckerTemplate(name=template_data["name"], code=template_data["code"]))
         checker_templates_config = CheckerTemplatesConfig(templates=checker_templates)
 
+        # Parse language setting
+        language = config_data.get("language", "uk")
+        if language == "ru":
+            logger.error("російська мова не підтримується, але ти москалику попався")
+            language = "uk"
+
+        # Parse extra_answers_with_users_csv setting
+        extra_answers_with_users_csv = bool(config_data.get("extra_answers_with_users_csv", False))
+
         return WebQuizConfig(
+            language=language,
+            extra_answers_with_users_csv=extra_answers_with_users_csv,
             server=server_config,
             paths=paths_config,
             admin=admin_config,

@@ -13,7 +13,8 @@ The easiest way to start using **WebQuiz** is by running the prebuilt binary fil
 2. Download the binary file that matches your operating system (Windows, macOS, or Linux).
 3. If the file comes as an archive, extract it into any folder you prefer.
 4. Run the file:
-   - **Windows:** double-click `webquiz.exe` or run it from the command line.
+   - **Windows (Installer):** download `webquiz-windows-setup.exe`, run the installer, and launch WebQuiz from the Start Menu.
+   - **Windows (Portable):** extract `webquiz-windows.exe.zip`, then double-click `webquiz.exe` or run it from the command line.
    - **macOS / Linux:** first grant execution permission:
      ```
      chmod +x webquiz
@@ -101,6 +102,12 @@ To take the quiz:
 4. After finishing the quiz, open the **results** folder — you'll find a file with the results in CSV format. If needed, also check the **logs** folder to ensure the server is running without errors.
 
 ![Quiz completion](../imgs/reg_default_test.png)
+
+#### If the Connection Drops
+
+Wi-Fi in a classroom is not always stable. When the student's device loses the connection to the server, the quiz page does not show an error. It shows a yellow banner at the top, **"Connection to the server lost. Retrying..."**, and keeps repeating the request every few seconds until the server answers. The chosen answer is locked while the page waits, and the quiz continues on its own once the connection is back.
+
+An answer or a registration is never counted twice, even if the server got the first attempt and only the reply was lost. A page opened or reloaded while the server is unreachable also waits for the connection instead of showing the registration form again.
 
 ---
 

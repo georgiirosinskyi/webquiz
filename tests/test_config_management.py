@@ -374,3 +374,284 @@ def test_config_registration_fields_reload_from_files_page():
         assert "fields:" in config_content_from_page
         assert "Grade" in config_content_from_page
         assert "School" in config_content_from_page
+
+
+def test_save_config_json_registration():
+    """Test saving config via JSON data with registration section."""
+    with custom_webquiz_server() as (proc, port):
+        cookies = get_admin_session(port)
+
+        response = requests.put(
+            f"http://localhost:{port}/api/admin/config",
+            cookies=cookies,
+            json={"data": {"registration": {"approve": True, "fields": ["Grade", "School"], "username_label": "Student"}}},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+        # Verify response includes both formats
+        assert "config_content" in data
+        assert "config_data" in data
+        assert data["config_data"]["registration"]["approve"] is True
+        assert data["config_data"]["registration"]["fields"] == ["Grade", "School"]
+        assert data["config_data"]["registration"]["username_label"] == "Student"
+
+        # Verify file was written correctly
+        config_path = data["config_path"]
+        with open(config_path, "r", encoding="utf-8") as f:
+            saved = yaml.safe_load(f.read())
+        assert saved["registration"]["approve"] is True
+        assert saved["registration"]["fields"] == ["Grade", "School"]
+        assert saved["registration"]["username_label"] == "Student"
+
+
+def test_save_config_json_language():
+    """Test saving language via JSON partial update (used by the config form dropdown)."""
+    with custom_webquiz_server() as (proc, port):
+        cookies = get_admin_session(port)
+
+        # Save language: en via JSON partial update
+        response = requests.put(
+            f"http://localhost:{port}/api/admin/config",
+            cookies=cookies,
+            json={"data": {"language": "en"}},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["config_data"]["language"] == "en"
+
+        # Verify file was written with language at top level
+        config_path = data["config_path"]
+        with open(config_path, "r", encoding="utf-8") as f:
+            saved = yaml.safe_load(f.read())
+        assert saved["language"] == "en"
+
+        # Verify hot-reload applied: the rendered index.html now uses English
+        page = requests.get(f"http://localhost:{port}/")
+        assert page.status_code == 200
+        assert "Register to start the quiz" in page.text
+        assert "Зареєструйтеся для початку тесту" not in page.text
+
+
+def test_save_config_json_language_rejects_invalid():
+    """Test that the form rejects unsupported language values."""
+    with custom_webquiz_server() as (proc, port):
+        cookies = get_admin_session(port)
+
+        response = requests.put(
+            f"http://localhost:{port}/api/admin/config",
+            cookies=cookies,
+            json={"data": {"language": "fr"}},
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "errors" in data
+        assert any("language" in err.lower() for err in data["errors"])
+
+
+def test_save_config_json_preserves_other_sections():
+    """Test that JSON save preserves existing config sections not in the update."""
+    with custom_webquiz_server() as (proc, port):
+        cookies = get_admin_session(port)
+
+        # First save a config with server section via YAML
+        initial_config = "server:\n  port: 9090\nregistration:\n  approve: false\n"
+        response = requests.put(
+            f"http://localhost:{port}/api/admin/config", cookies=cookies, json={"content": initial_config}
+        )
+        assert response.status_code == 200
+
+        # Now update only registration via JSON
+        response = requests.put(
+            f"http://localhost:{port}/api/admin/config",
+            cookies=cookies,
+            json={"data": {"registration": {"approve": True, "fields": ["Group"]}}},
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify server section is preserved
+        config_path = data["config_path"]
+        with open(config_path, "r", encoding="utf-8") as f:
+            saved = yaml.safe_load(f.read())
+        assert saved["server"]["port"] == 9090
+        assert saved["registration"]["approve"] is True
+        assert saved["registration"]["fields"] == ["Group"]
+
+
+def test_save_config_json_validation_error():
+    """Test that JSON save validates config structure."""
+    with custom_webquiz_server() as (proc, port):
+        cookies = get_admin_session(port)
+
+        # Send invalid registration data (fields must be a list)
+        response = requests.put(
+            f"http://localhost:{port}/api/admin/config",
+            cookies=cookies,
+            json={"data": {"registration": {"fields": "not_a_list"}}},
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "validation failed" in data["error"].lower()
+
+
+def test_save_config_json_empty_data():
+    """Test that JSON save with empty data preserves existing config."""
+    with custom_webquiz_server() as (proc, port):
+        cookies = get_admin_session(port)
+
+        # First save a config
+        initial_config = "registration:\n  approve: true\n"
+        response = requests.put(
+            f"http://localhost:{port}/api/admin/config", cookies=cookies, json={"content": initial_config}
+        )
+        assert response.status_code == 200
+
+        # Now send empty data
+        response = requests.put(
+            f"http://localhost:{port}/api/admin/config", cookies=cookies, json={"data": {}}
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify original config is preserved
+        config_path = data["config_path"]
+        with open(config_path, "r", encoding="utf-8") as f:
+            saved = yaml.safe_load(f.read())
+        assert saved["registration"]["approve"] is True
+
+
+def test_save_config_json_data_must_be_dict():
+    """Test that JSON save rejects non-dict data."""
+    with custom_webquiz_server() as (proc, port):
+        cookies = get_admin_session(port)
+
+        response = requests.put(
+            f"http://localhost:{port}/api/admin/config", cookies=cookies, json={"data": "not_a_dict"}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "dictionary" in data["error"].lower()
+
+
+def test_save_config_json_preserves_comments_and_blank_lines():
+    """Partial JSON config save must keep comments and section spacing."""
+    with custom_webquiz_server() as (proc, port):
+        cookies = get_admin_session(port)
+
+        # Trigger a no-op save to learn the config_path used by the server.
+        response = requests.put(
+            f"http://localhost:{port}/api/admin/config", cookies=cookies, json={"data": {}}
+        )
+        assert response.status_code == 200
+        config_path = response.json()["config_path"]
+
+        # Overwrite the file with a hand-formatted YAML that has comments and
+        # blank lines between sections — exactly the kind of thing PyYAML
+        # would have erased on round-trip.
+        commented_config = (
+            "# Top-of-file comment\n"
+            "\n"
+            "server:\n"
+            "  # port the server listens on\n"
+            f"  port: {port}\n"
+            "\n"
+            "paths:\n"
+            f"  quizzes_dir: quizzes_{port}\n"
+            f"  logs_dir: logs_{port}\n"
+            f"  csv_dir: data_{port}\n"
+            f"  static_dir: static_{port}\n"
+            "\n"
+            "admin:\n"
+            "  master_key: test123  # do not share\n"
+            "  trusted_ips: []\n"
+            "\n"
+            "# Student registration settings\n"
+            "registration:\n"
+            "  approve: false\n"
+        )
+        with open(config_path, "w", encoding="utf-8") as f:
+            f.write(commented_config)
+
+        # Partial update changes only registration.approve.
+        response = requests.put(
+            f"http://localhost:{port}/api/admin/config",
+            cookies=cookies,
+            json={"data": {"registration": {"approve": True}}},
+        )
+        assert response.status_code == 200, response.text
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            saved = f.read()
+
+        # Comments survive
+        assert "# Top-of-file comment" in saved
+        assert "# port the server listens on" in saved
+        assert "# do not share" in saved
+        assert "# Student registration settings" in saved
+        # Blank lines between sections survive
+        assert "\n\nserver:" in saved
+        assert "\n\npaths:" in saved
+        assert "\n\nadmin:" in saved
+        # Blank line before the standalone section comment is also preserved
+        assert "\n\n# Student registration settings\nregistration:" in saved
+        # And the requested change was actually applied
+        parsed = yaml.safe_load(saved)
+        assert parsed["registration"]["approve"] is True
+        assert parsed["server"]["port"] == port
+        assert parsed["admin"]["master_key"] == "test123"
+
+
+def test_save_config_yaml_returns_both_formats():
+    """Test that YAML save also returns config_content and config_data."""
+    with custom_webquiz_server() as (proc, port):
+        cookies = get_admin_session(port)
+
+        config_content = "registration:\n  approve: true\n  fields:\n    - Grade\n"
+        response = requests.put(
+            f"http://localhost:{port}/api/admin/config", cookies=cookies, json={"content": config_content}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "config_content" in data
+        assert "config_data" in data
+        assert data["config_data"]["registration"]["approve"] is True
+        assert data["config_data"]["registration"]["fields"] == ["Grade"]
+
+
+def test_files_page_includes_config_data():
+    """Test that /files/ page injects CONFIG_DATA JavaScript variable."""
+    import re
+    import json
+
+    with custom_webquiz_server() as (proc, port):
+        session = requests.Session()
+        auth_response = session.post(f"http://localhost:{port}/api/admin/auth", json={"master_key": "test123"})
+        assert auth_response.status_code == 200
+
+        # Save config with registration
+        config_content = "registration:\n  approve: true\n  fields:\n    - Grade\n"
+        response = session.put(f"http://localhost:{port}/api/admin/config", json={"content": config_content})
+        assert response.status_code == 200
+
+        # Load /files/ page
+        files_response = session.get(f"http://localhost:{port}/files/")
+        assert files_response.status_code == 200
+        html = files_response.text
+
+        # Extract CONFIG_DATA
+        match = re.search(r"const CONFIG_DATA = (.*?);", html)
+        assert match is not None, "CONFIG_DATA not found in /files/ page"
+
+        config_data = json.loads(match.group(1))
+        assert "registration" in config_data
+        assert config_data["registration"]["approve"] is True
+        assert config_data["registration"]["fields"] == ["Grade"]

@@ -224,6 +224,29 @@ def test_load_config_from_yaml_with_registration():
         assert config.registration.fields == ["grade", "school"]
         assert config.registration.approve is True
         assert config.registration.username_label == "Student Name"
+        # disabled_fields should default to empty list when omitted
+        assert config.registration.disabled_fields == []
+    finally:
+        os.unlink(config_path)
+
+
+def test_load_config_from_yaml_with_disabled_fields():
+    """Test loading config with both enabled and disabled registration fields."""
+    config_data = {
+        "registration": {
+            "fields": ["Grade"],
+            "disabled_fields": ["School", "Teacher"],
+        }
+    }
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        yaml.dump(config_data, f)
+        config_path = f.name
+
+    try:
+        config = load_config_from_yaml(config_path)
+        assert config.registration.fields == ["Grade"]
+        assert config.registration.disabled_fields == ["School", "Teacher"]
     finally:
         os.unlink(config_path)
 
@@ -299,10 +322,15 @@ def test_load_config_with_overrides_env_variable():
     old_value = os.environ.get("WEBQUIZ_MASTER_KEY")
     os.environ["WEBQUIZ_MASTER_KEY"] = "env_key_123"
 
+    # Run from a clean cwd so a stray repo-local webquiz.yaml can't influence the result
+    original_cwd = os.getcwd()
     try:
-        config = load_config_with_overrides()
-        assert config.admin.master_key == "env_key_123"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.chdir(tmpdir)
+            config = load_config_with_overrides()
+            assert config.admin.master_key == "env_key_123"
     finally:
+        os.chdir(original_cwd)
         # Restore environment
         if old_value is not None:
             os.environ["WEBQUIZ_MASTER_KEY"] = old_value
@@ -311,11 +339,20 @@ def test_load_config_with_overrides_env_variable():
 
 
 def test_load_config_with_overrides_no_config_file():
-    """Test loading config without a config file (uses defaults)."""
-    config = load_config_with_overrides(config_path=None)
-    assert config is not None
-    assert isinstance(config, WebQuizConfig)
-    assert config.server.port == 8080
+    """Test loading config without a config file (uses defaults from bundled example)."""
+    # Run from a clean cwd so a stray repo-local webquiz.yaml can't influence the result.
+    # With no file found, load_config_with_overrides() creates one from the bundled
+    # server_config.yaml.example (port 8080) in cwd and loads that.
+    original_cwd = os.getcwd()
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.chdir(tmpdir)
+            config = load_config_with_overrides(config_path=None)
+            assert config is not None
+            assert isinstance(config, WebQuizConfig)
+            assert config.server.port == 8080
+    finally:
+        os.chdir(original_cwd)
 
 
 def test_dataclass_defaults():
@@ -338,8 +375,9 @@ def test_dataclass_defaults():
     # RegistrationConfig
     registration = RegistrationConfig()
     assert registration.fields == []
+    assert registration.disabled_fields == []
     assert registration.approve is False
-    assert registration.username_label == "Ім'я користувача"
+    assert registration.username_label == ""  # Empty = use translation for current language
 
     # WebQuizConfig
     config = WebQuizConfig()
