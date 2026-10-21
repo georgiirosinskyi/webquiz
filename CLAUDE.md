@@ -195,6 +195,8 @@ webquiz-stress-test -c 50
 
 **Setup**: Parallel testing with ports 8080-8087, `custom_webquiz_server` fixture auto-cleans directories, `conftest.py` for shared fixtures. `test_cli_directory_creation.py` spawns the CLI with `sys.executable` and a worker-specific port from 8090-8097 (`cli_test_port()`)
 
+**Windows test notes**: test servers write output to `server_output_{port}.log` (never an unread `PIPE`: the small Windows pipe buffer fills and blocks the server); `conftest.py` resolves `localhost` to IPv4 only (refused `::1` costs ~2 s per request); after stopping a server the fixture waits for its port to close (the venv `python.exe` is a launcher, the real server is its child). Progress per test: `pytest -vv` (`addopts` has `-q`, so `-v` only cancels it). CSV files are opened with `newline=""` so line endings stay `\n` on Windows
+
 ## Important Notes
 - **CSV files** (2 per session, 3 with `extra_answers_with_users_csv: true`): `{quiz_name}_{NNNN}.csv` (per-answer submissions) + `{quiz_name}_{NNNN}.users.csv` (one row per user: №, name, registration fields, grade, HH:MM:SS time, answers given, correct answers, total questions, start/finish time) + optional `{quiz_name}_{NNNN}.answers_with_users.csv` (per-answer rows with `user_id`, `username`, and registration fields prepended). All three share the same `{NNNN}` suffix; `generate_csv_path` advances the suffix only when all candidate files for that number are free.
 - **Config** (`webquiz.yaml`): All sections optional, editable via `/files/` or admin panel, hot-reloaded on save (returns `restart_required` list if server/paths/master_key changed), UTF-8 charset header

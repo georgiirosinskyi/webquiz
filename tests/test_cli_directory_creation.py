@@ -9,6 +9,7 @@ import pytest
 import tempfile
 import shutil
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -37,7 +38,8 @@ def run_webquiz_cli_briefly(args=None):
     if "--port" not in args:
         args += ["--port", str(cli_test_port())]
     cmd = [sys.executable, "-m", "webquiz.cli"] + args
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    # DEVNULL, not PIPE: an unread pipe fills up on Windows and blocks the server
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     # Let it initialize
     time.sleep(2)
     # Terminate the process
@@ -47,6 +49,15 @@ def run_webquiz_cli_briefly(args=None):
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
+    # On Windows the venv python is a launcher and the server is its child, which
+    # keeps the port and the log file open for a moment after proc exits
+    port = int(args[args.index("--port") + 1])
+    for _ in range(50):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.1)
+            if sock.connect_ex(("127.0.0.1", port)) != 0:
+                break
+        time.sleep(0.1)
 
 
 @pytest.fixture

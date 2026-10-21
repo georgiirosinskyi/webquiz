@@ -6,6 +6,7 @@ logic work correctly.
 """
 
 import os
+import sys
 import tempfile
 import yaml
 import pytest
@@ -246,9 +247,10 @@ async def test_ensure_keys_generate_new():
         assert os.path.exists(public_key_path)
         assert os.path.exists(private_key_path)
 
-        # Check permissions (private key should be 0o600)
-        private_stat = os.stat(private_key_path)
-        assert oct(private_stat.st_mode)[-3:] == "600"
+        # Check permissions (private key should be 0o600); Windows has no POSIX modes
+        if sys.platform != "win32":
+            private_stat = os.stat(private_key_path)
+            assert oct(private_stat.st_mode)[-3:] == "600"
 
         # Check key format
         with open(public_key_path, "r") as f:

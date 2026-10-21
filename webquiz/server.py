@@ -1415,7 +1415,8 @@ class TestingServer:
         self.user_responses.clear()
 
         mode = "w" if not file_exists else "a"
-        async with aiofiles.open(self.csv_file, mode, encoding="utf-8") as f:
+        # newline="" keeps the csv writer's line endings (no \r\n translation on Windows)
+        async with aiofiles.open(self.csv_file, mode, encoding="utf-8", newline="") as f:
             await f.write(csv_content)
             await f.flush()
             os.fsync(f.fileno())
@@ -1480,7 +1481,7 @@ class TestingServer:
         csv_buffer.close()
 
         mode = "w" if not file_exists else "a"
-        async with aiofiles.open(self.answers_with_users_csv_file, mode, encoding="utf-8") as f:
+        async with aiofiles.open(self.answers_with_users_csv_file, mode, encoding="utf-8", newline="") as f:
             await f.write(csv_content)
             await f.flush()
             os.fsync(f.fileno())
@@ -1561,7 +1562,7 @@ class TestingServer:
         csv_buffer.close()
 
         # Always overwrite the file (users don't accumulate like responses do)
-        async with aiofiles.open(self.user_csv_file, "w", encoding="utf-8") as f:
+        async with aiofiles.open(self.user_csv_file, "w", encoding="utf-8", newline="") as f:
             await f.write(csv_content)
             await f.flush()
             os.fsync(f.fileno())
@@ -3908,8 +3909,9 @@ class TestingServer:
         if not name or not download_path:
             return web.json_response({"error": "Name and download_path are required"}, status=400)
 
-        # Check for absolute paths (Unix-style or Windows-style)
-        if os.path.isabs(folder) or (len(folder) >= 2 and folder[1] == ":"):
+        # Check for absolute paths (Unix-style or Windows-style). Rooted paths are
+        # checked explicitly: on Windows, Python 3.13+ isabs("/etc") is False (no drive)
+        if os.path.isabs(folder) or folder.startswith(("/", "\\")) or (len(folder) >= 2 and folder[1] == ":"):
             return web.json_response({"error": "Invalid folder path: absolute paths not allowed"}, status=400)
 
         # Check for path traversal attempts before normalization

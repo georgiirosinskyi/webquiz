@@ -327,10 +327,13 @@ def test_load_config_with_overrides_env_variable():
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             os.chdir(tmpdir)
-            config = load_config_with_overrides()
-            assert config.admin.master_key == "env_key_123"
+            try:
+                config = load_config_with_overrides()
+                assert config.admin.master_key == "env_key_123"
+            finally:
+                # Leave tmpdir before it is removed: Windows cannot delete the cwd
+                os.chdir(original_cwd)
     finally:
-        os.chdir(original_cwd)
         # Restore environment
         if old_value is not None:
             os.environ["WEBQUIZ_MASTER_KEY"] = old_value
@@ -344,15 +347,16 @@ def test_load_config_with_overrides_no_config_file():
     # With no file found, load_config_with_overrides() creates one from the bundled
     # server_config.yaml.example (port 8080) in cwd and loads that.
     original_cwd = os.getcwd()
-    try:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            os.chdir(tmpdir)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        os.chdir(tmpdir)
+        try:
             config = load_config_with_overrides(config_path=None)
             assert config is not None
             assert isinstance(config, WebQuizConfig)
             assert config.server.port == 8080
-    finally:
-        os.chdir(original_cwd)
+        finally:
+            # Leave tmpdir before it is removed: Windows cannot delete the cwd
+            os.chdir(original_cwd)
 
 
 def test_dataclass_defaults():

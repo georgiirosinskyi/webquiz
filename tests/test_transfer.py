@@ -49,8 +49,10 @@ class Machine:
         self.messages.append(message)
 
     def write(self, kind, filename, content):
-        mode = "wb" if isinstance(content, bytes) else "w"
-        with open(os.path.join(self.dirs[kind], filename), mode) as f:
+        if isinstance(content, str):
+            # Encode explicitly so sizes and hashes do not depend on Windows \r\n translation
+            content = content.encode("utf-8")
+        with open(os.path.join(self.dirs[kind], filename), "wb") as f:
             f.write(content)
 
     def read(self, kind, filename):

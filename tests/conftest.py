@@ -1,4 +1,5 @@
 import pytest
+import socket
 import subprocess
 import time
 import tempfile
@@ -6,6 +7,21 @@ import shutil
 import os
 import yaml
 from contextlib import contextmanager
+
+
+# Test servers listen on IPv4 only. On Windows "localhost" resolves to ::1 first,
+# and every refused IPv6 attempt costs ~2s before the IPv4 fallback, so tests
+# resolve "localhost" to IPv4 only.
+_original_getaddrinfo = socket.getaddrinfo
+
+
+def _ipv4_localhost_getaddrinfo(host, *args, **kwargs):
+    if host == "localhost":
+        return [info for info in _original_getaddrinfo(host, *args, **kwargs) if info[0] == socket.AF_INET]
+    return _original_getaddrinfo(host, *args, **kwargs)
+
+
+socket.getaddrinfo = _ipv4_localhost_getaddrinfo
 
 
 # Predefined ports for parallel testing (8 workers max)
@@ -135,14 +151,16 @@ def custom_webquiz_server(config=None, quizzes=None):
     if os.path.exists(pyproject_path):
         env["COVERAGE_PROCESS_START"] = pyproject_path
 
+    # Server output goes to a file: nobody reads a PIPE while the test runs, and
+    # on Windows the small pipe buffer fills up and blocks the server on its next log write
     cmd = [sys.executable, "-m", "webquiz.cli", "--config", config_filename]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+    output_filename = f"server_output_{port}.log"
+    output_file = open(output_filename, "w")
+    proc = subprocess.Popen(cmd, stdout=output_file, stderr=subprocess.STDOUT, text=True, env=env)
 
     try:
         # Wait for server to be ready
-        import socket
-
-        max_attempts = 30
+        max_attempts = 150
         for _ in range(max_attempts):
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -155,8 +173,12 @@ def custom_webquiz_server(config=None, quizzes=None):
             time.sleep(0.1)
         else:
             # Server failed to start
-            stdout, stderr = proc.communicate()
-            raise Exception(f"Server failed to start within {max_attempts * 0.1}s\nSTDOUT: {stdout}\nSTDERR: {stderr}")
+            proc.kill()
+            proc.wait()
+            output_file.flush()
+            with open(output_filename) as f:
+                output = f.read()
+            raise Exception(f"Server failed to start within {max_attempts * 0.1}s\nOUTPUT: {output}")
 
         yield proc, port
 
@@ -169,6 +191,17 @@ def custom_webquiz_server(config=None, quizzes=None):
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait()
+        output_file.close()
+
+        # On Windows sys.executable in a venv is a launcher that runs the real
+        # interpreter as a child, so the server can still hold the port for a
+        # moment after proc exits. Wait for it, or the next test sees "port in use".
+        for _ in range(50):
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(0.1)
+                if sock.connect_ex(("localhost", port)) != 0:
+                    break
+            time.sleep(0.1)
 
         # Cleanup directories and config file to prevent data contamination between tests
         try:
@@ -181,8 +214,9 @@ def custom_webquiz_server(config=None, quizzes=None):
                 if os.path.exists(directory):
                     shutil.rmtree(directory)
 
-            if os.path.exists(config_filename):
-                os.remove(config_filename)
+            for filename in [config_filename, output_filename]:
+                if os.path.exists(filename):
+                    os.remove(filename)
         except Exception as e:
             # Log cleanup errors but don't fail the test
             print(f"Warning: Cleanup error: {e}")
