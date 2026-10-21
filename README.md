@@ -360,6 +360,10 @@ questions:
 - `allow_skip_questions: true` - students can skip questions and return to them via the numbered navigation bar (default: `false`); an answered question cannot be answered again
 - `marks` - list of `{grade, min_score}` rules converting the percentage of earned points into a grade shown on the results screen and in the users CSV (default: 5 from 95%, 4 from 80%, 3 from 60%); `default_mark` is the grade below every rule (default: 2)
 
+**Quiz Switching:**
+- Switching or restarting the quiz reloads the quiz pages students still have open within a few seconds
+- Every request from the quiz page carries the quiz version; answers from a page of another quiz are refused, so they are never stored for the new quiz's questions
+
 **Copy Protection:**
 - Question text and answer options cannot be selected or copied by students
 - Prevents sharing quiz content via copy-paste

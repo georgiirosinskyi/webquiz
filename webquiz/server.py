@@ -560,6 +560,18 @@ def local_network_only(func):
     return wrapper
 
 
+#: Student API paths that check the quiz version sent by the quiz page
+STUDENT_API_PATHS = (
+    "/api/register",
+    "/api/update-registration",
+    "/api/submit-answer",
+    "/api/skip-question",
+    "/api/question-start",
+    "/api/verify-user/",
+    "/api/finish-test",
+)
+
+
 @web.middleware
 async def error_middleware(request, handler):
     """Global error handling middleware.
@@ -597,6 +609,8 @@ class TestingServer:
         self.master_key = config.admin.master_key
         self.admin_config = config.admin  # Store admin config for IP whitelist access
         self.current_quiz_file = None  # Will be set when quiz is selected
+        # Changes on every quiz switch or restart; quiz pages built for another version must reload
+        self.quiz_version: Optional[str] = None
         self.logs_dir = config.paths.logs_dir
         self.csv_dir = config.paths.csv_dir
         self.static_dir = config.paths.static_dir
@@ -969,6 +983,7 @@ class TestingServer:
 
         # Reset server state
         self.reset_server_state()
+        self.quiz_version = secrets.token_hex(8)
 
         # Update current quiz and CSV filenames (answers, users, optional extra)
         self.current_quiz_file = quiz_path
@@ -995,6 +1010,7 @@ class TestingServer:
             {
                 "type": "quiz_switched",
                 "current_quiz": quiz_filename,
+                "quiz_version": self.quiz_version,
                 "questions": self.questions,
                 "total_questions": len(self.questions),
                 "message": f"Quiz switched to: {quiz_filename}",
@@ -1305,6 +1321,7 @@ class TestingServer:
         # Inject questions data, title, version, registration fields, username label, and show_right_answer setting into template
         html_content = template_content.replace("{{QUESTIONS_DATA}}", questions_json)
         html_content = html_content.replace("{{QUIZ_TITLE}}", self.quiz_title)
+        html_content = html_content.replace("{{QUIZ_VERSION}}", self.quiz_version or "")
         html_content = html_content.replace("{{REGISTRATION_FIELDS}}", registration_fields_html)
         html_content = html_content.replace("{{USERNAME_LABEL}}", username_label)
         html_content = html_content.replace("{{SHOW_RIGHT_ANSWER}}", "true" if self.show_right_answer else "false")
@@ -4528,7 +4545,32 @@ class TestingServer:
             HTML file response
         """
         index_path = f"{self.static_dir}/index.html"
-        return web.FileResponse(index_path, headers={"Content-Type": "text/html; charset=utf-8"})
+        # The page embeds the quiz, so the browser must check for a newer one instead of using its cache
+        return web.FileResponse(
+            index_path, headers={"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache"}
+        )
+
+    async def get_quiz_version(self, request):
+        """Return the current quiz version; open quiz pages poll it to reload after a quiz switch."""
+        return web.json_response({"quiz_version": self.quiz_version}, headers={"Cache-Control": "no-store"})
+
+    def stale_quiz_response(self, request):
+        """Return a 409 response when a student request comes from a page of another quiz, else None.
+
+        The quiz page sends ``quiz_version`` with every API request. After a quiz switch or a
+        restart the page still shows the old questions; answering them would store answers for
+        the new quiz's questions, so the request is refused and the page reloads.
+        """
+        client_version = request.query.get("quiz_version")
+        if client_version is None or not request.path.startswith(STUDENT_API_PATHS):
+            return None
+        if client_version == self.quiz_version:
+            return None
+        logger.info(f"Request {request.path} from a page of another quiz version ({client_version}), asking to reload")
+        return web.json_response(
+            {"error": self.translations["quiz_changed"], "quiz_changed": True, "quiz_version": self.quiz_version},
+            status=409,
+        )
 
     @local_network_only
     async def serve_admin_page(self, request):
@@ -4780,8 +4822,15 @@ async def create_app(config: WebQuizConfig):
     # Start periodic flush task
     asyncio.create_task(server.periodic_flush())
 
+    @web.middleware
+    async def quiz_version_middleware(request, handler):
+        stale = server.stale_quiz_response(request)
+        if stale is not None:
+            return stale
+        return await handler(request)
+
     # Create app with middleware
-    app = web.Application(middlewares=[error_middleware])
+    app = web.Application(middlewares=[error_middleware, quiz_version_middleware])
 
     # Routes
     app.router.add_post("/api/register", server.register_user)
@@ -4791,6 +4840,7 @@ async def create_app(config: WebQuizConfig):
     app.router.add_post("/api/question-start", server.question_start)
     app.router.add_get("/api/verify-user/{user_id}", server.verify_user_id)
     app.router.add_post("/api/finish-test", server.finish_test)
+    app.router.add_get("/api/quiz-version", server.get_quiz_version)
 
     # Admin routes
     app.router.add_get("/admin/", server.serve_admin_page)

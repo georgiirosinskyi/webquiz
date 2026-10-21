@@ -22,6 +22,8 @@ The main administrative panel page contains essential tools for managing quizzes
 
   You can switch between quizzes or create new ones.
 
+  Switching or restarting a quiz clears all participants. Quiz pages of the old quiz that students still have open reload automatically within a few seconds, so students see the new quiz right away; the server does not accept answers from a page of the old quiz.
+
 - **"Create New Quiz" Button**
   Opens the interface for creating a new quiz in visual mode.
   The new file will be added to the `quizzes` directory.

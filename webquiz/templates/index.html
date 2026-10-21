@@ -892,6 +892,7 @@
         let answeredQuestions = 0;
         let showRightAnswer = {{SHOW_RIGHT_ANSWER}};
         let showFinalList = {{SHOW_FINAL_LIST}};
+        const QUIZ_VERSION = "{{QUIZ_VERSION}}"; // Changes when the admin switches or restarts the quiz
         const T = {{TRANSLATIONS_JSON}};
         let currentQuestionIndex = 0;
         let selectedAnswer = null;
@@ -1015,12 +1016,17 @@
         async function fetchWithRetry(url, options = {}) {
             let attempt = 0;
             let waiting = false;
+            url = withQuizVersion(url);
             try {
                 while (true) {
                     const controller = new AbortController();
                     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
                     try {
                         const response = await fetch(url, { ...options, signal: controller.signal });
+                        if (response.status === 409 && await isQuizChangedResponse(response)) {
+                            reloadForNewQuiz();
+                            return new Promise(() => {}); // The page is reloading
+                        }
                         if (!RETRY_STATUSES.includes(response.status)) {
                             return response;
                         }
@@ -1045,8 +1051,78 @@
             }
         }
 
+        // The page embeds the questions of one quiz. Every request carries its version, so after
+        // a quiz switch or restart the server refuses answers to the old questions and the page reloads.
+        function withQuizVersion(url) {
+            if (!QUIZ_VERSION || !url.startsWith('api/')) {
+                return url;
+            }
+            return url + (url.includes('?') ? '&' : '?') + 'quiz_version=' + encodeURIComponent(QUIZ_VERSION);
+        }
+
+        async function isQuizChangedResponse(response) {
+            try {
+                const data = await response.clone().json();
+                return !!data.quiz_changed;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        let reloadingForNewQuiz = false;
+
+        function reloadForNewQuiz() {
+            if (reloadingForNewQuiz) {
+                return;
+            }
+            reloadingForNewQuiz = true;
+            const banner = document.getElementById('connection-banner');
+            // If a reload already brought back this same page (e.g. a cached copy), do not loop
+            let reloadedFrom = null;
+            try {
+                reloadedFrom = sessionStorage.getItem('quizReloadFrom');
+                sessionStorage.setItem('quizReloadFrom', QUIZ_VERSION);
+            } catch (error) {
+                // Storage may be unavailable, the reload still works
+            }
+            if (reloadedFrom === QUIZ_VERSION) {
+                banner.textContent = T.quiz_changed_reload;
+                banner.classList.remove('hidden');
+                return;
+            }
+            banner.textContent = T.quiz_changed;
+            banner.classList.remove('hidden');
+            location.reload();
+        }
+
+        // Pages that stay open without requests (reading a question, results screen) learn about
+        // a new quiz by polling its version
+        const QUIZ_VERSION_POLL_MS = 5000;
+
+        async function checkQuizVersion() {
+            try {
+                const response = await fetch('api/quiz-version', { cache: 'no-store' });
+                if (!response.ok) {
+                    return;
+                }
+                const data = await response.json();
+                if (data.quiz_version && data.quiz_version !== QUIZ_VERSION) {
+                    reloadForNewQuiz();
+                }
+            } catch (error) {
+                // No connection: the next poll tries again
+            }
+        }
+
+        if (QUIZ_VERSION) {
+            setInterval(checkQuizVersion, QUIZ_VERSION_POLL_MS);
+        }
+
         function updateConnectionBanner(change) {
             requestsWaitingForConnection += change;
+            if (reloadingForNewQuiz) {
+                return; // The quiz-changed message stays visible
+            }
             const banner = document.getElementById('connection-banner');
             banner.textContent = T.connection_lost;
             banner.classList.toggle('hidden', requestsWaitingForConnection === 0);

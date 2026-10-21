@@ -60,6 +60,8 @@ TRANSLATIONS = {
         "status_check_error": "Помилка перевірки статусу",
         "submit_error": "Помилка відправки відповіді: ",
         "connection_lost": "Немає з'єднання з сервером. Повторна спроба...",
+        "quiz_changed": "Тест змінено. Сторінка оновлюється...",
+        "quiz_changed_reload": "Тест змінено. Будь ласка, перезавантажте сторінку.",
         "skip_error": "Помилка пропуску відповіді: ",
 
         # Results
@@ -159,6 +161,8 @@ TRANSLATIONS = {
         "status_check_error": "Status check error",
         "submit_error": "Error submitting answer: ",
         "connection_lost": "Connection to the server lost. Retrying...",
+        "quiz_changed": "The quiz has changed. Reloading the page...",
+        "quiz_changed_reload": "The quiz has changed. Please reload the page.",
         "skip_error": "Error skipping question: ",
 
         # Results

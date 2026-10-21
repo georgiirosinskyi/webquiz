@@ -77,5 +77,19 @@
             please configure the <code>admin.master_key</code> in your server configuration.
         </p>
     </div>
+    <script>
+        // Reload as soon as the admin selects a quiz
+        setInterval(async () => {
+            try {
+                const response = await fetch('api/quiz-version', { cache: 'no-store' });
+                const data = await response.json();
+                if (data.quiz_version) {
+                    location.reload();
+                }
+            } catch (error) {
+                // No connection: the next poll tries again
+            }
+        }, 5000);
+    </script>
 </body>
 </html>
