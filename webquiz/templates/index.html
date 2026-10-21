@@ -1626,20 +1626,33 @@
                 }
             }
 
-            // TODO: add support for multiple choise and text questions
-            // If question was alredy answered disable selection and show selected answer
-            if ((question.selectedAnswer !== undefined) && (question.selectedAnswer !== null)) {
-                const option = document.getElementById(`option_${question.selectedAnswer}`);
-                    if (option) {
-                        option.classList.add('selected');
+            // An answered question shows the stored answer and cannot be answered again
+            const isAnswered = question.status === "answered";
+            if (isAnswered) {
+                if (isTextQuestion) {
+                    const textInput = document.getElementById('text-answer-input');
+                    if (textInput) {
+                        textInput.value = question.selectedAnswer ?? '';
+                        textInput.disabled = true;
                     }
-                document.querySelectorAll('.option').forEach(option => {
+                } else {
+                    const chosen = Array.isArray(question.selectedAnswer) ? question.selectedAnswer : [question.selectedAnswer];
+                    chosen.forEach(optionIndex => {
+                        const option = document.getElementById(`option_${optionIndex}`);
+                        if (option) {
+                            option.classList.add('selected');
+                        }
+                    });
+                    document.querySelectorAll('.option').forEach(option => {
                         option.classList.add('disabled');
                     });
+                }
             }
 
             // For text questions, enable submit if there's a default value or any text
-            if (isTextQuestion) {
+            if (isAnswered) {
+                submitBtn.disabled = true;
+            } else if (isTextQuestion) {
                 submitBtn.disabled = !textAnswer.trim();
             } else {
                 submitBtn.disabled = true;
@@ -1886,8 +1899,7 @@
                     correctValue: data.correct_value
                 });
 
-                // TODO: add support for multiple choise and text questions
-                question.selectedAnswer = selectedAnswer
+                question.selectedAnswer = answerToSubmit;
                 question.status = "answered";
                 answeredQuestions++;
 
@@ -2041,20 +2053,27 @@
                 }
             }
 
-            const isLastQuestion = (currentQuestionIndex === (questions.length - 1));
+            // Leaving a question without an answer keeps it reachable from the navigation bar
+            if (questions[currentQuestionIndex].status !== "answered") {
+                questions[currentQuestionIndex].status = "skipped";
+            }
 
             // Move to the question
-            if ((questionIdx === null) && !isLastQuestion) {
-                currentQuestionIndex++;
-            } else if (questionIdx !== null) {
-                if (questions[currentQuestionIndex].status !== "answered") {
-                        questions[currentQuestionIndex].status = "skipped";
-                    }
-                currentQuestionIndex = questionIdx; // TODO: check if idx is valid
+            if (questionIdx !== null) {
+                if (questionIdx >= 0 && questionIdx < questions.length) {
+                    currentQuestionIndex = questionIdx;
+                }
+            } else {
+                // Next question without an answer; after the last one, the first one still unanswered
+                let next = currentQuestionIndex + 1;
+                while (next < questions.length && questions[next].status === "answered") {
+                    next++;
+                }
+                currentQuestionIndex = next < questions.length ? next : pickQuestionIndex(-1);
             }
 
             // Check if we've reached the end before notifying server
-            if (isLastQuestion || (answeredQuestions === questions.length)) {
+            if (answeredQuestions === questions.length) {
                 // Test completed - go directly to results
                 await showCurrentQuestion(false); // No animation for results screen
                 return;
