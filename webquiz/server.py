@@ -603,6 +603,7 @@ class TestingServer:
         self.user_responses: List[Dict[str, Any]] = []
         self.user_progress: Dict[str, int] = {}  # user_id -> last_answered_question_id
         self.question_start_times: Dict[str, datetime] = {}  # user_id -> question_start_time
+        self.question_start_ids: Dict[str, int] = {}  # user_id -> question the start time belongs to
         self.user_stats: Dict[str, Dict[str, Any]] = {}  # user_id -> final stats for completed users
         self.user_answers: Dict[str, List[Dict[str, Any]]] = {}  # user_id -> list of answers for stats calculation
         # user_id -> {question_id: {"selected_answer", "response"}}, answers a retried submit with the stored result
@@ -745,6 +746,7 @@ class TestingServer:
         self.user_responses.clear()
         self.user_progress.clear()
         self.question_start_times.clear()
+        self.question_start_ids.clear()
         self.user_stats.clear()
         self.user_answers.clear()
         self.answer_results.clear()
@@ -1888,6 +1890,7 @@ class TestingServer:
         if not requires_approval:
             # Start timing for first question
             self.question_start_times[user_id] = datetime.now()
+            self.question_start_ids[user_id] = self._first_question_id(user_data)
             user_data["quiz_start_time"] = datetime.now()
 
             # Initialize live stats: set first question to "think"
@@ -2048,11 +2051,7 @@ class TestingServer:
             return web.json_response({"error": self.translations["server_question_not_found"]}, status=404)
 
         # Calculate time taken server-side from when question was displayed
-        time_taken = 0
-        if user_id in self.question_start_times:
-            time_taken = (datetime.now() - self.question_start_times[user_id]).total_seconds()
-            # Clean up the start time
-            del self.question_start_times[user_id]
+        time_taken = self._take_question_time(user_id, question_id)
 
         if question_id not in user_data["skipped_questions"]:
             user_data["skipped_questions"].append(question_id)
@@ -2137,11 +2136,7 @@ class TestingServer:
             return web.json_response({"error": self.translations["server_question_not_found"]}, status=404)
 
         # Calculate time taken server-side from when question was displayed
-        time_taken = 0
-        if user_id in self.question_start_times:
-            time_taken = (datetime.now() - self.question_start_times[user_id]).total_seconds()
-            # Clean up the start time
-            del self.question_start_times[user_id]
+        time_taken = self._take_question_time(user_id, question_id)
 
         # Check if this is a text input question (has checker)
         is_text_question = "checker" in question
@@ -2381,6 +2376,24 @@ class TestingServer:
 
         return web.json_response({"status": "success"})
 
+    def _first_question_id(self, user_data):
+        """Return the id of the first question the user sees (respects randomization)."""
+        if self.randomize_questions and user_data.get("question_order"):
+            return user_data["question_order"][0]
+        return self.questions[0]["id"] if self.questions else None
+
+    def _take_question_time(self, user_id, question_id):
+        """Return seconds spent on the question and stop its timing.
+
+        The start time only counts when it belongs to this question: with navigation the
+        student may have moved to another question since.
+        """
+        start = self.question_start_times.pop(user_id, None)
+        started_question_id = self.question_start_ids.pop(user_id, None)
+        if start is None or (started_question_id is not None and started_question_id != question_id):
+            return 0
+        return (datetime.now() - start).total_seconds()
+
     async def question_start(self, request):
         """Handle notification that a user started viewing a question.
 
@@ -2406,8 +2419,11 @@ class TestingServer:
         if question_id in self.answer_results.get(user_id, {}):
             return web.json_response({"status": "success"})
 
-        if user_id not in self.question_start_times:
+        # Navigation can move to another question before answering: timing follows the shown question.
+        # A repeated notice for the same question keeps the original start time.
+        if user_id not in self.question_start_times or self.question_start_ids.get(user_id) != question_id:
             self.question_start_times[user_id] = datetime.now()
+            self.question_start_ids[user_id] = question_id
         self.update_live_stats(user_id, question_id, "think")
 
         # Get points for current question
@@ -2878,6 +2894,7 @@ class TestingServer:
 
         # Start timing for first question
         self.question_start_times[user_id] = datetime.now()
+        self.question_start_ids[user_id] = self._first_question_id(user_data)
 
         # Initialize live stats: set first question to "think"
         if len(self.questions) > 0:

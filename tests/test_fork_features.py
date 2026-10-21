@@ -246,3 +246,28 @@ def test_background_images_served(temp_dir):
             response = requests.get(f"http://localhost:{port}/img/{name}")
             assert response.status_code == 200, name
             assert response.content[:4] == b"\x89PNG"
+
+
+def question_start(port, user_id, question_id):
+    return requests.post(
+        f"http://localhost:{port}/api/question-start", json={"user_id": user_id, "question_id": question_id}
+    )
+
+
+def test_question_time_follows_shown_question(temp_dir):
+    """Time spent on another question before navigating away is not counted for the answered one."""
+    with custom_webquiz_server(quizzes={"quiz.yaml": quiz(allow_skip_questions=True)}) as (proc, port):
+        user_id = register(port)["user_id"]
+        assert question_start(port, user_id, 1).status_code == 200
+        time.sleep(1.5)  # on question 1
+        assert question_start(port, user_id, 3).status_code == 200
+        time.sleep(0.2)
+        response = submit(port, user_id, 3, 0)
+        assert response.status_code == 200
+        assert response.json()["time_taken"] < 1.0
+
+        # A repeated notice for the same question keeps the original start
+        assert question_start(port, user_id, 2).status_code == 200
+        time.sleep(0.6)
+        assert question_start(port, user_id, 2).status_code == 200
+        assert submit(port, user_id, 2, 1).json()["time_taken"] >= 0.5
