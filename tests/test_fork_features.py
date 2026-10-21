@@ -8,6 +8,7 @@ and the quiz page elements (timer, navigation, skip button), light theme only.
 import csv
 import glob
 import os
+import re
 import time
 
 import requests
@@ -289,6 +290,24 @@ def test_pages_have_only_light_theme(temp_dir):
             assert "theme-toggle" not in html, path
             assert "toggleTheme" not in html, path
             assert "data-theme" not in html, path
+
+
+def test_live_stats_state_colors(temp_dir):
+    with custom_webquiz_server(quizzes={"quiz.yaml": quiz()}) as (proc, port):
+        html = requests.get(f"http://localhost:{port}/live-stats/").text
+
+    def rule(selector):
+        rules = re.findall(rf"^\s*{re.escape(selector)} \{{([^}}]*)\}}", html, re.M)
+        assert len(rules) == 1, f"{selector} must be defined once, found {len(rules)}"
+        return rules[0]
+
+    # Every cell state has its own background (skipped questions are yellow)
+    for state in ["think", "ok", "fail", "skip", "empty"]:
+        assert f"background: var(--{state}-color)" in rule(f".state-{state}")
+    assert "color: #721c24" in rule(".state-fail")
+    # The reconnecting banner uses the "think" blue with matching text
+    assert "background: var(--think-color)" in rule(".connecting")
+    assert "color: #044b85" in rule(".connecting")
 
 
 def test_background_images_served(temp_dir):
