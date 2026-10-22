@@ -29,6 +29,8 @@ classifiers = [
 packages = [{include = "webquiz"}]
 include = [
     "webquiz/templates/*",
+    # Built by `npm run build` in frontend/; git-ignored, so it needs an explicit include for both formats
+    { path = "webquiz/ui/**/*", format = ["sdist", "wheel"] },
     "webquiz/img/*",
     "server_config.yaml.example"
 ]

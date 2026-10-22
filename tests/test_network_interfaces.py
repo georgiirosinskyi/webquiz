@@ -258,14 +258,11 @@ class TestPort80Normalization:
             response = requests.get(f"http://localhost:{port}/admin/")
             assert response.status_code == 200
 
-            # Extract NETWORK_INFO from HTML
-            html = response.text
-            match = re.search(r"const NETWORK_INFO = ({.*?});", html, re.DOTALL)
-            assert match, "NETWORK_INFO not found in admin page"
+            from conftest import get_page_data
 
-            network_info = match.group(1)
+            urls = get_page_data(response.text)["page"]["networkUrls"]
             # Verify port is included in URLs (for non-80 ports)
-            assert f":{port}/" in network_info, f"Port {port} should be in URL"
+            assert all(f":{port}/" in url for url in urls), f"Port {port} should be in every URL: {urls}"
 
     def test_normalize_url_removes_port_80(self):
         """Test that normalize_url helper removes :80 from URLs."""

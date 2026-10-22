@@ -16,6 +16,7 @@ from selenium_helpers import (
     find_option_by_text,
     wait_for_question_text,
     wait_for_question_containing_text,
+    wait_for_results,
 )
 
 
@@ -71,7 +72,7 @@ def test_auto_advance_with_show_right_answer_false(temp_dir, browser):
         browser.find_element(By.ID, "submit-answer-btn").click()
 
         # Should auto-advance to results
-        wait_for_element(browser, By.ID, "results", timeout=3)
+        wait_for_results(browser, timeout=3)
         assert "Результат:" in browser.page_source
 
 
@@ -185,7 +186,7 @@ def test_auto_advance_multiple_questions(temp_dir, browser):
         browser.find_element(By.ID, "submit-answer-btn").click()
 
         # Should auto-advance to results
-        wait_for_element(browser, By.ID, "results", timeout=3)
+        wait_for_results(browser, timeout=3)
         assert "Результат:" in browser.page_source
 
 
@@ -256,7 +257,7 @@ def test_auto_advance_to_results_last_question(temp_dir, browser):
         browser.find_element(By.ID, "submit-answer-btn").click()
 
         # Should auto-advance directly to results without continue button
-        wait_for_element(browser, By.ID, "results", timeout=3)
+        wait_for_results(browser, timeout=3)
         assert "Результат:" in browser.page_source
 
         # Verify continue button never appeared

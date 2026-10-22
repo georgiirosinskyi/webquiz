@@ -1,117 +1,51 @@
 """
-Selenium tests for quiz editor collapsible questions feature.
+Selenium tests for the admin quiz editor (built from frontend/src/admin).
 
 Tests verify:
 1. Questions are collapsed by default when editing an existing quiz
 2. Clicking on a question header toggles the collapsed state
 3. New questions added are expanded by default
-4. Question preview text is displayed in the header
-5. File/image indicators are shown
-6. Drag handle is present for reordering
+4. Question preview text, number and image/file indicators are in the header
+5. Drag handle is present for reordering
+6. "Save and Continue" keeps the editor open
+7. Settings the editor does not show (marks, ...) survive a save
 """
 
-import time
+import requests
+import yaml
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
 
-from conftest import custom_webquiz_server
+from conftest import custom_webquiz_server, get_admin_session
 from selenium_helpers import (
     skip_if_selenium_disabled,
     browser,
     wait_for_element,
-    wait_for_clickable,
+    admin_login,
+    open_quiz_editor,
+    question_items,
+    click_js,
+    clear_input,
+    expand_question,
+    wait_for_modal,
 )
 
 
-def admin_login(browser, port, master_key="test123"):
-    """Helper to log in to admin panel."""
-    browser.get(f"http://localhost:{port}/admin/")
-
-    # Wait for login form and enter master key
-    password_input = wait_for_element(browser, By.ID, "master-key")
-    password_input.send_keys(master_key)
-
-    login_button = browser.find_element(By.CSS_SELECTOR, "button[onclick='authenticate()']")
-    login_button.click()
-
-    # Wait for admin panel to load
-    WebDriverWait(browser, 10).until(EC.visibility_of_element_located((By.ID, "admin-panel")))
-
-    # Wait for quiz list to load
-    time.sleep(0.5)
+def body_hidden(item):
+    return not item.find_element(By.CSS_SELECTOR, ".ant-card-body").is_displayed()
 
 
-def select_and_edit_quiz(browser, quiz_index=0):
-    """Helper to select a quiz and open the editor.
-
-    Args:
-        browser: Selenium browser instance
-        quiz_index: Index of quiz to select (default 0 = first)
-    """
-    from selenium.webdriver.support.ui import Select
-
-    # Wait for quiz select element to appear
-    quiz_select_elem = WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.ID, "quiz-select")))
-
-    # Get all options
-    options = quiz_select_elem.find_elements(By.TAG_NAME, "option")
-    if len(options) <= quiz_index:
-        raise ValueError(f"Quiz index {quiz_index} out of range, only {len(options)} quizzes available")
-
-    # Click to select the option
-    options[quiz_index].click()
-
-    # Wait for edit button to become enabled and click it
-    edit_btn = WebDriverWait(browser, 10).until(EC.element_to_be_clickable((By.ID, "edit-btn")))
-    edit_btn.click()
-
-    # Wait for the quiz editor modal to open
-    WebDriverWait(browser, 10).until(EC.visibility_of_element_located((By.ID, "quiz-editor-modal")))
-
-    # Give time for questions to load
-    time.sleep(1.0)
+def quiz_file(port, filename):
+    cookies = get_admin_session(port)
+    return requests.get(f"http://localhost:{port}/api/admin/quiz/{filename}", cookies=cookies).json()["content"]
 
 
-def select_multiple_quizzes(browser, quiz_indices):
-    """Helper to select multiple quizzes using modifier+click.
-
-    Args:
-        browser: Selenium browser instance
-        quiz_indices: List of indices to select
-
-    Uses Command key on macOS, Ctrl on other platforms.
-    """
-    import platform
-    from selenium.webdriver.common.action_chains import ActionChains
-    from selenium.webdriver.common.keys import Keys
-
-    quiz_select_elem = WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.ID, "quiz-select")))
-
-    options = quiz_select_elem.find_elements(By.TAG_NAME, "option")
-    actions = ActionChains(browser)
-
-    # Use Command key on macOS, Ctrl on other platforms
-    modifier = Keys.COMMAND if platform.system() == "Darwin" else Keys.CONTROL
-
-    for i, idx in enumerate(quiz_indices):
-        if idx >= len(options):
-            raise ValueError(f"Quiz index {idx} out of range, only {len(options)} quizzes available")
-
-        if i == 0:
-            # First click without modifier
-            actions.click(options[idx])
-        else:
-            # Subsequent clicks with modifier held
-            actions.key_down(modifier).click(options[idx]).key_up(modifier)
-
-    actions.perform()
+def click_button(browser, text):
+    click_js(browser, browser.find_element(By.XPATH, f"//button[contains(., '{text}')]"))
 
 
 @skip_if_selenium_disabled
 def test_questions_collapsed_when_editing_quiz(temp_dir, browser):
-    """Test that questions are collapsed by default when editing an existing quiz."""
     quiz_data = {
         "test_quiz.yaml": {
             "title": "Collapsible Test Quiz",
@@ -125,353 +59,168 @@ def test_questions_collapsed_when_editing_quiz(temp_dir, browser):
 
     with custom_webquiz_server(quizzes=quiz_data) as (proc, port):
         admin_login(browser, port)
-        select_and_edit_quiz(browser)
+        open_quiz_editor(browser, "test_quiz.yaml")
 
-        # Find all question items
-        question_items = browser.find_elements(By.CSS_SELECTOR, ".question-item")
-        assert len(question_items) == 3, f"Expected 3 questions, found {len(question_items)}"
-
-        # Verify all questions are collapsed
-        for i, item in enumerate(question_items):
+        items = question_items(browser)
+        assert len(items) == 3, f"Expected 3 questions, found {len(items)}"
+        for i, item in enumerate(items):
             assert "collapsed" in item.get_attribute("class"), f"Question {i+1} should be collapsed"
-
-            # Verify the question body is hidden (max-height: 0)
-            question_body = item.find_element(By.CSS_SELECTOR, ".question-body")
-            # When collapsed, the body should have 0 height due to CSS
-            body_height = question_body.value_of_css_property("max-height")
-            # CSS might return "0px" or "0" depending on browser
-            assert body_height in (
-                "0px",
-                "0",
-            ), f"Question {i+1} body should have max-height: 0 when collapsed, got {body_height}"
+            assert body_hidden(item), f"Question {i+1} body should be hidden"
 
 
 @skip_if_selenium_disabled
 def test_click_header_toggles_collapse(temp_dir, browser):
-    """Test that clicking on a question header toggles the collapsed state."""
     quiz_data = {
         "test_quiz.yaml": {
             "title": "Toggle Test Quiz",
-            "questions": [
-                {"question": "Toggle question text", "options": ["Yes", "No"], "correct_answer": 0},
-            ],
+            "questions": [{"question": "Toggle question text", "options": ["Yes", "No"], "correct_answer": 0}],
         }
     }
 
     with custom_webquiz_server(quizzes=quiz_data) as (proc, port):
         admin_login(browser, port)
-        select_and_edit_quiz(browser)
+        open_quiz_editor(browser, "test_quiz.yaml")
 
-        # Get the question item
-        question_item = browser.find_element(By.CSS_SELECTOR, ".question-item")
-        question_header = question_item.find_element(By.CSS_SELECTOR, ".question-header")
+        header = question_items(browser)[0].find_element(By.CSS_SELECTOR, ".question-preview")
+        click_js(browser, header)
+        WebDriverWait(browser, 5).until(lambda d: "collapsed" not in question_items(d)[0].get_attribute("class"))
+        assert not body_hidden(question_items(browser)[0])
 
-        # Initially collapsed
-        assert "collapsed" in question_item.get_attribute("class")
-
-        # Click header to expand
-        question_header.click()
-        time.sleep(1.0)  # Wait for animation (increased for CI)
-
-        # Should be expanded now
-        assert "collapsed" not in question_item.get_attribute("class"), "Question should be expanded after click"
-
-        # Click header again to collapse
-        question_header.click()
-        time.sleep(1.0)  # Increased for CI
-
-        # Should be collapsed again
-        assert "collapsed" in question_item.get_attribute("class"), "Question should be collapsed after second click"
+        click_js(browser, question_items(browser)[0].find_element(By.CSS_SELECTOR, ".question-preview"))
+        WebDriverWait(browser, 5).until(lambda d: "collapsed" in question_items(d)[0].get_attribute("class"))
 
 
 @skip_if_selenium_disabled
 def test_new_question_is_expanded(temp_dir, browser):
-    """Test that newly added questions are expanded by default."""
     quiz_data = {
         "test_quiz.yaml": {
             "title": "New Question Test",
-            "questions": [
-                {"question": "Existing question", "options": ["A", "B"], "correct_answer": 0},
-            ],
+            "questions": [{"question": "Existing question", "options": ["A", "B"], "correct_answer": 0}],
         }
     }
 
     with custom_webquiz_server(quizzes=quiz_data) as (proc, port):
         admin_login(browser, port)
-        select_and_edit_quiz(browser)
+        open_quiz_editor(browser, "test_quiz.yaml")
 
-        # Find and click the "Add Question" button
-        add_button = browser.find_element(By.XPATH, "//button[contains(text(), 'Додати Питання')]")
-        add_button.click()
-        time.sleep(0.5)
+        click_button(browser, "Додати питання")
+        WebDriverWait(browser, 5).until(lambda d: len(question_items(d)) == 2)
 
-        # Get all question items
-        question_items = browser.find_elements(By.CSS_SELECTOR, ".question-item")
-        assert len(question_items) == 2, "Should have 2 questions now"
-
-        # First question (existing) should be collapsed
-        assert "collapsed" in question_items[0].get_attribute("class"), "Existing question should remain collapsed"
-
-        # Second question (new) should be expanded
-        assert "collapsed" not in question_items[1].get_attribute("class"), "New question should be expanded"
+        items = question_items(browser)
+        assert "collapsed" in items[0].get_attribute("class"), "Existing question should remain collapsed"
+        assert "collapsed" not in items[1].get_attribute("class"), "New question should be expanded"
 
 
 @skip_if_selenium_disabled
-def test_question_preview_text_displayed(temp_dir, browser):
-    """Test that question preview text is displayed in the collapsed header."""
-    quiz_data = {
-        "test_quiz.yaml": {
-            "title": "Preview Test Quiz",
-            "questions": [
-                {"question": "What is the capital of Ukraine?", "options": ["Kyiv", "Lviv"], "correct_answer": 0},
-            ],
-        }
-    }
-
-    with custom_webquiz_server(quizzes=quiz_data) as (proc, port):
-        admin_login(browser, port)
-        select_and_edit_quiz(browser)
-
-        # Get question items
-        question_items = browser.find_elements(By.CSS_SELECTOR, ".question-item")
-
-        # Check first question preview (text question)
-        preview1 = question_items[0].find_element(By.CSS_SELECTOR, ".question-preview")
-        assert (
-            "What is the capital of Ukraine?" in preview1.text
-        ), f"Preview should contain question text, got: {preview1.text}"
-
-
-@skip_if_selenium_disabled
-def test_file_image_indicators_displayed(temp_dir, browser):
-    """Test that file and image indicators are displayed in the collapsed header."""
+def test_header_shows_number_preview_and_indicators(temp_dir, browser):
     quiz_data = {
         "test_quiz.yaml": {
             "title": "Indicators Test Quiz",
             "questions": [
-                {
-                    "question": "Question with image",
-                    "image": "/imgs/test.png",
-                    "options": ["A", "B"],
-                    "correct_answer": 0,
-                },
+                {"question": "What is the capital of Ukraine?", "image": "/imgs/test.png", "options": ["A", "B"], "correct_answer": 0},
                 {"question": "Question with file", "file": "data.xlsx", "options": ["C", "D"], "correct_answer": 0},
-                {
-                    "question": "Question with both",
-                    "image": "/imgs/pic.jpg",
-                    "file": "doc.pdf",
-                    "options": ["E", "F"],
-                    "correct_answer": 0,
-                },
+                {"question": "Both", "image": "/imgs/pic.jpg", "file": "doc.pdf", "options": ["E", "F"], "correct_answer": 0, "points": 2},
             ],
         }
     }
 
     with custom_webquiz_server(quizzes=quiz_data) as (proc, port):
         admin_login(browser, port)
-        select_and_edit_quiz(browser)
+        open_quiz_editor(browser, "test_quiz.yaml")
+        items = question_items(browser)
 
-        # Get question items
-        question_items = browser.find_elements(By.CSS_SELECTOR, ".question-item")
+        assert [item.find_element(By.CSS_SELECTOR, ".question-number").text for item in items] == ["1.", "2.", "3."]
+        assert "What is the capital of Ukraine?" in items[0].find_element(By.CSS_SELECTOR, ".question-preview").text
 
-        # Check first question has image indicator
-        indicators1 = question_items[0].find_element(By.CSS_SELECTOR, ".question-indicators")
-        # Use base emoji without variation selector for cross-platform compatibility
-        assert (
-            "\U0001F5BC" in indicators1.text or "🖼" in indicators1.text
-        ), f"First question should have image indicator, got: {indicators1.text}"
+        indicators = [item.find_element(By.CSS_SELECTOR, ".question-indicators").text for item in items]
+        assert "🖼" in indicators[0], indicators
+        assert "📎" in indicators[1], indicators
+        assert "🖼" in indicators[2] and "📎" in indicators[2] and "🏆2" in indicators[2], indicators
 
-        # Check second question has file indicator
-        indicators2 = question_items[1].find_element(By.CSS_SELECTOR, ".question-indicators")
-        assert (
-            "\U0001F4CE" in indicators2.text or "📎" in indicators2.text
-        ), f"Second question should have file indicator, got: {indicators2.text}"
-
-        # Check third question has both indicators
-        indicators3 = question_items[2].find_element(By.CSS_SELECTOR, ".question-indicators")
-        assert (
-            "\U0001F5BC" in indicators3.text or "🖼" in indicators3.text
-        ), f"Third question should have image indicator"
-        assert (
-            "\U0001F4CE" in indicators3.text or "📎" in indicators3.text
-        ), f"Third question should have file indicator"
-
-
-@skip_if_selenium_disabled
-def test_drag_handle_present(temp_dir, browser):
-    """Test that drag handle is present for reordering questions."""
-    quiz_data = {
-        "test_quiz.yaml": {
-            "title": "Drag Handle Test Quiz",
-            "questions": [
-                {"question": "Question 1", "options": ["A", "B"], "correct_answer": 0},
-                {"question": "Question 2", "options": ["C", "D"], "correct_answer": 0},
-            ],
-        }
-    }
-
-    with custom_webquiz_server(quizzes=quiz_data) as (proc, port):
-        admin_login(browser, port)
-        select_and_edit_quiz(browser)
-
-        # Get question items
-        question_items = browser.find_elements(By.CSS_SELECTOR, ".question-item")
-
-        # Verify drag handle is present on each question
-        for i, item in enumerate(question_items):
-            drag_handle = item.find_element(By.CSS_SELECTOR, ".drag-handle")
-            assert drag_handle is not None, f"Question {i+1} should have drag handle"
-            assert drag_handle.is_displayed(), f"Drag handle should be visible for question {i+1}"
-            # Unicode TRIGRAM FOR HEAVEN (☰) or its codepoint
-            assert (
-                "\u2630" in drag_handle.text or "☰" in drag_handle.text
-            ), f"Drag handle should show ☰ icon, got: {drag_handle.text}"
-
-
-@skip_if_selenium_disabled
-def test_question_numbers_without_prefix(temp_dir, browser):
-    """Test that question numbers are displayed without 'Питання' prefix."""
-    quiz_data = {
-        "test_quiz.yaml": {
-            "title": "Numbers Test Quiz",
-            "questions": [
-                {"question": "Question 1", "options": ["A", "B"], "correct_answer": 0},
-                {"question": "Question 2", "options": ["C", "D"], "correct_answer": 0},
-            ],
-        }
-    }
-
-    with custom_webquiz_server(quizzes=quiz_data) as (proc, port):
-        admin_login(browser, port)
-        select_and_edit_quiz(browser)
-
-        # Get question items
-        question_items = browser.find_elements(By.CSS_SELECTOR, ".question-item")
-
-        # Check question numbers are just digits with dot
-        number1 = question_items[0].find_element(By.CSS_SELECTOR, ".question-number")
-        assert number1.text == "1.", f"First question number should be '1.', got: {number1.text}"
-
-        number2 = question_items[1].find_element(By.CSS_SELECTOR, ".question-number")
-        assert number2.text == "2.", f"Second question number should be '2.', got: {number2.text}"
+        for item in items:
+            assert item.find_element(By.CSS_SELECTOR, ".drag-handle").is_displayed()
 
 
 @skip_if_selenium_disabled
 def test_save_and_continue_keeps_editor_open(temp_dir, browser):
-    """Test that 'Save and Continue' button saves quiz and keeps editor open."""
-    config = {"admin": {"master_key": "test123"}}
-
-    with custom_webquiz_server(config=config) as (proc, port):
+    with custom_webquiz_server() as (proc, port):
         admin_login(browser, port)
+        click_js(browser, browser.find_element(By.CSS_SELECTOR, '[data-testid="create-btn"]'))
+        wait_for_modal(browser)
+        wait_for_element(browser, By.ID, "quiz-filename").send_keys("test_save_continue")
+        browser.find_element(By.ID, "quiz-title").send_keys("Save and Continue Test")
 
-        # Click "Create Quiz" button
-        create_btn = wait_for_clickable(browser, By.XPATH, "//button[contains(text(), 'Створити Новий Quiz')]")
-        create_btn.click()
+        # A new quiz starts with one empty, expanded question
+        item = question_items(browser)[0]
+        item.find_element(By.CSS_SELECTOR, ".question-text").send_keys("Test question")
+        options = item.find_elements(By.CSS_SELECTOR, ".option-text")
+        options[0].send_keys("Option A")
+        options[1].send_keys("Option B")
 
-        # Wait for editor modal
-        WebDriverWait(browser, 10).until(EC.visibility_of_element_located((By.ID, "quiz-editor-modal")))
+        save_continue = browser.find_element(By.CSS_SELECTOR, '[data-testid="save-continue"]')
+        click_js(browser, save_continue)
+        WebDriverWait(browser, 5).until(lambda d: "Збережено" in save_continue.text)
+        WebDriverWait(browser, 5).until(lambda d: "Продовжити" in save_continue.text)
 
-        # Enter quiz filename
-        filename_input = browser.find_element(By.ID, "quiz-filename")
-        filename_input.send_keys("test_save_continue")
+        # The editor stays open and now edits the saved file
+        assert "Редагувати" in browser.find_element(By.CSS_SELECTOR, ".ant-modal-title").text
+        assert browser.find_element(By.ID, "quiz-filename").is_enabled()
 
-        # Enter quiz title
-        title_input = browser.find_element(By.ID, "quiz-title")
-        title_input.clear()
-        title_input.send_keys("Save and Continue Test")
-
-        # Find and click "Add Question" button (scroll into view to avoid sticky bar)
-        add_button = browser.find_element(By.XPATH, "//button[contains(text(), 'Додати Питання')]")
-        browser.execute_script("arguments[0].scrollIntoView({block: 'center'});", add_button)
-        time.sleep(0.2)
-        add_button.click()
-
-        # Wait for question item to appear
-        question_item = WebDriverWait(browser, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, ".question-item"))
-        )
-
-        # Fill in question text (it's an input, not textarea)
-        question_input = question_item.find_element(By.CSS_SELECTOR, ".question-text")
-        question_input.send_keys("Test question")
-
-        # Fill in options (find option text inputs within the question)
-        option_inputs = question_item.find_elements(By.CSS_SELECTOR, ".option-text")
-        option_inputs[0].send_keys("Option A")
-        option_inputs[1].send_keys("Option B")
-
-        # Click "Save and Continue" button
-        save_continue_btn = browser.find_element(By.ID, "save-continue-btn")
-        save_continue_btn.click()
-
-        # Wait briefly and check for success state
-        time.sleep(0.5)
-        save_continue_btn = browser.find_element(By.ID, "save-continue-btn")
-        # Button should show success state (green background, "Збережено" text)
-        assert "Збережено" in save_continue_btn.text, f"Button should show success state, got: {save_continue_btn.text}"
-
-        # Wait for button to return to default state (1.5s delay)
-        time.sleep(1.5)
-
-        # Verify button is re-enabled and text restored
-        save_continue_btn = browser.find_element(By.ID, "save-continue-btn")
-        assert save_continue_btn.is_enabled(), "Button should be re-enabled after save"
-        assert "Продовжити" in save_continue_btn.text, "Button text should be restored"
-
-        # Verify editor is still open
-        editor_modal = browser.find_element(By.ID, "quiz-editor-modal")
-        assert editor_modal.is_displayed(), "Editor should still be open after Save and Continue"
-
-        # Verify we're now in edit mode (filename should be enabled for renaming)
-        filename_input = browser.find_element(By.ID, "quiz-filename")
-        assert filename_input.is_enabled(), "Filename should be enabled in edit mode for renaming"
-
-        # Verify modal title changed to edit mode
-        modal_title = browser.find_element(By.ID, "modal-title")
-        assert "Редагувати" in modal_title.text, f"Modal title should indicate edit mode, got: {modal_title.text}"
+        saved = yaml.safe_load(quiz_file(port, "test_save_continue.yaml"))
+        assert saved["title"] == "Save and Continue Test"
+        assert saved["questions"] == [{"question": "Test question", "options": ["Option A", "Option B"], "correct_answer": 0}]
 
 
 @skip_if_selenium_disabled
 def test_save_and_continue_in_edit_mode(temp_dir, browser):
-    """Test that 'Save and Continue' works when already in edit mode."""
     quiz_data = {
         "test_quiz.yaml": {
             "title": "Existing Quiz",
-            "questions": [
-                {"question": "Original question", "options": ["A", "B"], "correct_answer": 0},
-            ],
+            "questions": [{"question": "Original question", "options": ["A", "B"], "correct_answer": 0}],
         }
     }
 
     with custom_webquiz_server(quizzes=quiz_data) as (proc, port):
         admin_login(browser, port)
-        select_and_edit_quiz(browser)
+        open_quiz_editor(browser, "test_quiz.yaml")
 
-        # Modify the title
-        title_input = browser.find_element(By.ID, "quiz-title")
-        title_input.clear()
-        title_input.send_keys("Modified Title")
+        title = browser.find_element(By.ID, "quiz-title")
+        clear_input(title)
+        title.send_keys("Modified Title")
 
-        # Click "Save and Continue" button
-        save_continue_btn = browser.find_element(By.ID, "save-continue-btn")
-        save_continue_btn.click()
+        save_continue = browser.find_element(By.CSS_SELECTOR, '[data-testid="save-continue"]')
+        click_js(browser, save_continue)
+        WebDriverWait(browser, 5).until(lambda d: "Збережено" in save_continue.text)
 
-        # Wait briefly and check for success state
-        time.sleep(0.5)
-        save_continue_btn = browser.find_element(By.ID, "save-continue-btn")
-        assert "Збережено" in save_continue_btn.text, f"Button should show success state, got: {save_continue_btn.text}"
+        assert browser.find_element(By.ID, "quiz-title").get_attribute("value") == "Modified Title"
+        assert yaml.safe_load(quiz_file(port, "test_quiz.yaml"))["title"] == "Modified Title"
 
-        # Wait for button to return to default state (1.5s delay)
-        time.sleep(1.5)
 
-        # Verify button is re-enabled after save
-        save_continue_btn = browser.find_element(By.ID, "save-continue-btn")
-        assert save_continue_btn.is_enabled(), "Button should be re-enabled after save"
+@skip_if_selenium_disabled
+def test_editor_keeps_settings_it_does_not_show(temp_dir, browser):
+    quiz_data = {
+        "test_quiz.yaml": {
+            "title": "Graded",
+            "time_limit": 300,
+            "marks": [{"grade": 12, "min_score": 90}],
+            "default_mark": 1,
+            "questions": [{"question": "Q", "options": ["A", "B"], "correct_answer": 1, "custom": "kept"}],
+        }
+    }
 
-        # Verify editor is still open
-        editor_modal = browser.find_element(By.ID, "quiz-editor-modal")
-        assert editor_modal.is_displayed(), "Editor should still be open after Save and Continue"
+    with custom_webquiz_server(quizzes=quiz_data) as (proc, port):
+        admin_login(browser, port)
+        open_quiz_editor(browser, "test_quiz.yaml")
+        assert browser.find_element(By.ID, "time-limit").get_attribute("value") == "300"
 
-        # Verify title input still has the modified value
-        title_input = browser.find_element(By.ID, "quiz-title")
-        assert title_input.get_attribute("value") == "Modified Title", "Title should be preserved"
+        option = expand_question(browser, 0).find_elements(By.CSS_SELECTOR, ".option-text")[0]
+        clear_input(option)
+        option.send_keys("A2")
+        click_js(browser, browser.find_element(By.CSS_SELECTOR, '[data-testid="save-quiz"]'))
+        WebDriverWait(browser, 10).until(lambda d: not d.find_elements(By.CSS_SELECTOR, ".ant-modal-wrap .question-item"))
+
+        saved = yaml.safe_load(quiz_file(port, "test_quiz.yaml"))
+        assert saved["marks"] == [{"grade": 12, "min_score": 90}]
+        assert saved["default_mark"] == 1
+        assert saved["time_limit"] == 300
+        assert saved["questions"][0] == {"question": "Q", "options": ["A2", "B"], "correct_answer": 1, "custom": "kept"}

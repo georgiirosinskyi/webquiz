@@ -29,6 +29,7 @@ from selenium_helpers import (
     is_option_selected,
     get_selected_options,
     find_option_by_text,
+    wait_for_results,
 )
 
 
@@ -397,7 +398,7 @@ def test_multiple_submissions_different_questions(browser):
         wait_for_clickable(browser, By.ID, "continue-btn").click()
 
         # Should reach results
-        wait_for_element(browser, By.ID, "results")
+        wait_for_results(browser)
 
 
 # ============================================================================
@@ -520,7 +521,7 @@ def test_no_feedback_when_show_right_answer_false(browser):
 
         # With show_right_answer: false, quiz should auto-advance to results (no continue button)
         # Wait for results page to appear
-        wait_for_element(browser, By.ID, "results", timeout=3)
+        wait_for_results(browser, timeout=3)
 
         # Verify we reached results
         assert "Результат" in browser.page_source or "Result" in browser.page_source
@@ -744,7 +745,7 @@ def test_complete_all_multiple_choice_quiz(browser):
         wait_for_clickable(browser, By.ID, "continue-btn").click()
 
         # Should reach results
-        wait_for_element(browser, By.ID, "results")
+        wait_for_results(browser)
         assert "Результат" in browser.page_source or "Result" in browser.page_source
 
 
@@ -781,7 +782,7 @@ def test_mixed_single_and_multiple_choice_quiz(browser):
         wait_for_clickable(browser, By.ID, "continue-btn").click()
 
         # Results
-        wait_for_element(browser, By.ID, "results")
+        wait_for_results(browser)
 
 
 @skip_if_selenium_disabled
@@ -971,7 +972,7 @@ def test_results_show_correct_answers_multiple_choice(browser):
         wait_for_clickable(browser, By.ID, "continue-btn").click()
 
         # Check results show correct answers
-        wait_for_element(browser, By.ID, "results")
+        wait_for_results(browser)
         results_html = browser.page_source
 
         # Should show the correct answers
@@ -1009,7 +1010,7 @@ def test_results_checkmark_and_x_for_multiple_choice(browser):
         wait_for_clickable(browser, By.ID, "continue-btn").click()
 
         # Check results
-        wait_for_element(browser, By.ID, "results")
+        wait_for_results(browser)
         results_html = browser.page_source
 
         # Should have both checkmark and X
@@ -1048,7 +1049,7 @@ def test_results_table_displays_all_questions(browser):
         wait_for_clickable(browser, By.ID, "continue-btn").click()
 
         # Check results table
-        wait_for_element(browser, By.ID, "results")
+        wait_for_results(browser)
         results_table = browser.find_element(By.CLASS_NAME, "results-table")
 
         # Both questions should be in the table

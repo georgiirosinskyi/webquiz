@@ -241,3 +241,13 @@ def get_admin_session(port, master_key="test123"):
     if response.status_code != 200:
         raise Exception(f"Failed to authenticate: {response.status_code} - {response.text}")
     return response.cookies
+
+
+def get_page_data(html):
+    """Return window.__WEBQUIZ__ injected into a page built from frontend/ (see render_ui_page)."""
+    import json
+    import re
+
+    match = re.search(r"<script>window\.__WEBQUIZ__ = (.*?);</script>", html)
+    assert match, "window.__WEBQUIZ__ is not injected into the page"
+    return json.loads(match.group(1))

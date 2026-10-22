@@ -7,12 +7,10 @@ without losing field names, so commonly-flipped fields don't have to be deleted
 and recreated.
 """
 
-import json
-import re
 import requests
 import yaml
 
-from conftest import custom_webquiz_server, get_admin_session
+from conftest import custom_webquiz_server, get_admin_session, get_page_data
 
 
 def test_disabled_field_not_required_at_register():
@@ -125,12 +123,10 @@ def test_files_page_exposes_disabled_fields():
         )
         assert response.status_code == 200
 
-        # Load /files/ and pull CONFIG_DATA out of the script tag
+        # Load /files/ and read the config data injected for the form
         files_response = session.get(f"http://localhost:{port}/files/")
         assert files_response.status_code == 200
-        match = re.search(r"const CONFIG_DATA = (.*?);", files_response.text)
-        assert match is not None
-        config_data = json.loads(match.group(1))
+        config_data = get_page_data(files_response.text)["page"]["configData"]
         assert config_data["registration"]["fields"] == ["Grade"]
         assert config_data["registration"]["disabled_fields"] == ["School", "Teacher"]
 

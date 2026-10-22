@@ -19,6 +19,12 @@ def main():
         print("PyInstaller is not installed or not in PATH. Install it with: poetry install")
         sys.exit(1)
 
+    # The pages built from frontend/ must exist, or the binary would ship without them
+    ui_dir = project_root / "webquiz" / "ui"
+    if not (ui_dir / "live-stats.html").exists():
+        print("Frontend is not built. Run: cd frontend && npm ci && npm run build")
+        sys.exit(1)
+
     # PyInstaller command - use the binary entry point
     binary_entry = project_root / "webquiz" / "binary_entry.py"
     cmd = [
@@ -30,6 +36,8 @@ def main():
         f"{project_root / 'webquiz' / 'img'}:webquiz/img",
         "--add-data",
         f"{project_root / 'webquiz' / 'templates'}:webquiz/templates",
+        "--add-data",
+        f"{ui_dir}:webquiz/ui",
         "--add-data",
         f"{project_root / 'webquiz' / 'server_config.yaml.example'}:webquiz/",
         "--hidden-import",

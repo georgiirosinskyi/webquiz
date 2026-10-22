@@ -149,6 +149,10 @@ webquiz.yaml
 webquiz.pid
 custom_config_*.yaml
 
+# Frontend (frontend/ is built into webquiz/ui/)
+node_modules/
+webquiz/ui/
+
 # IDE files
 .vscode/
 .idea/

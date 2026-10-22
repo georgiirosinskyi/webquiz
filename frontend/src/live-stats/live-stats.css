@@ -1,0 +1,31 @@
+body {
+  margin: 0;
+}
+
+.question-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-align: center;
+  word-break: break-word;
+}
+
+.username-text {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.header-image {
+  max-width: 40px;
+  max-height: 40px;
+  object-fit: cover;
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.points-indicator {
+  font-size: 0.85em;
+  color: #d48806;
+  white-space: nowrap;
+}

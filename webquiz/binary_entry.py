@@ -11,6 +11,12 @@ import webquiz.cli
 
 
 def main():
+    # The bootloader ignores PYTHONIOENCODING/PYTHONUTF8, and output redirected to a file on
+    # Windows uses the ANSI code page, so the emoji in the startup messages would crash the server
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
     # Set executable directory for relative path resolution
     # For PyInstaller binaries, we need to detect the correct executable path
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):

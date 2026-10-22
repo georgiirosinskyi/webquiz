@@ -15,6 +15,7 @@ from selenium_helpers import (
     find_option_by_text,
     wait_for_question_text,
     wait_for_question_containing_text,
+    wait_for_results,
 )
 
 
@@ -142,7 +143,7 @@ def test_complete_quiz_journey(temp_dir, browser):
         continue_button.click()
 
         # Wait for results page to load
-        wait_for_element(browser, By.ID, "results")
+        wait_for_results(browser)
 
         # Verify that the basic quiz journey worked:
         # 1. We reached the results page
@@ -254,7 +255,7 @@ def test_session_persistence_on_reload(temp_dir, browser):
             assert current_question.is_displayed()
         except TimeoutException:
             # Or if already completed, should show results
-            results = wait_for_element(browser, By.ID, "results", timeout=5)
+            results = wait_for_results(browser, timeout=5)
             assert results.is_displayed()
 
         # User info should still be displayed
@@ -479,7 +480,7 @@ def test_browser_navigation_behavior(temp_dir, browser):
 
         # Should be able to complete quiz
         wait_for_clickable(browser, By.ID, "continue-btn").click()
-        wait_for_element(browser, By.ID, "results")
+        wait_for_results(browser)
 
 
 @skip_if_selenium_disabled
@@ -531,7 +532,7 @@ def test_show_right_answer_true_visual_feedback(temp_dir, browser):
         continue_button.click()
 
         # Wait for results
-        wait_for_element(browser, By.ID, "results")
+        wait_for_results(browser)
 
         # Results should show correct answer hint
         assert "Правильна:" in browser.page_source, "Results should show 'Correct:' hint"
@@ -572,10 +573,10 @@ def test_show_right_answer_false_visual_feedback(temp_dir, browser):
         submit_button.click()
 
         # With show_right_answer: false, quiz should auto-advance to results (no continue button)
-        wait_for_element(browser, By.ID, "results", timeout=3)
+        wait_for_results(browser, timeout=3)
 
         # Debug: Check the showRightAnswer variable value and results HTML
-        show_right_answer_value = browser.execute_script("return showRightAnswer;")
+        show_right_answer_value = browser.execute_script("return window.__WEBQUIZ__.page.showRightAnswer;")
         print(f"DEBUG: showRightAnswer = {show_right_answer_value}")
 
         results_content = browser.execute_script("return document.getElementById('results-content').innerHTML;")
@@ -624,7 +625,7 @@ def test_show_right_answer_false_correct_answer_visual_feedback(temp_dir, browse
         submit_button.click()
 
         # With show_right_answer: false, quiz should auto-advance to results (no continue button)
-        wait_for_element(browser, By.ID, "results", timeout=3)
+        wait_for_results(browser, timeout=3)
 
         # Results should show perfect score but no correct answer hints
         assert "1/1" in browser.page_source or "100%" in browser.page_source, "Results should show perfect score"

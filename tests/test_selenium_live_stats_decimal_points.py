@@ -64,7 +64,8 @@ def test_live_stats_shows_decimal_question_points(browser):
         requests.post(f"{base_url}/api/register", json={"username": "indicatoruser"})
 
         browser.get(f"{base_url}/live-stats/")
-        WebDriverWait(browser, 15).until(lambda d: d.find_elements(By.CSS_SELECTOR, ".points-indicator"))
+        indicator_selector = '[data-testid="points-indicator"]'
+        WebDriverWait(browser, 15).until(lambda d: d.find_elements(By.CSS_SELECTOR, indicator_selector))
 
-        indicator = browser.find_element(By.CSS_SELECTOR, ".points-indicator")
+        indicator = browser.find_element(By.CSS_SELECTOR, indicator_selector)
         assert "0.5" in indicator.get_attribute("innerHTML"), f"Expected 0.5 in the indicator: {indicator.text}"

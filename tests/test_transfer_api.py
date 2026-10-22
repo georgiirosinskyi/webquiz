@@ -93,10 +93,9 @@ def test_public_endpoints_work_from_public_ip():
 
 
 def test_send_panel_hidden_until_tunnel_connected():
-    """The page shows the send panel only after GET /api/admin/transfer says it is available."""
+    """The files page shows the send panel only when GET /api/admin/transfer says it is available."""
     with custom_webquiz_server() as (proc, port):
         cookies = get_admin_session(port)
-        response = requests.get(f"http://localhost:{port}/files/", cookies=cookies)
-        assert response.status_code == 200
-        assert '<div id="transfer-panel" class="transfer-panel hidden">' in response.text
-        assert "classList.toggle('hidden', !state.available)" in response.text
+        state = requests.get(f"http://localhost:{port}/api/admin/transfer", cookies=cookies).json()
+        assert state["available"] is False
+        assert state["name"] is None

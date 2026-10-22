@@ -1,7 +1,7 @@
 import requests
 import yaml
 
-from conftest import custom_webquiz_server, get_admin_session
+from conftest import custom_webquiz_server, get_admin_session, get_page_data
 
 
 def test_update_config_with_valid_data():
@@ -363,12 +363,8 @@ def test_config_registration_fields_reload_from_files_page():
         assert files_response.status_code == 200
         html = files_response.text
 
-        # Extract CONFIG_CONTENT from JavaScript in the page
-        match = re.search(r"const CONFIG_CONTENT = (.*?);", html)
-        assert match is not None, "CONFIG_CONTENT not found in /files/ page"
-
-        config_content_js = match.group(1)
-        config_content_from_page = json.loads(config_content_js)
+        # The config content is injected as page data
+        config_content_from_page = get_page_data(html)["page"]["configContent"]
 
         # Verify the fields are in the content returned by the page
         assert "fields:" in config_content_from_page
@@ -647,11 +643,7 @@ def test_files_page_includes_config_data():
         assert files_response.status_code == 200
         html = files_response.text
 
-        # Extract CONFIG_DATA
-        match = re.search(r"const CONFIG_DATA = (.*?);", html)
-        assert match is not None, "CONFIG_DATA not found in /files/ page"
-
-        config_data = json.loads(match.group(1))
+        config_data = get_page_data(html)["page"]["configData"]
         assert "registration" in config_data
         assert config_data["registration"]["approve"] is True
         assert config_data["registration"]["fields"] == ["Grade"]

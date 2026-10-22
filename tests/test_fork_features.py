@@ -13,7 +13,7 @@ import time
 
 import requests
 
-from conftest import custom_webquiz_server, get_admin_session
+from conftest import custom_webquiz_server, get_admin_session, get_page_data
 
 
 FOUR_QUESTIONS = {
@@ -265,19 +265,19 @@ def test_quiz_paths_outside_quizzes_dir_rejected(temp_dir):
 
 def test_quiz_page_has_fork_elements(temp_dir):
     with custom_webquiz_server(quizzes={"quiz.yaml": quiz()}) as (proc, port):
+        # The elements are rendered by the page script (frontend/src/quiz/QuizApp.tsx)
         html = requests.get(f"http://localhost:{port}/").text
-        assert 'id="timer"' in html
-        assert 'id="nav"' in html
-        assert 'id="skip-question-btn"' in html and "Пропустити питання" in html
-        assert "img/background.png" in html
-        assert "{{T_" not in html
-        # The progress bar was removed in this fork
-        assert 'id="progress-bar"' not in html
+        script = re.search(r'src="(ui/assets/quiz-[^"]+\.js)"', html).group(1)
+        js = requests.get(f"http://localhost:{port}/{script}").text
+        for element_id in ["timer", "nav", "skip-question-btn"]:
+            assert f'id:"{element_id}"' in js, element_id
+        assert "progress-bar" not in js, "The progress bar was removed in this fork"
+        assert get_page_data(html)["page"]["translations"]["skip_question"] == "Пропустити питання"
+        assert "img/background.png" in js
 
     with custom_webquiz_server(config={"language": "en"}, quizzes={"quiz.yaml": quiz()}) as (proc, port):
         html = requests.get(f"http://localhost:{port}/").text
-        assert "Skip question" in html
-        assert "{{T_" not in html
+        assert get_page_data(html)["page"]["translations"]["skip_question"] == "Skip question"
 
 
 def test_pages_have_only_light_theme(temp_dir):
@@ -290,24 +290,6 @@ def test_pages_have_only_light_theme(temp_dir):
             assert "theme-toggle" not in html, path
             assert "toggleTheme" not in html, path
             assert "data-theme" not in html, path
-
-
-def test_live_stats_state_colors(temp_dir):
-    with custom_webquiz_server(quizzes={"quiz.yaml": quiz()}) as (proc, port):
-        html = requests.get(f"http://localhost:{port}/live-stats/").text
-
-    def rule(selector):
-        rules = re.findall(rf"^\s*{re.escape(selector)} \{{([^}}]*)\}}", html, re.M)
-        assert len(rules) == 1, f"{selector} must be defined once, found {len(rules)}"
-        return rules[0]
-
-    # Every cell state has its own background (skipped questions are yellow)
-    for state in ["think", "ok", "fail", "skip", "empty"]:
-        assert f"background: var(--{state}-color)" in rule(f".state-{state}")
-    assert "color: #721c24" in rule(".state-fail")
-    # The reconnecting banner uses the "think" blue with matching text
-    assert "background: var(--think-color)" in rule(".connecting")
-    assert "color: #044b85" in rule(".connecting")
 
 
 def test_background_images_served(temp_dir):

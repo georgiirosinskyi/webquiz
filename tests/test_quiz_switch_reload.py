@@ -10,7 +10,7 @@ import re
 import pytest
 import requests
 
-from conftest import custom_webquiz_server, get_admin_session
+from conftest import custom_webquiz_server, get_admin_session, get_page_data
 
 
 QUIZ_A = {
@@ -32,9 +32,7 @@ QUIZ_B = {
 
 def page_version(port):
     html = requests.get(f"http://localhost:{port}/").text
-    match = re.search(r'const QUIZ_VERSION = "([0-9a-f]*)";', html)
-    assert match, "quiz page must embed its quiz version"
-    return match.group(1)
+    return get_page_data(html)["page"]["quizVersion"]
 
 
 def current_version(port):
@@ -168,12 +166,13 @@ def test_admin_and_other_endpoints_ignore_quiz_version(temp_dir):
 
 
 def test_quiz_page_reload_logic_present(temp_dir):
+    """The page script sends quiz_version and polls api/quiz-version (logic tested in frontend/src/quiz/connection.test.ts)."""
     with custom_webquiz_server(quizzes={"default.yaml": QUIZ_A}) as (proc, port):
         html = requests.get(f"http://localhost:{port}/").text
-        assert "function withQuizVersion(url)" in html
-        assert "function reloadForNewQuiz()" in html
-        assert "setInterval(checkQuizVersion, QUIZ_VERSION_POLL_MS)" in html
-        assert "{{QUIZ_VERSION}}" not in html
+        script = re.search(r'src="(ui/assets/quiz-[^"]+\.js)"', html).group(1)
+        js = requests.get(f"http://localhost:{port}/{script}").text
+        assert "quiz_version=" in js
+        assert "api/quiz-version" in js
 
 
 def test_selection_page_waits_for_quiz(temp_dir):

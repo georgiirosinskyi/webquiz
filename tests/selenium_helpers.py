@@ -9,6 +9,7 @@ import pytest
 import os
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
@@ -80,6 +81,11 @@ def wait_for_element(browser, by, selector, timeout=10):
         print(f"Timeout waiting for element: {by}={selector}")
         print(f"Current page source: {browser.page_source[:500]}...")
         raise
+
+
+def wait_for_results(browser, timeout=10):
+    """Wait until the results screen is shown (#results is always in the page, hidden until then)."""
+    return WebDriverWait(browser, timeout).until(EC.visibility_of_element_located((By.ID, "results")))
 
 
 def wait_for_clickable(browser, by, selector, timeout=10):
@@ -252,3 +258,80 @@ def register_user(browser, port, username="TestStudent", **additional_fields):
     register_button = find_register_button(browser)
     register_button.click()
     wait_for_element(browser, By.ID, "current-question-container")
+
+
+# ============================================================================
+# ADMIN PAGE HELPERS (page built from frontend/src/admin)
+# ============================================================================
+
+
+def admin_login(browser, port, master_key="test123"):
+    """Open /admin/, log in with the master key and wait for the panel."""
+    browser.get(f"http://localhost:{port}/admin/")
+    wait_for_element(browser, By.ID, "master-key").send_keys(master_key)
+    browser.find_element(By.XPATH, "//button[@type='submit']").click()
+    wait_for_element(browser, By.CSS_SELECTOR, '[data-testid="admin-panel"]')
+    # The quiz list is loaded right after the panel appears
+    WebDriverWait(browser, 10).until(
+        lambda d: d.find_elements(By.CSS_SELECTOR, '[data-testid="quiz-list"] tr[data-row-key]')
+    )
+
+
+def quiz_row(browser, filename):
+    return wait_for_element(browser, By.CSS_SELECTOR, f'[data-testid="quiz-list"] tr[data-row-key="{filename}"]')
+
+
+def select_quizzes(browser, filenames):
+    """Tick the selection checkboxes of the given quizzes."""
+    for filename in filenames:
+        quiz_row(browser, filename).find_element(By.CSS_SELECTOR, ".ant-checkbox-input").click()
+
+
+def open_quiz_editor(browser, filename):
+    """Select one quiz, click Edit and wait for its questions."""
+    quiz_row(browser, filename).find_element(By.CSS_SELECTOR, "td:not(.ant-table-selection-column)").click()
+    wait_for_clickable(browser, By.CSS_SELECTOR, '[data-testid="edit-btn"]').click()
+    wait_for_modal(browser)
+    WebDriverWait(browser, 10).until(lambda d: d.find_elements(By.CSS_SELECTOR, ".question-item"))
+
+
+def wait_for_modal(browser):
+    """Wait until an antd modal finished its opening animation (elements read as hidden while it runs)."""
+    WebDriverWait(browser, 10).until(
+        lambda d: any(
+            el.is_displayed() and "zoom" not in (el.get_attribute("class") or "")
+            for el in d.find_elements(By.CSS_SELECTOR, ".ant-modal")
+        )
+    )
+
+
+def clear_input(element):
+    """Empty a React-controlled input; element.clear() bypasses React and the old value comes back."""
+    element.send_keys(Keys.CONTROL, "a")
+    element.send_keys(Keys.DELETE)
+
+
+def question_items(browser):
+    return browser.find_elements(By.CSS_SELECTOR, ".question-item")
+
+
+def click_js(browser, element):
+    """Click through JS: modal animations and the sticky footer can cover elements."""
+    browser.execute_script("arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();", element)
+
+
+def expand_question(browser, index):
+    """Expand the Nth question - the editor collapses them all when it opens an existing quiz."""
+    item = question_items(browser)[index]
+    if "collapsed" in item.get_attribute("class"):
+        click_js(browser, item.find_element(By.CSS_SELECTOR, ".question-number"))
+        WebDriverWait(browser, 10).until(
+            lambda d: "collapsed" not in question_items(d)[index].get_attribute("class")
+        )
+    return question_items(browser)[index]
+
+
+def message_texts(browser, kind="error"):
+    """Texts of the antd notifications (message.success/error) shown right now."""
+    # textContent: the notice is still fading in, so .text would be empty
+    return [el.get_attribute("textContent") for el in browser.find_elements(By.CSS_SELECTOR, f".ant-message-{kind}")]

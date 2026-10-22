@@ -186,7 +186,9 @@ class TestMultipleChoiceIntegration:
         assert "Minimum correct: Select at least 2 colors" in html_content
 
         # Check that quiz configuration is embedded
-        assert "show_right_answer" in html_content
+        from conftest import get_page_data
+
+        assert get_page_data(html_content)["page"]["showRightAnswer"] is True
 
     def test_backward_compatibility_existing_quiz(self):
         """Test that existing quiz files without multiple choice work"""

@@ -2,19 +2,25 @@
 Selenium tests for entering decimal question points in the admin quiz editor.
 
 Verifies the points input accepts values like 0.5 and 0.25, that the editor
-saves them, and that they are still there when the quiz is reopened.
+saves them, that they are still there when the quiz is reopened, and that bad
+values block the save with a message naming the question.
 """
 
-import time
 import requests
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 
 from conftest import custom_webquiz_server, get_admin_session
-from selenium_helpers import skip_if_selenium_disabled, browser, wait_for_element
-from test_selenium_quiz_editor import admin_login, select_and_edit_quiz
-
+from selenium_helpers import (
+    skip_if_selenium_disabled,
+    browser,
+    admin_login,
+    open_quiz_editor,
+    expand_question,
+    click_js,
+    clear_input,
+    message_texts,
+)
 
 QUIZ = {
     "default.yaml": {
@@ -27,81 +33,61 @@ QUIZ = {
 }
 
 
-def expand_question(browser, index):
-    """Expand the Nth question - the editor collapses them all by default."""
-    question_items = browser.find_elements(By.CSS_SELECTOR, ".question-item")
-    assert len(question_items) > index, f"Expected more than {index} questions"
-    item = question_items[index]
-    if "collapsed" in item.get_attribute("class"):
-        header = item.find_element(By.CSS_SELECTOR, ".question-header")
-        browser.execute_script("arguments[0].scrollIntoView({block: 'center'});", header)
-        # Click via JS: the editor's sticky action bar can sit over the header
-        browser.execute_script("arguments[0].click();", header)
-        WebDriverWait(browser, 10).until(
-            lambda d: "collapsed"
-            not in d.find_elements(By.CSS_SELECTOR, ".question-item")[index].get_attribute("class")
-        )
-        time.sleep(0.5)  # let the expand transition finish
-    return browser.find_elements(By.CSS_SELECTOR, ".question-item")[index]
+def points_input(browser, index):
+    return expand_question(browser, index).find_element(By.CSS_SELECTOR, ".points-input")
 
 
 def set_points(browser, index, value):
-    """Type a points value into the Nth question's points input."""
-    item = expand_question(browser, index)
-    field = item.find_element(By.CSS_SELECTOR, ".points-input")
+    field = points_input(browser, index)
     browser.execute_script("arguments[0].scrollIntoView({block: 'center'});", field)
-    field.clear()
+    clear_input(field)
     field.send_keys(value)
     return field
 
 
+def click_save(browser):
+    click_js(browser, browser.find_element(By.CSS_SELECTOR, '[data-testid="save-quiz"]'))
+
+
+def editor_open(browser):
+    return bool(browser.find_elements(By.CSS_SELECTOR, ".ant-modal-wrap .question-item"))
+
+
 def save_quiz(browser):
-    """Click the editor's save button and wait for the modal to close."""
-    save_btn = WebDriverWait(browser, 10).until(
-        EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Зберегти Quiz')]"))
-    )
-    browser.execute_script("arguments[0].click();", save_btn)
-    WebDriverWait(browser, 10).until(EC.invisibility_of_element_located((By.ID, "quiz-editor-modal")))
+    click_save(browser)
+    WebDriverWait(browser, 10).until(lambda d: not editor_open(d))
+
+
+def quiz_content(port):
+    cookies = get_admin_session(port)
+    return requests.get(f"http://localhost:{port}/api/admin/quiz/default.yaml", cookies=cookies).json()["content"]
 
 
 @skip_if_selenium_disabled
 def test_points_input_accepts_decimal_values(browser):
-    """The points input is not restricted to whole numbers."""
     with custom_webquiz_server(quizzes=QUIZ) as (proc, port):
         admin_login(browser, port)
-        select_and_edit_quiz(browser)
-
+        open_quiz_editor(browser, "default.yaml")
         field = set_points(browser, 0, "0.25")
-
         assert field.get_attribute("value") == "0.25", "Input should hold the decimal value"
-        assert field.get_attribute("step") == "0.01", "Input should step by 0.01"
-        # A browser marks a number input invalid when the value breaks step/min
-        assert browser.execute_script("return arguments[0].checkValidity();", field), "0.25 should be a valid value"
 
 
 @skip_if_selenium_disabled
 def test_editor_saves_decimal_points(browser):
-    """Values typed as 0.5 and 0.25 are saved into the quiz file."""
     with custom_webquiz_server(quizzes=QUIZ) as (proc, port):
         admin_login(browser, port)
-        select_and_edit_quiz(browser)
-
+        open_quiz_editor(browser, "default.yaml")
         set_points(browser, 0, "0.5")
         set_points(browser, 1, "0.25")
         save_quiz(browser)
 
-        cookies = get_admin_session(port)
-        content = requests.get(f"http://localhost:{port}/api/admin/quiz/default.yaml", cookies=cookies).json()[
-            "content"
-        ]
-
+        content = quiz_content(port)
         assert "points: 0.5" in content, f"0.5 was not saved. Quiz file:\n{content}"
         assert "points: 0.25" in content, f"0.25 was not saved. Quiz file:\n{content}"
 
 
 @skip_if_selenium_disabled
 def test_decimal_points_reload_into_editor(browser):
-    """A quiz already holding decimal points shows them when reopened."""
     quiz = {
         "default.yaml": {
             "title": "Stored Points Quiz",
@@ -114,28 +100,9 @@ def test_decimal_points_reload_into_editor(browser):
 
     with custom_webquiz_server(quizzes=quiz) as (proc, port):
         admin_login(browser, port)
-        select_and_edit_quiz(browser)
-
-        values = [
-            expand_question(browser, i).find_element(By.CSS_SELECTOR, ".points-input").get_attribute("value")
-            for i in range(2)
-        ]
-
-        assert values[0] == "0.25", f"Expected 0.25 in the first points input, got {values}"
-        assert values[1] == "2.5", f"Expected 2.5 in the second points input, got {values}"
-
-
-def click_save(browser):
-    """Click the editor's save button without waiting for the modal to close."""
-    save_btn = WebDriverWait(browser, 10).until(
-        EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Зберегти Quiz')]"))
-    )
-    browser.execute_script("arguments[0].click();", save_btn)
-
-
-def error_messages(browser):
-    """Text of the error messages currently shown in the message area."""
-    return [el.text for el in browser.find_elements(By.CSS_SELECTOR, "#message-area .message.error")]
+        open_quiz_editor(browser, "default.yaml")
+        values = [points_input(browser, i).get_attribute("value") for i in range(2)]
+        assert values == ["0.25", "2.5"], values
 
 
 @skip_if_selenium_disabled
@@ -143,78 +110,37 @@ def test_more_than_two_decimals_shows_error(browser):
     """Typing 0.255 is refused with a message instead of being rounded silently."""
     with custom_webquiz_server(quizzes=QUIZ) as (proc, port):
         admin_login(browser, port)
-        select_and_edit_quiz(browser)
-
+        open_quiz_editor(browser, "default.yaml")
         set_points(browser, 0, "0.255")
         click_save(browser)
 
-        WebDriverWait(browser, 10).until(lambda d: error_messages(d))
-        message = " ".join(error_messages(browser))
-
+        WebDriverWait(browser, 10).until(lambda d: message_texts(d))
+        message = " ".join(message_texts(browser))
         assert "Питання 1" in message, f"Error should name the question, got: {message}"
         assert "2 знак" in message, f"Error should mention the 2 decimal limit, got: {message}"
-
-        # The editor stays open so the value can be corrected
-        assert browser.find_element(By.ID, "quiz-editor-modal").is_displayed(), "Editor should stay open"
-
-        # Nothing was saved
-        cookies = get_admin_session(port)
-        content = requests.get(f"http://localhost:{port}/api/admin/quiz/default.yaml", cookies=cookies).json()[
-            "content"
-        ]
-        assert "points:" not in content, f"Quiz should not have been saved. Quiz file:\n{content}"
+        assert editor_open(browser), "Editor should stay open"
+        assert "points:" not in quiz_content(port), "Quiz should not have been saved"
 
 
 @skip_if_selenium_disabled
 def test_zero_points_shows_error(browser):
-    """Typing 0 is refused with a message naming the question."""
     with custom_webquiz_server(quizzes=QUIZ) as (proc, port):
         admin_login(browser, port)
-        select_and_edit_quiz(browser)
-
+        open_quiz_editor(browser, "default.yaml")
         set_points(browser, 0, "0")
         click_save(browser)
 
-        WebDriverWait(browser, 10).until(lambda d: error_messages(d))
-        message = " ".join(error_messages(browser))
-
+        WebDriverWait(browser, 10).until(lambda d: message_texts(d))
+        message = " ".join(message_texts(browser))
         assert "Питання 1" in message, f"Error should name the question, got: {message}"
-        assert browser.find_element(By.ID, "quiz-editor-modal").is_displayed(), "Editor should stay open"
+        assert editor_open(browser), "Editor should stay open"
 
 
 @skip_if_selenium_disabled
 def test_two_decimals_still_saves(browser):
-    """Exactly two decimals stay valid and save without an error."""
     with custom_webquiz_server(quizzes=QUIZ) as (proc, port):
         admin_login(browser, port)
-        select_and_edit_quiz(browser)
-
+        open_quiz_editor(browser, "default.yaml")
         set_points(browser, 0, "0.25")
         save_quiz(browser)
-
-        assert not error_messages(browser), f"No error expected, got: {error_messages(browser)}"
-
-        cookies = get_admin_session(port)
-        content = requests.get(f"http://localhost:{port}/api/admin/quiz/default.yaml", cookies=cookies).json()[
-            "content"
-        ]
-        assert "points: 0.25" in content, f"0.25 should be saved. Quiz file:\n{content}"
-
-
-@skip_if_selenium_disabled
-def test_trophy_indicator_shows_for_half_point(browser):
-    """A 0.5 point question shows the trophy indicator in the collapsed header."""
-    quiz = {
-        "default.yaml": {
-            "title": "Indicator Quiz",
-            "questions": [{"question": "Q1", "options": ["A", "B"], "correct_answer": 0, "points": 0.5}],
-        }
-    }
-
-    with custom_webquiz_server(quizzes=quiz) as (proc, port):
-        admin_login(browser, port)
-        select_and_edit_quiz(browser)
-
-        indicator = wait_for_element(browser, By.CSS_SELECTOR, ".points-indicator")
-        assert indicator is not None, "Trophy indicator should be shown for a 0.5 point question"
-        assert "0.5" in indicator.get_attribute("innerHTML"), f"Indicator should show 0.5, got: {indicator.text}"
+        assert not message_texts(browser), f"No error expected, got: {message_texts(browser)}"

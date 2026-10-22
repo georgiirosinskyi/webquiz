@@ -1,5 +1,6 @@
 import asyncio
 import httpx
+import html
 import json
 import csv
 import yaml
@@ -69,6 +70,40 @@ def copy_resource(filename: str, dst_dir: Path):
 
     with resources.as_file(resources.files("webquiz") / filename) as src:
         shutil.copy2(src, dst_file)
+
+
+# Pages built from frontend/ (React + antd) by `npm run build`; PyInstaller and the wheel ship them
+UI_DIR = Path(str(resources.files("webquiz") / "ui"))
+UI_DATA_MARKER = "<!--WEBQUIZ_DATA-->"
+UI_PAGES = ["live-stats.html", "files.html", "admin.html", "quiz.html"]
+
+
+def inject_page_data(template: str, data: dict) -> str:
+    """Put `data` into a built frontend page as window.__WEBQUIZ__ (in place of UI_DATA_MARKER)."""
+    # "<" is escaped so data can never close the script tag
+    payload = json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
+    return template.replace(UI_DATA_MARKER, f"<script>window.__WEBQUIZ__ = {payload};</script>")
+
+
+def render_ui_page(template: Optional[str], data: dict) -> web.Response:
+    """Render a built frontend page with its data injected as window.__WEBQUIZ__.
+
+    Args:
+        template: Built HTML from webquiz/ui/, or None when the frontend is not built
+        data: JSON-serializable page data
+
+    Returns:
+        HTML response, or 503 with build instructions when the page is missing
+    """
+    if template is None:
+        return web.Response(
+            text="<h1>Frontend is not built</h1><p>Run <code>npm ci && npm run build</code> in <code>frontend/</code>.</p>",
+            content_type="text/html",
+            status=503,
+        )
+    return web.Response(
+        text=inject_page_data(template, data), content_type="text/html", headers={"Cache-Control": "no-cache"}
+    )
 
 
 def get_package_version() -> str:
@@ -686,10 +721,6 @@ class TestingServer:
         """
         templates = {}
         template_files = [
-            "index.html",
-            "admin.html",
-            "files.html",
-            "live_stats.html",
             "quiz_selection_required.html",
             "template_error.html",
         ]
@@ -701,7 +732,21 @@ class TestingServer:
             except Exception as e:
                 logger.warning(f"Failed to load template {template_file}: {e}")
 
+        for page in UI_PAGES:
+            try:
+                templates[f"ui/{page}"] = (UI_DIR / page).read_text(encoding="utf-8")
+                logger.info(f"Loaded UI page: {page}")
+            except OSError as e:
+                logger.warning(f"Failed to load UI page {page} (run `npm run build` in frontend/): {e}")
+
         return templates
+
+    def _ui_page_data(self, page: Optional[dict] = None) -> dict:
+        """Data a built frontend page receives as window.__WEBQUIZ__ (`page` holds the page's own data)."""
+        data = {"language": self.config.language, "version": package_version}
+        if page is not None:
+            data["page"] = page
+        return data
 
     def generate_log_path(self) -> str:
         """Generate log file path in logs directory with simple numeric naming.
@@ -1300,71 +1345,36 @@ class TestingServer:
 
             questions_for_client.append(client_question)
 
-        # Convert questions to JSON string for embedding
-        questions_json = json.dumps(questions_for_client, indent=2)
-
-        template_content = self.templates.get("index.html", "")
-
-        # Generate registration fields HTML as a table (always include username)
-        registration_fields_html = '<table class="registration-table">'
-
-        # Get username label from config; fall back to translation if not customized
+        # Username label from config; falls back to the translation when not customized
         username_label = self.translations["username_label"]
-        if hasattr(self.config, "registration") and hasattr(self.config.registration, "username_label"):
-            if self.config.registration.username_label:
-                username_label = self.config.registration.username_label
+        if hasattr(self.config, "registration") and getattr(self.config.registration, "username_label", None):
+            username_label = self.config.registration.username_label
 
-        # Add username field as first row
-        registration_fields_html += f"""
-            <tr>
-                <td class="registration-label">{username_label}:</td>
-                <td class="registration-input">
-                    <input type="text" id="username">
-                </td>
-            </tr>"""
-
-        # Add additional registration fields if configured
+        registration_fields = []
         if hasattr(self.config, "registration") and self.config.registration.fields:
-            for field_label in self.config.registration.fields:
-                field_name = field_label.lower().replace(" ", "_")
-                registration_fields_html += f"""
-            <tr>
-                <td class="registration-label">{field_label}:</td>
-                <td class="registration-input">
-                    <input type="text" class="registration-field" data-field-name="{field_name}">
-                </td>
-            </tr>"""
+            registration_fields = [
+                {"label": label, "name": label.lower().replace(" ", "_")} for label in self.config.registration.fields
+            ]
 
-        registration_fields_html += "</table>"
+        page = {
+            "title": self.quiz_title,
+            "quizVersion": self.quiz_version or "",
+            "questions": questions_for_client,
+            "showRightAnswer": self.show_right_answer,
+            "showFinalList": self.show_final_list,
+            "usernameLabel": username_label,
+            "registrationFields": registration_fields,
+            "translations": self.translations,
+        }
 
-        # Inject questions data, title, version, registration fields, username label, and show_right_answer setting into template
-        html_content = template_content.replace("{{QUESTIONS_DATA}}", questions_json)
-        html_content = html_content.replace("{{QUIZ_TITLE}}", self.quiz_title)
-        html_content = html_content.replace("{{QUIZ_VERSION}}", self.quiz_version or "")
-        html_content = html_content.replace("{{REGISTRATION_FIELDS}}", registration_fields_html)
-        html_content = html_content.replace("{{USERNAME_LABEL}}", username_label)
-        html_content = html_content.replace("{{SHOW_RIGHT_ANSWER}}", "true" if self.show_right_answer else "false")
-        html_content = html_content.replace("{{SHOW_FINAL_LIST}}", "true" if self.show_final_list else "false")
-        html_content = html_content.replace("{{WEBQUIZ_VERSION}}", get_package_version())
-
-        # Inject translations as JSON for JS and as individual placeholders for HTML/CSS
-        t = self.translations
-        html_content = html_content.replace("{{TRANSLATIONS_JSON}}", json.dumps(t, ensure_ascii=False))
-        html_content = html_content.replace("{{T_CORRECT_ANSWER_LABEL}}", t["correct_answer_label"])
-        html_content = html_content.replace("{{T_YOUR_ANSWER_LABEL}}", t["your_answer_label"])
-        html_content = html_content.replace("{{T_ALSO_CORRECT_LABEL}}", t["also_correct_label"])
-        html_content = html_content.replace("{{T_LOADING}}", t["loading"])
-        html_content = html_content.replace("{{T_CHECKING_DATA}}", t["checking_data"])
-        html_content = html_content.replace("{{T_REGISTER_TITLE}}", t["register_title"])
-        html_content = html_content.replace("{{T_REGISTER_BUTTON}}", t["register_button"])
-        html_content = html_content.replace("{{T_WAITING_TITLE}}", t["waiting_title"])
-        html_content = html_content.replace("{{T_WAITING_DESCRIPTION}}", t["waiting_description"])
-        html_content = html_content.replace("{{T_WAITING_HINT}}", t["waiting_hint"])
-        html_content = html_content.replace("{{T_SAVE_CHANGES}}", t["save_changes"])
-        html_content = html_content.replace("{{T_CHECK_STATUS}}", t["check_status"])
-        html_content = html_content.replace("{{T_SUBMIT_ANSWER}}", t["submit_answer"])
-        html_content = html_content.replace("{{T_CONTINUE_BUTTON}}", t["continue_button"])
-        html_content = html_content.replace("{{T_SKIP_QUESTION}}", t["skip_question"])
+        template = self.templates.get("ui/quiz.html")
+        if template is None:
+            html_content = "<h1>Frontend is not built</h1><p>Run <code>npm ci && npm run build</code> in <code>frontend/</code>.</p>"
+        else:
+            html_content = inject_page_data(template, self._ui_page_data(page))
+            html_content = html_content.replace("<title>WebQuiz</title>", f"<title>{html.escape(self.quiz_title)}</title>")
+            # Relative asset URLs: the quiz page may be served under a reverse proxy prefix (server.url_format)
+            html_content = html_content.replace('="/ui/', '="ui/')
 
         # Write to destination
         async with aiofiles.open(index_path, "w", encoding="utf-8") as f:
@@ -4270,52 +4280,41 @@ class TestingServer:
         Returns:
             HTML response with files management interface
         """
-        template_content = self.templates.get("files.html", "")
-
-        # Check if client IP is trusted and inject auto-auth flag
+        # Check if client IP is trusted (its requests pass without a session)
         client_ip = get_client_ip(request)
         is_trusted_ip = client_ip in self.admin_config.trusted_ips if hasattr(self, "admin_config") else False
 
-        # Read config file content (only if config file was provided)
+        # Config file content and structured data for the form editor (only if a config file was provided)
         config_path = self.config.config_path
-        config_content = ""
-        config_data_json = "null"
+        config_content = None
+        config_data = None
+        if config_path:
+            config_content = ""
+            config_data = {"language": "uk", "extra_answers_with_users_csv": False, "registration": {}}
         if config_path and os.path.exists(config_path):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     config_content = f.read()
-                # Parse config to provide structured JSON data for form editor
                 parsed = yaml.safe_load(config_content) if config_content.strip() else {}
                 if parsed and isinstance(parsed, dict):
                     registration = parsed.get("registration", {})
                     if not isinstance(registration, dict):
                         registration = {}
-                    config_data_json = json.dumps(
-                        {
-                            "language": parsed.get("language", "uk"),
-                            "extra_answers_with_users_csv": bool(parsed.get("extra_answers_with_users_csv", False)),
-                            "registration": registration,
-                        }
-                    )
-                else:
-                    config_data_json = json.dumps(
-                        {"language": "uk", "extra_answers_with_users_csv": False, "registration": {}}
-                    )
+                    config_data = {
+                        "language": parsed.get("language", "uk"),
+                        "extra_answers_with_users_csv": bool(parsed.get("extra_answers_with_users_csv", False)),
+                        "registration": registration,
+                    }
             except Exception as e:
                 logger.warning(f"Could not read config file: {e}")
 
-        # Inject JavaScript variables for trusted IP auto-auth and config
-        js_variables = f"""
-            const IS_TRUSTED_IP = {str(is_trusted_ip).lower()};
-            const CONFIG_CONTENT = {json.dumps(config_content) if config_path else 'null'};
-            const CONFIG_PATH = {json.dumps(config_path) if config_path else 'null'};
-            const CONFIG_DATA = {config_data_json if config_path else 'null'};
-        """
-
-        # Inject the JavaScript variables before </head>
-        template_content = template_content.replace("</head>", f"<script>{js_variables}</script>\n    </head>")
-
-        return web.Response(text=template_content, content_type="text/html")
+        page = {
+            "isTrustedIp": is_trusted_ip,
+            "configPath": config_path or None,
+            "configContent": config_content,
+            "configData": config_data,
+        }
+        return render_ui_page(self.templates.get("ui/files.html"), self._ui_page_data(page))
 
     def _list_files_in_directory(self, directory, file_type):
         """Helper to list files in a directory with metadata.
@@ -4605,9 +4604,7 @@ class TestingServer:
         Returns:
             HTML response with admin interface
         """
-        template_content = self.templates.get("admin.html", "")
-
-        # Check if client IP is trusted and inject auto-auth flag
+        # Check if client IP is trusted (its requests pass without a session)
         client_ip = get_client_ip(request)
         is_trusted_ip = client_ip in self.admin_config.trusted_ips if hasattr(self, "admin_config") else False
 
@@ -4616,15 +4613,8 @@ class TestingServer:
         port = self.config.server.port
         url_format = self.config.server.url_format
 
-        # Generate URLs for external network interfaces only
-        urls = []
-        for ip in interfaces:
-            url = url_format.replace("{IP}", ip).replace("{PORT}", str(port))
-            url = normalize_url(url)
-            urls.append({"label": f"Network Access ({ip})", "quiz_url": url})
-
-        # Prepare network info for JavaScript (only what's actually used)
-        network_info = {"urls": urls}
+        # URLs for external network interfaces only
+        urls = [normalize_url(url_format.replace("{IP}", ip).replace("{PORT}", str(port))) for ip in interfaces]
 
         # Get downloadable quizzes configuration
         downloadable_quizzes = []
@@ -4652,17 +4642,13 @@ class TestingServer:
             except Exception as e:
                 logger.error(f"Error reading tunnel public key: {e}")
 
-        # Inject trusted IP status, network info, downloadable quizzes, and version into the template
-        server_data_script = f"""
-    const IS_TRUSTED_IP = {str(is_trusted_ip).lower()};
-    const NETWORK_INFO = {json.dumps(network_info)};
-    const DOWNLOADABLE_QUIZZES = {json.dumps(downloadable_quizzes)};
-    const WEBQUIZ_VERSION = {json.dumps(package_version)};
-    const TUNNEL_PUBLIC_KEY = {json.dumps(tunnel_public_key)};"""
-
-        template_content = template_content.replace("<script>", f"<script>{server_data_script}\n")
-
-        return web.Response(text=template_content, content_type="text/html")
+        page = {
+            "isTrustedIp": is_trusted_ip,
+            "networkUrls": urls,
+            "downloadableQuizzes": downloadable_quizzes,
+            "tunnelPublicKey": tunnel_public_key,
+        }
+        return render_ui_page(self.templates.get("ui/admin.html"), self._ui_page_data(page))
 
     @local_network_only
     async def serve_live_stats_page(self, request):
@@ -4671,13 +4657,7 @@ class TestingServer:
         Returns:
             HTML response with live stats interface
         """
-        try:
-            template_content = self.templates.get("live_stats.html", "")
-
-            return web.Response(text=template_content, content_type="text/html")
-        except Exception as e:
-            logger.error(f"Error serving live stats page: {e}")
-            return web.Response(text="<h1>Live stats page not found</h1>", content_type="text/html", status=404)
+        return render_ui_page(self.templates.get("ui/live-stats.html"), self._ui_page_data())
 
     async def _handle_websocket_connection(
         self, request, client_list: List[web.WebSocketResponse], initial_state_data: dict, client_type: str
@@ -4928,6 +4908,11 @@ async def create_app(config: WebQuizConfig):
         show_index=True,
         name="imgs",
     )
+    # Assets of the pages built from frontend/ (file names carry a content hash)
+    if UI_DIR.is_dir():
+        app.router.add_static("/ui/", path=UI_DIR, name="ui")
+    else:
+        logger.warning(f"Frontend build not found at {UI_DIR}; run `npm ci && npm run build` in frontend/")
     # Serve static files from configured static directory
     app.router.add_static("/", path=config.paths.static_dir, name="static")
 

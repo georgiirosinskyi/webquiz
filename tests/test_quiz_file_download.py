@@ -10,7 +10,7 @@ from pathlib import Path
 
 import requests
 
-from tests.conftest import custom_webquiz_server, get_admin_session
+from tests.conftest import custom_webquiz_server, get_admin_session, get_page_data
 
 
 def test_admin_list_files_empty_directory(temp_dir):
@@ -173,8 +173,7 @@ def test_question_with_file_field_in_index(temp_dir):
         with open(index_path, "r", encoding="utf-8") as f:
             html_content = f.read()
 
-        questions_match = re.search(r"let questions = (\[.*?\]);", html_content, re.DOTALL)
-        embedded_questions = json.loads(questions_match.group(1))
+        embedded_questions = get_page_data(html_content)["page"]["questions"]
 
         assert len(embedded_questions) == 4
 

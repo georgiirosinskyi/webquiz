@@ -34,6 +34,7 @@ A modern web-based quiz and testing system built with Python and aiohttp that al
 - Python 3.9-3.14 (required by aiohttp)
 - Poetry (recommended) or pip
 - Git
+- Node.js 20+ (only to build the web pages from a git checkout; the PyPI package and the binaries ship them built)
 
 ### Installation with Poetry (Recommended)
 
@@ -48,13 +49,18 @@ A modern web-based quiz and testing system built with Python and aiohttp that al
    poetry install
    ```
 
-3. **Run the server**
+3. **Build the web pages** (React + Ant Design, into `webquiz/ui/`)
+   ```bash
+   cd frontend && npm ci && npm run build && cd ..
+   ```
+
+4. **Run the server**
    ```bash
    webquiz           # Foreground mode
    webquiz -d        # Daemon mode
    ```
 
-4. **Open your browser**
+5. **Open your browser**
    ```
    http://localhost:8080
    ```
@@ -100,13 +106,18 @@ webquiz/
 │   ├── binary_entry.py    # Binary executable entry point
 │   ├── version_check.py   # Version update checking
 │   ├── server_config.yaml.example  # Configuration example
-│   └── templates/         # HTML templates
-│       ├── index.html                     # Main quiz interface
-│       ├── admin.html                     # Admin management panel
-│       ├── files.html                     # File manager interface
-│       ├── live_stats.html                # Live statistics dashboard
+│   ├── ui/                # Built web pages (npm run build, git-ignored)
+│   └── templates/         # Small server-rendered pages
 │       ├── quiz_selection_required.html   # Quiz selection prompt
 │       └── template_error.html            # Error page template
+├── frontend/               # Web pages: React + TypeScript + Ant Design 6, built with Vite
+│   ├── quiz.html, admin.html, files.html, live-stats.html   # Page entries
+│   └── src/
+│       ├── quiz/          # Student quiz page (React only, no antd)
+│       ├── admin/         # Admin panel and quiz editor
+│       ├── files/         # File manager
+│       ├── live-stats/    # Live statistics
+│       └── shared/        # Login, API helpers, theme
 ├── tests/                  # Test suite (14 test files)
 │   ├── conftest.py                      # Test fixtures and configuration
 │   ├── test_cli_directory_creation.py   # CLI and directory tests
@@ -254,7 +265,12 @@ pytest tests/ -v -n 4
 # Run specific test file
 pytest tests/test_admin_api.py
 pytest tests/test_registration_approval.py
+
+# Frontend unit tests (Vitest)
+cd frontend && npm test
 ```
+
+The Python tests use the built pages, so run `npm run build` in `frontend/` first.
 
 ### Test Coverage
 
@@ -727,9 +743,9 @@ The admin panel automatically detects when the package has been updated while th
 
 ### Styling
 
-- Templates are located in `webquiz/templates/`
+- The pages live in `frontend/` (React + Ant Design 6, light theme set in `frontend/src/shared/AppProvider.tsx`); the student page keeps its own CSS in `frontend/src/quiz/quiz.css`
 - Responsive design works on mobile and desktop
-- Generated `static/index.html` can be customized (regenerates on quiz switch)
+- `static/index.html` is regenerated from the built page on every quiz switch
 
 ## 🛠️ Development
 
@@ -752,7 +768,21 @@ python -m webquiz.build
 ./dist/webquiz --master-key secret123
 ```
 
-The binary includes all templates and configuration examples, with automatic directory creation on first run.
+The binary includes the built web pages, templates and configuration examples, with automatic directory creation on first run. Build the frontend first (`cd frontend && npm ci && npm run build`); `build_binary` stops with a message if `webquiz/ui/` is missing.
+
+### Frontend Development
+
+The web pages are a Vite multi-page app in `frontend/`:
+
+```bash
+cd frontend
+npm ci            # install exact versions from package-lock.json
+npm run dev       # dev server on http://localhost:5173 (proxies /api and /ws to WEBQUIZ_URL, default http://localhost:8080)
+npm test          # Vitest unit tests
+npm run build     # type-check and build into ../webquiz/ui/
+```
+
+Open `http://localhost:5173/admin.html` (or `files.html`, `live-stats.html`) while the Python server runs. The server serves the built files from `/ui/`, puts each page's data into `window.__WEBQUIZ__` and writes the quiz page into `static/index.html`. React is a separate chunk, so the student page does not download Ant Design.
 
 ### Key Technical Decisions
 
@@ -770,7 +800,7 @@ The binary includes all templates and configuration examples, with automatic dir
 ### Architecture
 
 - **Backend**: Python 3.9-3.14 with aiohttp async web framework
-- **Frontend**: Vanilla HTML/CSS/JavaScript (no frameworks)
+- **Frontend**: React 19 + TypeScript + Ant Design 6 (admin pages), built with Vite into the Python package; the student page uses React only
 - **Storage**: In-memory with periodic CSV backups (30-second intervals)
 - **Session Management**: Cookie-based with server-side validation
 - **Real-time Features**: WebSocket for live stats and admin notifications

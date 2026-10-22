@@ -14,22 +14,22 @@ The main administrative panel page contains essential tools for managing quizzes
 #### Main Panel Elements
 
 - **Available Quiz Files**
-  The top of the page displays a list of all quizzes available in the `quizzes` folder.
-  Each quiz shows its filename and title (if set), for example: `default.yaml - My Quiz Title`.
-  The current active quiz is highlighted with a yellow background and marked as **(current)**.
+  The **Quiz** card displays a table of all quizzes available in the `quizzes` folder with their filename and title (if set).
+  The current active quiz is marked with a green **current** tag; its name is also shown above the table.
 
-  You can select multiple quizzes using **Ctrl+click** (or **Cmd+click** on macOS) for individual selection, or **Shift+click** to select a range. When multiple quizzes are selected, you can unite them into a single quiz or delete them together.
+  Click a row to select a quiz, tick the checkboxes (or **Ctrl+click** / **Cmd+click** on macOS) to select several, and double-click a row to open it in the editor.
+  With one quiz selected, the buttons **Switch** (**Restart current** for the active quiz), **Edit**, **Duplicate** and **Delete** are available. With several quizzes selected, **Unite quizzes** appears instead of Switch/Edit/Duplicate. The active quiz cannot be deleted.
 
   You can switch between quizzes or create new ones.
 
   Switching or restarting a quiz clears all participants. Quiz pages of the old quiz that students still have open reload automatically within a few seconds, so students see the new quiz right away; the server does not accept answers from a page of the old quiz.
 
-- **"Create New Quiz" Button**
+- **"New quiz" Button**
   Opens the interface for creating a new quiz in visual mode.
   The new file will be added to the `quizzes` directory.
 
-- **"Delete Quiz" Button**
-  Allows you to delete the selected quiz from the file system.
+- **"Delete" Button**
+  Deletes the selected quizzes from the file system after a confirmation.
 
 - **Pending Approvals**
   This panel appears if manual user approval is enabled in the configuration (`registration.approve: true`, see [Configuration](040_config.md) for details).
@@ -191,6 +191,11 @@ The editor uses a visual wizard interface for easy question management.
 - **Randomize Question Order**
   If enabled, questions are shuffled for each participant. Each student sees questions in a different random order.
 
+- **Show the list of questions at the end**, **Allow skipping questions**, **Time limit (seconds)**
+  The `show_final_list`, `allow_skip_questions` and `time_limit` options (see [Quiz File Format](050_quiz_format.md)). An empty time limit or 0 means no limit.
+
+Options the editor does not show (for example `marks` and `default_mark`) and unknown question fields are kept when the quiz is saved from the editor.
+
 #### Question Editor
 
 For each question, you can configure:
@@ -212,7 +217,9 @@ For each question, you can configure:
 
 - **Stick to Previous Question** — when randomization is enabled, this keeps the question adjacent to the previous one. Useful for grouping related questions together.
 
-Questions can be reordered by dragging the handle on the left, and collapsed/expanded by clicking the arrow.
+Questions can be reordered by dragging the handle on the left or with the arrow buttons, and collapsed/expanded by clicking the question header.
+
+Before saving, the editor checks every question: it needs text or an image, filled answer options, at least one correct answer for multiple choice, and points greater than 0 with at most 2 decimal places. Problems are listed under the questions with the question number, and those questions are expanded.
 
 #### Saving
 
@@ -228,30 +235,35 @@ Questions can be reordered by dragging the handle on the left, and collapsed/exp
 
 The Live Statistics page provides real-time monitoring of quiz progress for all participants. Access it via the **Live Stats** link at the bottom of any admin page.
 
-#### Filter Buttons
+The page title shows the name of the current quiz.
 
-At the top of the page, filter buttons allow you to view:
+#### Filter
+
+The switch at the top right shows:
 - **All** — all registered participants
 - **In Progress** — participants currently taking the quiz
-- **Completed** — participants who have finished the quiz
+- **Completed** — participants who have finished the quiz (newest first)
 
-Each button shows the count of participants in that category.
+Each option shows the count of participants in that category.
 
 #### Statistics Grid
 
 The main area displays a grid with:
-- **User column** — participant names and their IDs
-- **Question columns** — each question text (truncated for display)
+- **User column** (stays visible while scrolling sideways) — participant name, an icon for in progress / completed, and the earned points out of the total
+- **Question columns** — question text (an image for image-only questions), the number of correct answers out of the answers given, 📎 for an attached file and 🏆 for questions worth other than 1 point
 
 #### Color Coding
 
-Each cell shows the participant's answer status:
-- **Red circle** — incorrect answer
-- **Green background** — correct answer
-- **Yellow background** — currently answering this question
-- **Empty/white** — not yet answered
+Each cell shows the participant's answer status (the legend is under the grid):
+- **Blue** — currently answering this question
+- **Green** — correct answer
+- **Red** — incorrect answer
+- **Yellow** — skipped
+- **Grey** — not reached yet
 
 Each answered cell also displays the time taken to answer that question.
+
+If the connection to the server drops, the page reconnects by itself and shows a notice; after several failed attempts a **Reconnect** button appears.
 
 This view allows you to monitor quiz progress in real-time and identify participants who may be struggling or need assistance.
 

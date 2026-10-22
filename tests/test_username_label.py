@@ -1,6 +1,10 @@
 import requests
 import time
-from conftest import custom_webquiz_server
+from conftest import custom_webquiz_server, get_page_data
+
+
+def username_label(response):
+    return get_page_data(response.text)["page"]["usernameLabel"]
 
 
 def test_default_username_label():
@@ -10,7 +14,7 @@ def test_default_username_label():
         response = requests.get(f"http://localhost:{port}/")
 
         assert response.status_code == 200
-        assert "Ім'я користувача:" in response.text
+        assert username_label(response) == "Ім'я користувача"
 
 
 def test_custom_username_label_english():
@@ -22,8 +26,8 @@ def test_custom_username_label_english():
         response = requests.get(f"http://localhost:{port}/")
 
         assert response.status_code == 200
-        assert "Student Name:" in response.text
-        assert "Ім'я користувача:" not in response.text
+        assert username_label(response) == "Student Name"
+        assert username_label(response) != "Ім'я користувача"
 
 
 def test_custom_username_label_ukrainian():
@@ -35,7 +39,7 @@ def test_custom_username_label_ukrainian():
         response = requests.get(f"http://localhost:{port}/")
 
         assert response.status_code == 200
-        assert "Логін учня:" in response.text
+        assert username_label(response) == "Логін учня"
 
 
 def test_default_username_label_follows_language_en():
@@ -47,8 +51,8 @@ def test_default_username_label_follows_language_en():
         response = requests.get(f"http://localhost:{port}/")
 
         assert response.status_code == 200
-        assert "Username:" in response.text
-        assert "Ім'я користувача:" not in response.text
+        assert username_label(response) == "Username"
+        assert username_label(response) != "Ім'я користувача"
 
 
 def test_custom_username_label_overrides_language():
@@ -60,5 +64,5 @@ def test_custom_username_label_overrides_language():
         response = requests.get(f"http://localhost:{port}/")
 
         assert response.status_code == 200
-        assert "Логін учня:" in response.text
-        assert "Username:" not in response.text
+        assert username_label(response) == "Логін учня"
+        assert username_label(response) != "Username"

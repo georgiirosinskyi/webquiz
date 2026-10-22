@@ -464,179 +464,74 @@ def test_unite_invalid_quiz_structure_error(temp_dir):
 
 
 # Selenium tests for multi-select UI functionality
-import time
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.action_chains import ActionChains
 
-from selenium_helpers import skip_if_selenium_disabled, browser, wait_for_element
+from selenium_helpers import skip_if_selenium_disabled, browser, admin_login, quiz_row, select_quizzes
+
+TWO_QUIZZES = {
+    "quiz1.yaml": {"title": "Quiz 1", "questions": [{"question": "Q1?", "options": ["A", "B"], "correct_answer": 0}]},
+    "quiz2.yaml": {"title": "Quiz 2", "questions": [{"question": "Q2?", "options": ["C", "D"], "correct_answer": 1}]},
+}
 
 
-def admin_login(browser, port, master_key="test123"):
-    """Helper to log in to admin panel."""
-    browser.get(f"http://localhost:{port}/admin/")
-    password_input = wait_for_element(browser, By.ID, "master-key")
-    password_input.send_keys(master_key)
-    login_button = browser.find_element(By.CSS_SELECTOR, "button[onclick='authenticate()']")
-    login_button.click()
-    WebDriverWait(browser, 10).until(EC.visibility_of_element_located((By.ID, "admin-panel")))
-    time.sleep(0.5)
+def buttons(browser):
+    """Visible quiz action buttons by data-testid."""
+    return {
+        el.get_attribute("data-testid"): el
+        for el in browser.find_elements(By.CSS_SELECTOR, "button[data-testid$='-btn']")
+        if el.is_displayed()
+    }
+
+
+def switch_to(port, filename):
+    cookies = get_admin_session(port)
+    requests.post(f"http://localhost:{port}/api/admin/switch-quiz", cookies=cookies, json={"quiz_filename": filename})
 
 
 @skip_if_selenium_disabled
 def test_single_select_shows_standard_buttons(temp_dir, browser):
-    """Test that selecting 1 quiz shows switch/edit/duplicate buttons."""
-    quizzes = {
-        "quiz1.yaml": {
-            "title": "Quiz 1",
-            "questions": [{"question": "Q1?", "options": ["A", "B"], "correct_answer": 0}],
-        },
-        "quiz2.yaml": {
-            "title": "Quiz 2",
-            "questions": [{"question": "Q2?", "options": ["C", "D"], "correct_answer": 1}],
-        },
-    }
-
-    with custom_webquiz_server(quizzes=quizzes) as (proc, port):
+    """Selecting 1 quiz enables switch/edit/duplicate."""
+    with custom_webquiz_server(quizzes=TWO_QUIZZES) as (proc, port):
         admin_login(browser, port)
+        select_quizzes(browser, ["quiz1.yaml"])
 
-        # Wait for quiz select element
-        quiz_select = WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.ID, "quiz-select")))
-
-        # Select one quiz
-        options = quiz_select.find_elements(By.TAG_NAME, "option")
-        options[0].click()
-        time.sleep(0.3)
-
-        # Verify single-quiz-actions is visible
-        single_actions = browser.find_element(By.ID, "single-quiz-actions")
-        assert single_actions.is_displayed()
-
-        # Verify multi-quiz-actions is hidden
-        multi_actions = browser.find_element(By.ID, "multi-quiz-actions")
-        assert not multi_actions.is_displayed()
-
-        # Verify buttons are enabled
-        edit_btn = browser.find_element(By.ID, "edit-btn")
-        assert not edit_btn.get_attribute("disabled")
+        visible = buttons(browser)
+        assert "unite-btn" not in visible
+        for name in ["switch-btn", "edit-btn", "duplicate-btn"]:
+            assert visible[name].is_enabled(), name
 
 
 @skip_if_selenium_disabled
 def test_multi_select_shows_unite_button(temp_dir, browser):
-    """Test that selecting 2+ quizzes shows unite button."""
-    import platform
-
-    quizzes = {
-        "quiz1.yaml": {
-            "title": "Quiz 1",
-            "questions": [{"question": "Q1?", "options": ["A", "B"], "correct_answer": 0}],
-        },
-        "quiz2.yaml": {
-            "title": "Quiz 2",
-            "questions": [{"question": "Q2?", "options": ["C", "D"], "correct_answer": 1}],
-        },
-    }
-
-    with custom_webquiz_server(quizzes=quizzes) as (proc, port):
+    """Selecting 2+ quizzes shows the unite button instead of switch/edit/duplicate."""
+    with custom_webquiz_server(quizzes=TWO_QUIZZES) as (proc, port):
         admin_login(browser, port)
+        select_quizzes(browser, ["quiz1.yaml", "quiz2.yaml"])
 
-        # Wait for quiz select element
-        quiz_select = WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.ID, "quiz-select")))
-
-        # Select multiple quizzes using modifier key (Command on macOS, Ctrl elsewhere)
-        options = quiz_select.find_elements(By.TAG_NAME, "option")
-        actions = ActionChains(browser)
-
-        # Use Command key on macOS, Ctrl on other platforms
-        modifier = Keys.COMMAND if platform.system() == "Darwin" else Keys.CONTROL
-        actions.click(options[0]).key_down(modifier).click(options[1]).key_up(modifier).perform()
-        time.sleep(0.5)
-
-        # Verify single-quiz-actions is hidden
-        single_actions = browser.find_element(By.ID, "single-quiz-actions")
-        assert (
-            not single_actions.is_displayed()
-        ), "Single quiz actions should be hidden when multiple quizzes are selected"
-
-        # Verify multi-quiz-actions is visible
-        multi_actions = browser.find_element(By.ID, "multi-quiz-actions")
-        assert multi_actions.is_displayed(), "Multi quiz actions should be visible when multiple quizzes are selected"
-
-        # Verify unite button is present
-        unite_btn = browser.find_element(By.ID, "unite-btn")
-        assert unite_btn.is_displayed()
+        WebDriverWait(browser, 5).until(lambda d: "unite-btn" in buttons(d))
+        visible = buttons(browser)
+        for name in ["switch-btn", "edit-btn", "duplicate-btn"]:
+            assert name not in visible, name
 
 
 @skip_if_selenium_disabled
-def test_current_quiz_marked_in_select(temp_dir, browser):
-    """Test current quiz shows '(поточний)' suffix after switching."""
-    quizzes = {
-        "quiz1.yaml": {
-            "title": "Quiz 1",
-            "questions": [{"question": "Q1?", "options": ["A", "B"], "correct_answer": 0}],
-        },
-        "quiz2.yaml": {
-            "title": "Quiz 2",
-            "questions": [{"question": "Q2?", "options": ["C", "D"], "correct_answer": 1}],
-        },
-    }
-
-    with custom_webquiz_server(quizzes=quizzes) as (proc, port):
-        # First switch to a quiz via API so there's a current quiz
-        cookies = get_admin_session(port)
-        requests.post(
-            f"http://localhost:{port}/api/admin/switch-quiz",
-            cookies=cookies,
-            json={"quiz_filename": "quiz1.yaml"},
-        )
-
+def test_current_quiz_marked_in_list(temp_dir, browser):
+    """The current quiz carries a 'поточний' tag in the list."""
+    with custom_webquiz_server(quizzes=TWO_QUIZZES) as (proc, port):
+        switch_to(port, "quiz1.yaml")
         admin_login(browser, port)
 
-        # Wait for quiz select element
-        quiz_select = WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.ID, "quiz-select")))
-
-        # Find option with current quiz marker
-        options = quiz_select.find_elements(By.TAG_NAME, "option")
-        current_quiz_found = False
-        for option in options:
-            if "(поточний)" in option.text:
-                current_quiz_found = True
-                break
-
-        assert current_quiz_found, "Current quiz should be marked with '(поточний)'"
+        assert "поточний" in quiz_row(browser, "quiz1.yaml").text
+        assert "поточний" not in quiz_row(browser, "quiz2.yaml").text
 
 
 @skip_if_selenium_disabled
 def test_delete_button_disabled_for_current_quiz(temp_dir, browser):
-    """Test delete button is disabled when current quiz is selected."""
-    quizzes = {
-        "quiz1.yaml": {
-            "title": "Quiz 1",
-            "questions": [{"question": "Q1?", "options": ["A", "B"], "correct_answer": 0}],
-        },
-    }
-
+    quizzes = {"quiz1.yaml": TWO_QUIZZES["quiz1.yaml"]}
     with custom_webquiz_server(quizzes=quizzes) as (proc, port):
-        # First switch to a quiz via API so there's a current quiz
-        cookies = get_admin_session(port)
-        requests.post(
-            f"http://localhost:{port}/api/admin/switch-quiz",
-            cookies=cookies,
-            json={"quiz_filename": "quiz1.yaml"},
-        )
-
+        switch_to(port, "quiz1.yaml")
         admin_login(browser, port)
+        select_quizzes(browser, ["quiz1.yaml"])
 
-        # Wait for quiz select element
-        quiz_select = WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.ID, "quiz-select")))
-
-        # Select the current quiz (only one quiz, which is current)
-        options = quiz_select.find_elements(By.TAG_NAME, "option")
-        options[0].click()
-        time.sleep(0.3)
-
-        # Verify delete button is disabled
-        delete_btn = browser.find_element(By.ID, "delete-btn")
-        assert delete_btn.get_attribute("disabled")
+        assert not buttons(browser)["delete-btn"].is_enabled()

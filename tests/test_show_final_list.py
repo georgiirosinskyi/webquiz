@@ -2,7 +2,7 @@ import re
 import json
 import requests
 from pathlib import Path
-from conftest import custom_webquiz_server, get_admin_session
+from conftest import custom_webquiz_server, get_admin_session, get_page_data
 
 
 def test_show_final_list_default_true(temp_dir):
@@ -24,7 +24,7 @@ def test_show_final_list_default_true(temp_dir):
             html_content = f.read()
 
         # Default should be true
-        assert "let showFinalList = true;" in html_content
+        assert get_page_data(html_content)["page"]["showFinalList"] is True
 
 
 def test_show_final_list_true_explicit(temp_dir):
@@ -46,7 +46,7 @@ def test_show_final_list_true_explicit(temp_dir):
         with open(index_path, "r", encoding="utf-8") as f:
             html_content = f.read()
 
-        assert "let showFinalList = true;" in html_content
+        assert get_page_data(html_content)["page"]["showFinalList"] is True
 
 
 def test_show_final_list_false(temp_dir):
@@ -68,7 +68,7 @@ def test_show_final_list_false(temp_dir):
         with open(index_path, "r", encoding="utf-8") as f:
             html_content = f.read()
 
-        assert "let showFinalList = false;" in html_content
+        assert get_page_data(html_content)["page"]["showFinalList"] is False
 
 
 def test_show_final_list_false_still_shows_score():
@@ -155,7 +155,7 @@ def test_show_final_list_in_quiz_switch(temp_dir):
         # First quiz should have showFinalList = true
         with open(index_path, "r", encoding="utf-8") as f:
             html_content = f.read()
-        assert "let showFinalList = true;" in html_content
+        assert get_page_data(html_content)["page"]["showFinalList"] is True
 
         # Switch to second quiz
         cookies = get_admin_session(port)
@@ -169,4 +169,4 @@ def test_show_final_list_in_quiz_switch(temp_dir):
         # Second quiz should have showFinalList = false
         with open(index_path, "r", encoding="utf-8") as f:
             html_content = f.read()
-        assert "let showFinalList = false;" in html_content
+        assert get_page_data(html_content)["page"]["showFinalList"] is False
