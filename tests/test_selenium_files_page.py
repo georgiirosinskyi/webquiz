@@ -1,4 +1,4 @@
-"""Selenium tests for the file manager page (built from frontend/src/files)."""
+"""Selenium tests for the Files and Settings sections of the admin app (frontend/src/files)."""
 
 import requests
 import yaml
@@ -10,11 +10,11 @@ from conftest import custom_webquiz_server, get_admin_session, get_page_data
 from selenium_helpers import skip_if_selenium_disabled, browser
 
 
-def login(browser, base_url):
-    browser.get(f"{base_url}/files/")
+def login(browser, base_url, path="/files/", ready='[data-testid="files-panel"]'):
+    browser.get(f"{base_url}{path}")
     browser.find_element(By.ID, "master-key").send_keys("test123")
-    browser.find_element(By.XPATH, "//button[.//span[text()='Login']]").click()
-    WebDriverWait(browser, 10).until(lambda d: d.find_elements(By.CSS_SELECTOR, '[data-testid="files-panel"]'))
+    browser.find_element(By.XPATH, "//button[@type='submit']").click()
+    WebDriverWait(browser, 10).until(lambda d: d.find_elements(By.CSS_SELECTOR, ready))
 
 
 def click_tab(browser, label):
@@ -51,8 +51,7 @@ def test_config_form_saves_registration_fields(browser):
         port,
     ):
         base_url = f"http://localhost:{port}"
-        login(browser, base_url)
-        click_tab(browser, "Config")
+        login(browser, base_url, "/admin/settings", '[data-testid="cfg-reg-fields-list"]')
 
         fields = WebDriverWait(browser, 10).until(
             lambda d: d.find_elements(By.CSS_SELECTOR, '[data-testid="cfg-reg-fields-list"] input[type="text"]')

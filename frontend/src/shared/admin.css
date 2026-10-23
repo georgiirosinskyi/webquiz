@@ -89,3 +89,87 @@ body {
 .picker-row:hover {
   background: #f5f5f5;
 }
+
+/* Admin app layout */
+.admin-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  height: 56px;
+  line-height: 56px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.admin-brand {
+  color: #fff;
+  font-weight: 600;
+  font-size: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.admin-menu {
+  flex: 1;
+  min-width: 0;
+  border-bottom: none;
+  line-height: 56px;
+}
+
+.admin-content {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.section-header {
+  margin-bottom: 16px;
+}
+
+@media (max-width: 768px) {
+  .admin-header {
+    padding: 0 8px;
+    gap: 8px;
+  }
+
+  .admin-brand {
+    font-size: 16px;
+  }
+
+  .admin-content {
+    padding: 10px;
+  }
+}
+
+/* Overview */
+.row-pending > td {
+  background: #fffbe6 !important;
+}
+
+.progress-dots {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-width: 260px;
+}
+
+.progress-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.username-text {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* Menu labels keep the menu's text color (antd Badge sets its own) */
+.menu-badge {
+  color: inherit;
+}

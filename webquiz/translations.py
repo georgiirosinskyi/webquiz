@@ -77,9 +77,8 @@ TRANSLATIONS = {
         "no_question_content": "Немає контенту питання",
 
         # Show answers on completion
-        "answers_available_later": "ℹ️ Правильні відповіді будуть доступні після завершення тесту всіма учнями.",
-        "reload_later": "Перезавантажте сторінку пізніше, щоб побачити правильні відповіді.",
-        "reload_page": "🔄 Перезавантажити сторінку",
+        "answers_available_later": "Правильні відповіді з'являться, коли всі користувачі завершать тест",
+        "answers_refresh_note": "Сторінка оновиться автоматично.",
 
         # Server-side error messages (user-facing)
         "server_username_empty": "Ім'я користувача не може бути порожнім",
@@ -177,9 +176,8 @@ TRANSLATIONS = {
         "no_question_content": "No question content",
 
         # Show answers on completion
-        "answers_available_later": "ℹ️ Correct answers will be available after all students complete the quiz.",
-        "reload_later": "Reload the page later to see the correct answers.",
-        "reload_page": "🔄 Reload page",
+        "answers_available_later": "The correct answers will appear when all users finish the quiz",
+        "answers_refresh_note": "The page updates automatically.",
 
         # Server-side error messages (user-facing)
         "server_username_empty": "Username cannot be empty",

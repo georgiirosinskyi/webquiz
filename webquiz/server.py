@@ -75,7 +75,7 @@ def copy_resource(filename: str, dst_dir: Path):
 # Pages built from frontend/ (React + antd) by `npm run build`; PyInstaller and the wheel ship them
 UI_DIR = Path(str(resources.files("webquiz") / "ui"))
 UI_DATA_MARKER = "<!--WEBQUIZ_DATA-->"
-UI_PAGES = ["live-stats.html", "files.html", "admin.html", "quiz.html"]
+UI_PAGES = ["live-stats.html", "admin.html", "quiz.html"]
 
 
 def inject_page_data(template: str, data: dict) -> str:
@@ -1078,6 +1078,8 @@ class TestingServer:
                 "current_quiz": quiz_filename,
                 "pending_users": {},
                 "requires_approval": hasattr(self.config, "registration") and self.config.registration.approve,
+                "quiz": self._admin_quiz_info(),
+                "users": [],
             }
         )
 
@@ -1644,6 +1646,9 @@ class TestingServer:
         self.websocket_clients = await self._broadcast_to_websocket_list(
             self.websocket_clients, message, "live stats WebSocket"
         )
+        # Every live stats change concerns one user; the admin overview gets that user's full record
+        if message.get("user_id"):
+            await self.notify_admin_user_updated(message["user_id"])
 
     async def broadcast_to_admin_websockets(self, message: dict):
         """Broadcast message to all connected admin WebSocket clients.
@@ -1674,6 +1679,73 @@ class TestingServer:
                 if field_name in user_data:
                     fields[field_name] = user_data[field_name]
         return fields
+
+    def _admin_quiz_info(self) -> dict:
+        """Current quiz summary for the admin overview page."""
+        return {
+            "filename": self._current_quiz_name(),
+            "title": getattr(self, "quiz_title", None),
+            "total_questions": len(self.questions),
+            "total_points": sum_points(q.get("points", 1) for q in self.questions),
+            "time_limit": getattr(self, "time_limit_s", 0) or 0,
+            "randomize_questions": bool(getattr(self, "randomize_questions", False)),
+            "allow_skip_questions": bool(getattr(self, "allow_skip_questions", False)),
+            "show_answers_on_completion": bool(getattr(self, "show_answers_on_completion", False)),
+            "force_all_completed": self.force_all_completed,
+            "requires_approval": hasattr(self.config, "registration") and self.config.registration.approve,
+            "questions": [
+                {
+                    "id": q["id"],
+                    "question": q.get("question", ""),
+                    "image": q.get("image"),
+                    "points": normalize_points(q.get("points", 1)),
+                }
+                for q in self.questions
+            ],
+        }
+
+    def _admin_user_record(self, user_id: str) -> dict:
+        """Everything the admin overview shows about one user: status, progress, points, grade, timing."""
+        user_data = self.users[user_id]
+        answers = self.user_answers.get(user_id, [])
+        # time_taken == -1 marks a placeholder for a question left unanswered when the test was finished
+        given = [a for a in answers if a.get("time_taken") != -1]
+        stats = self.user_stats.get(user_id)
+        approved = user_data.get("approved", True)
+
+        if not approved:
+            status = "pending"
+        elif stats is not None:
+            status = "time_up" if user_data.get("finish_reason") == "timeout" else "completed"
+        else:
+            status = "in_progress"
+
+        start = user_data.get("quiz_start_time")
+        finish = user_data.get("quiz_finish_time")
+        elapsed = int(((finish or datetime.now()) - start).total_seconds()) if start else None
+
+        return {
+            "user_id": user_id,
+            "username": user_data["username"],
+            "registration_fields": self._extract_registration_fields(user_data),
+            "status": status,
+            "registered_at": user_data.get("registered_at"),
+            "answered": len(given),
+            "correct": sum(1 for a in given if a.get("is_correct")),
+            "skipped": len(user_data.get("skipped_questions", [])),
+            "earned_points": sum_points(a.get("earned_points", 0) for a in answers),
+            "mark": stats["mark"] if stats else None,
+            "points_percentage": stats["points_percentage"] if stats else None,
+            "elapsed_seconds": elapsed,
+            "remaining_seconds": self._remaining_seconds(user_data) if status == "in_progress" else None,
+            "question_order": user_data.get("question_order") or [q["id"] for q in self.questions],
+            "live_stats": self.live_stats.get(user_id, {}),
+        }
+
+    async def notify_admin_user_updated(self, user_id: str):
+        """Send the user's current record to the admin pages."""
+        if user_id in self.users and self.admin_websocket_clients:
+            await self.broadcast_to_admin_websockets({"type": "user_updated", "user": self._admin_user_record(user_id)})
 
     def _validate_answer(self, selected_answer, question):
         """Validate answer for single choice, multiple choice, and text input questions.
@@ -2019,6 +2091,7 @@ class TestingServer:
                     "registration_fields": self._extract_registration_fields(user_data),
                 }
             )
+            await self.notify_admin_user_updated(user_id)
 
         logger.info(f"Registered user: {username} with ID: {user_id}, requires_approval: {requires_approval}")
 
@@ -2108,6 +2181,7 @@ class TestingServer:
                 "registration_fields": self._extract_registration_fields(user_data),
             }
         )
+        await self.notify_admin_user_updated(user_id)
 
         logger.info(f"Updated registration data for user: {user_id}")
         return web.json_response(
@@ -2467,6 +2541,7 @@ class TestingServer:
             logger.info(f"Test for user {user_id} is already completed, finish request ({reason}) ignored")
             return
 
+        user_data["finish_reason"] = reason
         deadline = self._test_deadline(user_data)
         if reason == "timeout" and deadline is not None:
             user_data["quiz_finish_time"] = min(datetime.now(), deadline)
@@ -2533,6 +2608,7 @@ class TestingServer:
         # Test completed - calculate and store final stats
         self.calculate_and_store_user_stats(user_id)
         logger.info(f"Test completed for user {user_id} ({reason}) - final stats calculated")
+        await self.notify_admin_user_updated(user_id)
 
     async def question_start(self, request):
         """Handle notification that a user started viewing a question.
@@ -3078,6 +3154,7 @@ class TestingServer:
 
         # Broadcast approval to admin WebSocket
         await self.broadcast_to_admin_websockets({"type": "user_approved", "user_id": user_id})
+        await self.notify_admin_user_updated(user_id)
 
         logger.info(f"Approved user: {user_id}")
         return web.json_response({"success": True, "message": "User approved successfully", "user_id": user_id})
@@ -3109,14 +3186,14 @@ class TestingServer:
 
         # Broadcast to admin WebSocket clients
         await self.broadcast_to_admin_websockets(
-            {"type": "answers_forced", "forced": True, "message": "Відповіді тепер доступні для всіх учнів"}
+            {"type": "answers_forced", "forced": True, "message": "Відповіді тепер доступні для всіх користувачів"}
         )
 
         return web.json_response(
             {
                 "success": True,
                 "forced": True,
-                "message": "Відповіді успішно відкриті для всіх учнів",
+                "message": "Відповіді успішно відкриті для всіх користувачів",
                 "completed_count": len(self.user_stats),
                 "total_count": len(self.users),
             }
@@ -4271,19 +4348,8 @@ class TestingServer:
             return web.json_response({"error": e.message}, status=e.status)
         return web.json_response({"success": True})
 
-    @local_network_only
-    async def serve_files_page(self, request):
-        """Serve the files management page.
-
-        Injects trusted IP status and config content for auto-authentication.
-
-        Returns:
-            HTML response with files management interface
-        """
-        # Check if client IP is trusted (its requests pass without a session)
-        client_ip = get_client_ip(request)
-        is_trusted_ip = client_ip in self.admin_config.trusted_ips if hasattr(self, "admin_config") else False
-
+    def _config_page_data(self) -> dict:
+        """Config file path, content and structured data for the settings page form editor."""
         # Config file content and structured data for the form editor (only if a config file was provided)
         config_path = self.config.config_path
         config_content = None
@@ -4308,13 +4374,7 @@ class TestingServer:
             except Exception as e:
                 logger.warning(f"Could not read config file: {e}")
 
-        page = {
-            "isTrustedIp": is_trusted_ip,
-            "configPath": config_path or None,
-            "configContent": config_content,
-            "configData": config_data,
-        }
-        return render_ui_page(self.templates.get("ui/files.html"), self._ui_page_data(page))
+        return {"configPath": config_path or None, "configContent": config_content, "configData": config_data}
 
     def _list_files_in_directory(self, directory, file_type):
         """Helper to list files in a directory with metadata.
@@ -4597,9 +4657,9 @@ class TestingServer:
 
     @local_network_only
     async def serve_admin_page(self, request):
-        """Serve the admin interface page.
+        """Serve the admin app (one page for /admin/, its sections /admin/{section} and /files/).
 
-        Injects trusted IP status, network info, downloadable quizzes, and version.
+        Injects trusted IP status, network info, downloadable quizzes, config content and version.
 
         Returns:
             HTML response with admin interface
@@ -4647,6 +4707,7 @@ class TestingServer:
             "networkUrls": urls,
             "downloadableQuizzes": downloadable_quizzes,
             "tunnelPublicKey": tunnel_public_key,
+            **self._config_page_data(),
         }
         return render_ui_page(self.templates.get("ui/admin.html"), self._ui_page_data(page))
 
@@ -4792,6 +4853,8 @@ class TestingServer:
             "requires_approval": hasattr(self.config, "registration") and self.config.registration.approve,
             "tunnel": tunnel_info,
             "transfer_requests": self.transfer.list_incoming(),
+            "quiz": self._admin_quiz_info(),
+            "users": [self._admin_user_record(user_id) for user_id in self.users],
         }
         return await self._handle_websocket_connection(
             request, self.admin_websocket_clients, initial_data, "admin WebSocket"
@@ -4884,7 +4947,9 @@ async def create_app(config: WebQuizConfig):
     app.router.add_get("/ws/admin", server.websocket_admin)
 
     # File management routes (admin access)
-    app.router.add_get("/files/", server.serve_files_page)
+    app.router.add_get("/admin/{section:.+}", server.serve_admin_page)
+    # The file manager is a section of the admin app now; the old URL opens it
+    app.router.add_get("/files/", server.serve_admin_page)
     # Quiz file attachment download route
     app.router.add_get("/attach/{filename}", server.serve_quiz_file)
     app.router.add_get("/api/files/list", server.files_list)

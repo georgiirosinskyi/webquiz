@@ -1,3 +1,6 @@
+import type { ReactNode } from "react";
+import { Alert, Card, Flex, Grid, Progress, Table, Tag, Typography } from "antd";
+import { LoadingOutlined, PaperClipOutlined } from "@ant-design/icons";
 import { formatPoints, isImagePath, relativePath } from "./logic";
 
 // Results of a finished test as verify-user returns them (final_results)
@@ -60,10 +63,9 @@ function QuestionCell({ question, image, file, fallback }: { question?: string; 
           <a
             href={relativePath(file!)}
             download
-            className="question-file"
-            style={{ display: "inline-flex", marginTop: 5, padding: "5px 10px", fontSize: 12 }}
+            className="question-file question-file-small"
           >
-            <span className="question-file-icon">📎</span>
+            <PaperClipOutlined className="question-file-icon" />
             <span className="question-file-name">{file!.split("/").pop()}</span>
           </a>
         </>
@@ -101,6 +103,141 @@ function AnswerCell({ answer }: { answer?: string }) {
 const correctnessClass = (isCorrect: boolean | null | undefined) =>
   isCorrect === true ? "answer-correct" : isCorrect === false ? "answer-incorrect" : "";
 
+// One row of the results list, the same for server and client results
+interface Row {
+  question?: string;
+  image?: string;
+  file?: string;
+  answer?: string;
+  correctAnswer?: string | null;
+  isCorrect: boolean | null | undefined;
+  // Correct answer hint under a wrong answer
+  showHint: boolean;
+  points?: string;
+}
+
+function CorrectMark({ isCorrect, unknown }: { isCorrect: boolean | null | undefined; unknown: string }) {
+  if (isCorrect === undefined || isCorrect === null) return <Typography.Text type="secondary">{unknown}</Typography.Text>;
+  return (
+    <Tag color={isCorrect ? "success" : "error"} className={isCorrect ? "correct" : "incorrect"} style={{ marginInlineEnd: 0 }}>
+      {isCorrect ? "✓" : "✗"}
+    </Tag>
+  );
+}
+
+function AnswerWithHint({ row, t }: { row: Row; t: Record<string, string> }) {
+  return (
+    <>
+      <span className={correctnessClass(row.isCorrect)}>
+        <AnswerCell answer={row.answer} />
+      </span>
+      {row.showHint && (
+        <div className="correct-answer-hint">
+          {t.result_correct_header}
+          <AnswerCell answer={row.correctAnswer || undefined} />
+        </div>
+      )}
+    </>
+  );
+}
+
+// Table on wide screens, a card per question on phones
+function ResultsList({
+  rows,
+  numbered,
+  withPoints,
+  t,
+}: {
+  rows: Row[];
+  numbered: boolean;
+  withPoints: boolean;
+  t: Record<string, string>;
+}) {
+  const mobile = Grid.useBreakpoint().md === false;
+  const unknown = numbered ? t.unknown : "—";
+
+  if (mobile) {
+    return (
+      <Flex vertical gap={10} className="results-table results-cards">
+        {rows.map((row, index) => (
+          <Card
+            key={index}
+            size="small"
+            className={`result-card${row.isCorrect === true ? " ok" : row.isCorrect === false ? " fail" : ""}`}
+          >
+            <Flex justify="space-between" align="flex-start" gap={8}>
+              <div className="result-question">
+                {numbered && <Typography.Text strong>{index + 1}. </Typography.Text>}
+                <QuestionCell question={row.question} image={row.image} file={row.file} fallback={t.no_question_content} />
+              </div>
+              <Flex gap={4} align="center">
+                {withPoints && row.points && <Tag style={{ marginInlineEnd: 0 }}>{row.points}</Tag>}
+                <CorrectMark isCorrect={row.isCorrect} unknown={unknown} />
+              </Flex>
+            </Flex>
+            <div className="result-answer">
+              <Typography.Text type="secondary">{t.your_answer_header}: </Typography.Text>
+              <AnswerWithHint row={row} t={t} />
+            </div>
+          </Card>
+        ))}
+      </Flex>
+    );
+  }
+
+  return (
+    <Table<Row & { key: number }>
+      className="results-table"
+      size="middle"
+      pagination={false}
+      dataSource={rows.map((row, index) => ({ ...row, key: index }))}
+      columns={[
+        ...(numbered
+          ? [
+              {
+                key: "n",
+                title: t.number_header,
+                width: 50,
+                align: "center" as const,
+                render: (_: unknown, __: Row, index: number) => index + 1,
+              },
+            ]
+          : []),
+        {
+          key: "question",
+          title: t.question_header,
+          render: (_, row) => (
+            <QuestionCell question={row.question} image={row.image} file={row.file} fallback={t.no_question_content} />
+          ),
+        },
+        { key: "answer", title: t.your_answer_header, render: (_, row) => <AnswerWithHint row={row} t={t} /> },
+        {
+          key: "correct",
+          title: numbered ? t.correct_header_alt : t.correct_header,
+          align: "center",
+          width: 110,
+          render: (_, row) => <CorrectMark isCorrect={row.isCorrect} unknown={unknown} />,
+        },
+        ...(withPoints
+          ? [{ key: "points", title: t.points_header, width: 80, align: "center" as const, dataIndex: "points" }]
+          : []),
+      ]}
+    />
+  );
+}
+
+function Summary({ percent, children }: { percent: number; children: ReactNode }) {
+  const mobile = Grid.useBreakpoint().md === false;
+  return (
+    <Flex align="center" justify="center" gap={24} wrap className="results-summary">
+      <Progress type="circle" percent={percent} size={mobile ? 110 : 130} status="normal" />
+      <Flex vertical gap={4}>
+        {children}
+      </Flex>
+    </Flex>
+  );
+}
+
 export function FinalResultsView({
   results,
   totalQuestions,
@@ -114,103 +251,50 @@ export function FinalResultsView({
   showRightAnswer: boolean;
   t: Record<string, string>;
 }) {
-  const rows = results.test_results;
   const waitForAnswers = !!results.show_answers_on_completion && !results.all_completed;
   // is_correct is left out while the answers are hidden
-  const hasCorrectAnswers = rows.length > 0 && rows[0].is_correct !== undefined;
-  const hasCustomPoints = rows.some((row) => (row.points || 1) !== 1);
+  const hasCorrectAnswers = results.test_results.length > 0 && results.test_results[0].is_correct !== undefined;
+  const hasCustomPoints = results.test_results.some((row) => (row.points || 1) !== 1);
+  const rows: Row[] = results.test_results.map((row) => ({
+    question: row.question,
+    image: row.image,
+    file: row.file,
+    answer: row.selected_answer,
+    correctAnswer: row.correct_answer,
+    isCorrect: row.is_correct,
+    showHint:
+      row.is_correct === false && !!row.correct_answer && !!row.selected_answer && (showRightAnswer || hasCorrectAnswers),
+    points: `${formatPoints(row.earned_points !== undefined ? row.earned_points : row.is_correct ? row.points || 1 : 0)}/${formatPoints(row.points || 1)}`,
+  }));
 
   return (
-    <>
-      <p>
-        <strong>{t.result_label}</strong> {results.correct_count}/{totalQuestions} ({results.percentage}%)
-      </p>
-      <p>
-        <strong>{t.mark_label}</strong> {results.mark}
-      </p>
-      {hasCustomPoints && (
-        <p>
-          <strong>{t.points_label}</strong> {formatPoints(results.earned_points || 0)}/
-          {formatPoints(results.total_points || totalQuestions)} ({results.points_percentage || results.percentage}%)
-        </p>
-      )}
+    <Flex vertical gap={20}>
+      <Summary percent={hasCustomPoints ? results.points_percentage || results.percentage : results.percentage}>
+        <Typography.Title level={2} className="result-mark" style={{ margin: 0 }}>
+          {t.mark_label} {results.mark}
+        </Typography.Title>
+        <Typography.Text className="result-score">
+          <strong>{t.result_label}</strong> {results.correct_count}/{totalQuestions} ({results.percentage}%)
+        </Typography.Text>
+        {hasCustomPoints && (
+          <Typography.Text className="result-points">
+            <strong>{t.points_label}</strong> {formatPoints(results.earned_points || 0)}/
+            {formatPoints(results.total_points || totalQuestions)} ({results.points_percentage || results.percentage}%)
+          </Typography.Text>
+        )}
+      </Summary>
       {waitForAnswers && (
-        <div
-          style={{
-            background: "var(--stats-bg)",
-            padding: 15,
-            borderRadius: 5,
-            margin: "15px 0",
-            borderLeft: "4px solid #2196f3",
-          }}
-        >
-          <p style={{ margin: "0 0 10px 0" }}>
-            <strong>{t.answers_available_later}</strong>
-          </p>
-          <p style={{ margin: "0 0 10px 0", fontSize: 14 }}>{t.reload_later}</p>
-          <button
-            onClick={() => location.reload()}
-            style={{ background: "#2196f3", fontSize: 14, margin: 0 }}
-          >
-            {t.reload_page}
-          </button>
-        </div>
+        <Alert
+          type="info"
+          showIcon
+          icon={<LoadingOutlined />}
+          className="answers-later"
+          title={t.answers_available_later}
+          description={t.answers_refresh_note}
+        />
       )}
-      {showFinalList && (
-        <table className="results-table">
-          <thead>
-            <tr>
-              <th style={{ textAlign: "center" }}>{t.number_header}</th>
-              <th>{t.question_header}</th>
-              <th>{t.your_answer_header}</th>
-              <th style={{ textAlign: "center" }}>{t.correct_header_alt}</th>
-              {hasCustomPoints && <th style={{ textAlign: "center" }}>{t.points_header}</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, index) => (
-              <tr key={index}>
-                <td data-label={t.number_header} style={{ textAlign: "center" }}>
-                  {index + 1}
-                </td>
-                <td data-label={t.question_header}>
-                  <QuestionCell question={row.question} image={row.image} file={row.file} fallback={t.no_question_content} />
-                </td>
-                <td data-label={t.your_answer_header}>
-                  <span className={correctnessClass(row.is_correct)}>
-                    <AnswerCell answer={row.selected_answer} />
-                  </span>
-                  {row.is_correct === false &&
-                    row.correct_answer &&
-                    row.selected_answer &&
-                    (showRightAnswer || hasCorrectAnswers) && (
-                      <div className="correct-answer-hint">
-                        {t.result_correct_header}
-                        <AnswerCell answer={row.correct_answer} />
-                      </div>
-                    )}
-                </td>
-                <td data-label={t.correct_header_alt} style={{ textAlign: "center" }}>
-                  {row.is_correct !== undefined ? (
-                    <span className={row.is_correct ? "correct" : "incorrect"} style={{ fontSize: 18 }}>
-                      {row.is_correct ? "✓" : "✗"}
-                    </span>
-                  ) : (
-                    <span style={{ color: "#666" }}>{t.unknown}</span>
-                  )}
-                </td>
-                {hasCustomPoints && (
-                  <td data-label={t.points_header} style={{ textAlign: "center" }}>
-                    {formatPoints(row.earned_points !== undefined ? row.earned_points : row.is_correct ? row.points || 1 : 0)}/
-                    {formatPoints(row.points || 1)}
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </>
+      {showFinalList && <ResultsList rows={rows} numbered withPoints={hasCustomPoints} t={t} />}
+    </Flex>
   );
 }
 
@@ -227,51 +311,23 @@ export function ClientResultsView({
 }) {
   const correct = results.filter((result) => result.isCorrect === true).length;
   const percentage = results.length ? Math.round((correct / results.length) * 100) : 0;
+  const rows: Row[] = results.map((result) => ({
+    question: result.question,
+    image: result.image,
+    file: result.file,
+    answer: result.selectedAnswer,
+    correctAnswer: result.correctAnswer,
+    isCorrect: result.isCorrect,
+    showHint: result.isCorrect === false && !!result.correctAnswer && showRightAnswer,
+  }));
   return (
-    <>
-      <p>
-        <strong>{t.result_label}</strong> {correct}/{results.length} ({percentage}%)
-      </p>
-      {showFinalList && (
-        <table className="results-table">
-          <thead>
-            <tr>
-              <th>{t.question_header}</th>
-              <th>{t.your_answer_header}</th>
-              <th style={{ textAlign: "center" }}>{t.correct_header}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {results.map((result, index) => (
-              <tr key={index}>
-                <td data-label={t.question_header}>
-                  <QuestionCell question={result.question} image={result.image} file={result.file} fallback={t.no_question_content} />
-                </td>
-                <td data-label={t.your_answer_header}>
-                  <span className={correctnessClass(result.isCorrect)}>
-                    <AnswerCell answer={result.selectedAnswer} />
-                  </span>
-                  {result.isCorrect === false && result.correctAnswer && showRightAnswer && (
-                    <div className="correct-answer-hint">
-                      {t.result_correct_header}
-                      <AnswerCell answer={result.correctAnswer} />
-                    </div>
-                  )}
-                </td>
-                <td data-label={t.correct_header_alt} style={{ textAlign: "center" }}>
-                  {result.isCorrect !== null ? (
-                    <span className={result.isCorrect ? "correct" : "incorrect"} style={{ fontSize: 18 }}>
-                      {result.isCorrect ? "✓" : "✗"}
-                    </span>
-                  ) : (
-                    <span style={{ color: "#666" }}>—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </>
+    <Flex vertical gap={20}>
+      <Summary percent={percentage}>
+        <Typography.Text className="result-score">
+          <strong>{t.result_label}</strong> {correct}/{results.length} ({percentage}%)
+        </Typography.Text>
+      </Summary>
+      {showFinalList && <ResultsList rows={rows} numbered={false} withPoints={false} t={t} />}
+    </Flex>
   );
 }

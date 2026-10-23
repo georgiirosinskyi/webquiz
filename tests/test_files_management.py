@@ -6,7 +6,7 @@ from conftest import custom_webquiz_server, get_admin_session, get_page_data
 
 
 def test_files_page_serves_html():
-    """Verify /files/ serves the built page with its data; the login form is rendered by the page itself."""
+    """Verify /files/ serves the admin app (Files section) with its data; the login form is rendered by the page itself."""
     with custom_webquiz_server() as (proc, port):
         response = requests.get(f"http://localhost:{port}/files/")
 
@@ -15,7 +15,7 @@ def test_files_page_serves_html():
         assert '<div id="root"></div>' in response.text
         page = get_page_data(response.text)["page"]
         assert page["isTrustedIp"] is False
-        assert set(page) == {"isTrustedIp", "configPath", "configContent", "configData"}
+        assert {"isTrustedIp", "configPath", "configContent", "configData", "networkUrls"} <= set(page)
 
 
 def test_files_api_requires_master_key():
@@ -82,7 +82,7 @@ def test_files_page_renders_with_auth():
 
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
-        assert "File Manager" in response.text
+        assert "<title>WebQuiz Admin</title>" in response.text
 
 
 # File Listing Tests
@@ -514,7 +514,7 @@ def test_special_filename_handling():
 
 
 def test_files_page_admin_panel_integration():
-    """Test navigation link from admin panel works."""
+    """/admin/ and /files/ are the same admin app."""
     with custom_webquiz_server() as (proc, port):
         cookies = get_admin_session(port)
 
@@ -526,7 +526,7 @@ def test_files_page_admin_panel_integration():
         # Then check files page works
         files_response = requests.get(f"http://localhost:{port}/files/", cookies=cookies)
         assert files_response.status_code == 200
-        assert "File Manager" in files_response.text
+        assert "<title>WebQuiz Admin</title>" in files_response.text
 
 
 def test_files_functionality_with_real_server_logs():

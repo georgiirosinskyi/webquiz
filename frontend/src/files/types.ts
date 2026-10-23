@@ -19,14 +19,6 @@ export interface ConfigData {
   };
 }
 
-// window.__WEBQUIZ__.page of /files/ (see serve_files_page in server.py)
-export interface FilesPageData {
-  isTrustedIp: boolean;
-  configPath: string | null;
-  configContent: string | null;
-  configData: ConfigData | null;
-}
-
 export interface OutgoingOffer {
   id: string;
   to: string;

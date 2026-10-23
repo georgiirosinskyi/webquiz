@@ -80,13 +80,13 @@ show_answers_on_completion: true    # Reveal after all complete
 
 **How it works:**
 
-1. During the quiz, students **do not see** correct answers
-2. After completing the quiz, students see their results but **without correct answers**
-3. Students see a message: _"Correct answers will be available after all students complete. Reload the page later."_
-4. Once **all registered students** finish the quiz, correct answers become visible
-5. If a new student registers later, answers are hidden again until they complete
+1. During the quiz, users **do not see** correct answers
+2. After completing the quiz, users see their results but **without correct answers**
+3. Users see a message: _"The correct answers will appear when all users finish the quiz. The page updates automatically."_
+4. Once **all registered users** finish the quiz, the correct answers appear on the results page by themselves, without a reload (the page checks every 5 seconds)
+5. If a new user registers later, answers are hidden again until they complete
 
-> **Tip:** Using `show_answers_on_completion: true` is useful for group learning environments where you want students to discuss answers together after everyone has completed the quiz independently.
+> **Tip:** Using `show_answers_on_completion: true` is useful for group sessions where you want users to discuss answers together after everyone has completed the quiz independently.
 
 > **Manual Control:** Administrators can force reveal answers without waiting for stragglers using the "Show Answers for All" button in the admin panel. See the "Administrative Interface" section for details.
 
@@ -111,7 +111,7 @@ show_final_list: false  # Only show score, hide question list
 
 #### `time_limit` (optional)
 
-Time limit for the whole test in seconds (default `0` — no limit). The student sees a countdown timer; it turns orange 3 minutes before the end and red 1 minute before the end. When the time is up the test finishes automatically: unanswered questions count as wrong. If admin approval is required, the countdown starts when the student is approved. The server enforces the limit too: answers sent more than 10 seconds after the time is up are rejected. Reloading the page does not reset the timer, and if a student closed the page and the time ran out, the test is finished when the page is opened again.
+Time limit for the whole test in seconds (default `0` — no limit). The user sees a countdown timer next to the question number; it turns orange 3 minutes before the end and red 1 minute before the end. When the time is up the test finishes automatically: unanswered questions count as wrong. If admin approval is required, the countdown starts when the user is approved. The server enforces the limit too: answers sent more than 10 seconds after the time is up are rejected. Reloading the page does not reset the timer, and if a user closed the page and the time ran out, the test is finished when the page is opened again.
 
 ```
 time_limit: 300  # 5 minutes
@@ -121,7 +121,7 @@ time_limit: 300  # 5 minutes
 
 #### `allow_skip_questions` (optional)
 
-Allows skipping questions and returning to them later (default `false`). A **"Skip"** button appears under the question (or **"Next"** when the next question was already viewed), and the navigation bar with question numbers shows the state of each one: grey — not opened yet, blue — answered, orange — skipped, green — current. An answered question cannot be answered again.
+Allows skipping questions and returning to them later (default `false`). A **"Skip"** button appears under the question (or **"Next"** when the next question was already viewed), and the navigation bar with question numbers shows the state of each one: disabled button — not opened yet, light blue — answered, yellow — skipped, blue outline — current. An answered question cannot be answered again.
 
 ```
 allow_skip_questions: true

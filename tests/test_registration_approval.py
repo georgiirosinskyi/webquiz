@@ -449,6 +449,9 @@ def test_quiz_switch_clears_pending_users_on_admin_websocket():
             assert response.status_code == 200
 
             message = json.loads(ws.recv())
+            # The registration is followed by the user's record for the overview page
+            while message["type"] == "user_updated":
+                message = json.loads(ws.recv())
             assert message["type"] == "quiz_switched"
             assert message["pending_users"] == {}
             assert message["requires_approval"] is True

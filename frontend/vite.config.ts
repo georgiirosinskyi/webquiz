@@ -14,13 +14,11 @@ export default defineConfig({
   build: {
     outDir: resolve(__dirname, "../webquiz/ui"),
     emptyOutDir: true,
-    // Shared chunks every page reuses from cache: React alone (the quiz page needs only it)
-    // and antd with the rest of the libraries (admin pages)
+    // Shared chunks every page reuses from cache: React and antd with the rest of the libraries
     chunkSizeWarningLimit: 1500,
     rollupOptions: {
       input: {
         "live-stats": resolve(__dirname, "live-stats.html"),
-        files: resolve(__dirname, "files.html"),
         admin: resolve(__dirname, "admin.html"),
         quiz: resolve(__dirname, "quiz.html"),
       },

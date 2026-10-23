@@ -6,7 +6,7 @@ A modern web-based quiz and testing system built with Python and aiohttp that al
 
 - **Multi-Quiz System**: Questions loaded from `quizzes/` directory with multiple YAML files
 - **Multiple Question Types**: Single choice, multiple choice, and text input questions with Python-based validation
-- **Admin Interface**: Web-based admin panel with master key authentication for quiz management
+- **Admin Interface**: Web-based admin app with master key authentication: a live overview of the current quiz and all participants (status, progress, points, grade, time, approval), quiz management, files, settings and access in one menu
 - **Registration Approval**: Optional admin approval workflow for new registrations with real-time notifications
 - **Question Randomization**: Configurable per-student question order randomization for fair testing
 - **Question Grouping**: Keep related questions together during randomization with `stick_to_the_previous` attribute
@@ -111,11 +111,11 @@ webquiz/
 │       ├── quiz_selection_required.html   # Quiz selection prompt
 │       └── template_error.html            # Error page template
 ├── frontend/               # Web pages: React + TypeScript + Ant Design 6, built with Vite
-│   ├── quiz.html, admin.html, files.html, live-stats.html   # Page entries
+│   ├── quiz.html, admin.html, live-stats.html   # Page entries
 │   └── src/
-│       ├── quiz/          # Student quiz page (React only, no antd)
-│       ├── admin/         # Admin panel and quiz editor
-│       ├── files/         # File manager
+│       ├── quiz/          # User quiz page (antd, same theme as the admin pages)
+│       ├── admin/         # Admin app: menu, overview, quizzes, quiz editor
+│       ├── files/         # Files and settings sections of the admin app
 │       ├── live-stats/    # Live statistics
 │       └── shared/        # Login, API helpers, theme
 ├── tests/                  # Test suite (14 test files)
@@ -283,6 +283,7 @@ The project has **222+ tests** across **15 test files** covering:
 - **Config Management** (23 tests): Config editor, validation, and form-based JSON updates
 - **Registration Approval** (20 tests): Approval workflow and timing
 - **Files Management** (38 tests): File manager interface
+- **Admin Overview** (6 + 3 Selenium tests): Live participant records on the admin WebSocket and the overview page (`test_admin_overview_websocket.py`, `test_selenium_admin_overview.py`)
 - **SSH Tunnel** (31 tests): Key generation, config fetch, connect/disconnect (`test_tunnel.py`)
 - **File Transfer** (59 tests): Sending files between servers through the tunnel (`test_transfer.py`, `test_transfer_api.py`)
 - **Network Access** (22 tests): Local network restriction and proxy header handling
@@ -373,7 +374,7 @@ questions:
 
 **Time Limit, Skipping and Grades:**
 - `time_limit: 300` - countdown for the whole test in seconds; when time is up, the test finishes and unanswered questions count as wrong (default: `0`, no limit). The server enforces it as well (10 s grace), and a page reload keeps the timer
-- `allow_skip_questions: true` - students can skip questions and return to them via the numbered navigation bar (default: `false`); an answered question cannot be answered again
+- `allow_skip_questions: true` - users can skip questions and return to them via the numbered navigation bar (default: `false`); an answered question cannot be answered again
 - `marks` - list of `{grade, min_score}` rules converting the percentage of earned points into a grade shown on the results screen and in the users CSV (default: 5 from 95%, 4 from 80%, 3 from 60%); `default_mark` is the grade below every rule (default: 2)
 
 **Quiz Switching:**
@@ -505,7 +506,7 @@ registration:
     - Grade
     - School
   disabled_fields:         # Fields preserved in config but hidden from the form
-    - Teacher              # Toggle on/off from the file manager Config tab
+    - Teacher              # Toggle on/off in the admin Settings section
 
 quiz:
   show_right_answer: false          # Show correct answer after submission
@@ -531,7 +532,7 @@ WebQuiz offers flexible control over when students can see correct answers:
 - **`show_right_answer: false`**: Correct answers are completely hidden during the quiz and on the final results page
 - **`show_answers_on_completion: true`**: Works with `show_right_answer: false` to reveal answers dynamically:
   - Answers remain hidden until ALL students complete the quiz
-  - Students see a waiting message with a reload button
+  - Users see a waiting message; the results page checks every 5 s and shows the answers by itself, without a reload
   - Once all students finish, correct answers become visible
   - If new students register, answers are hidden again until everyone completes
   - In approval mode, only approved students count toward completion
@@ -628,9 +629,9 @@ tunnel:
 Servers connected to the **same tunnel server with the same SSH user** (one socket directory, e.g. all computers of one school) can send quiz, log and CSV files to each other through the tunnel.
 
 1. Give every server a fixed, unique `socket_name` (e.g. `room-12`) and connect the tunnel on both.
-2. **Sender**: open the File Manager (`/files/`), tick the files, type the name of the other server and click **Send**. Only a list of the files is sent at this point. The **Send files to another server** panel is shown only while the tunnel is connected.
-3. **Receiver**: the admin panel shows the request. For every file it shows what is already there and lets the admin choose what to do (see below), then **Accept** / **Reject**.
-4. On **Accept**, the receiver downloads the files from the sender as chosen. The sender's File Manager shows the answer.
+2. **Sender**: open the admin **Files** section (`/admin/files`), tick the files, type the name of the other server and click **Send**. Only a list of the files is sent at this point. The **Send files to another server** panel is shown only while the tunnel is connected.
+3. **Receiver**: the admin **Files** section shows the request (the menu item gets a badge). For every file it shows what is already there and lets the admin choose what to do (see below), then **Accept** / **Reject**.
+4. On **Accept**, the receiver downloads the files from the sender as chosen. The sender's Files section shows the answer.
 
 Images and attachments used by a quiz (`image`, image `options` and `file` fields, from `quizzes/imgs/` and `quizzes/attach/`) are added to the request automatically. Files that a quiz references but that do not exist on the sender are skipped.
 
@@ -734,16 +735,19 @@ Enable admin features with a master key:
 webquiz --master-key secret123
 ```
 
-Access admin panels:
-- `/admin` - Quiz management and user approval
-- `/files` - View logs, CSV files, and edit configuration
-- `/live-stats` - Real-time user progress dashboard
+Admin app (one page with a menu at the top):
+- `/admin/` - **Overview**: the current quiz (switch, restart, edit, open answers) and a live table of all participants with status, progress per question, points, grade, time left and approval buttons; a **Matrix** view shows questions x participants
+- `/admin/quizzes` - Quiz files: switch, edit, duplicate, unite, delete, download quiz sets
+- `/admin/files` (also `/files/`) - CSV results, logs, quiz files, sending files to another server
+- `/admin/settings` - Configuration (form or YAML)
+- `/admin/access` - URLs for other devices and the SSH tunnel
+- `/live-stats/` - Full-screen live statistics for a projector
 
 The admin panel automatically detects when the package has been updated while the server is running and displays a "Restart Required" notification, prompting you to restart the server to use the new version.
 
 ### Styling
 
-- The pages live in `frontend/` (React + Ant Design 6, light theme set in `frontend/src/shared/AppProvider.tsx`); the student page keeps its own CSS in `frontend/src/quiz/quiz.css`
+- The pages live in `frontend/` (React + Ant Design 6, light theme set in `frontend/src/shared/AppProvider.tsx` for every page); the quiz page styles its answer options in `frontend/src/quiz/quiz.css`
 - Responsive design works on mobile and desktop
 - `static/index.html` is regenerated from the built page on every quiz switch
 
@@ -782,7 +786,7 @@ npm test          # Vitest unit tests
 npm run build     # type-check and build into ../webquiz/ui/
 ```
 
-Open `http://localhost:5173/admin.html` (or `files.html`, `live-stats.html`) while the Python server runs. The server serves the built files from `/ui/`, puts each page's data into `window.__WEBQUIZ__` and writes the quiz page into `static/index.html`. React is a separate chunk, so the student page does not download Ant Design.
+Open `http://localhost:5173/admin.html` (or `quiz.html`, `live-stats.html`) while the Python server runs. The server serves the built files from `/ui/`, puts each page's data into `window.__WEBQUIZ__` and writes the quiz page into `static/index.html`.
 
 ### Key Technical Decisions
 
@@ -800,7 +804,7 @@ Open `http://localhost:5173/admin.html` (or `files.html`, `live-stats.html`) whi
 ### Architecture
 
 - **Backend**: Python 3.9-3.14 with aiohttp async web framework
-- **Frontend**: React 19 + TypeScript + Ant Design 6 (admin pages), built with Vite into the Python package; the student page uses React only
+- **Frontend**: React 19 + TypeScript + Ant Design 6 (all pages), built with Vite into the Python package
 - **Storage**: In-memory with periodic CSV backups (30-second intervals)
 - **Session Management**: Cookie-based with server-side validation
 - **Real-time Features**: WebSocket for live stats and admin notifications

@@ -12,10 +12,12 @@ export function ConfigEditor({
   configPath,
   initialContent,
   initialData,
+  onSaved,
 }: {
   configPath: string;
   initialContent: string;
   initialData: ConfigData | null;
+  onSaved?: (content: string, data: ConfigData | null) => void;
 }) {
   const { modal } = App.useApp();
   const [form] = Form.useForm<ConfigFormValues>();
@@ -55,6 +57,7 @@ export function ConfigEditor({
         if (result.data.config_data) form.setFieldsValue(configToForm(result.data.config_data));
         setFormDirty(false);
         setYamlDirty(false);
+        if (result.data.config_content !== undefined) onSaved?.(result.data.config_content, result.data.config_data || null);
       } else {
         setFeedback({
           type: "error",

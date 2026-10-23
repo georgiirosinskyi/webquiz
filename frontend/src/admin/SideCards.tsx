@@ -1,83 +1,16 @@
 import { useEffect, useState } from "react";
-import { Alert, App, Badge, Button, Card, Flex, Input, List, Select, Space, Tag, Typography } from "antd";
-import { CheckOutlined, CloudDownloadOutlined, CopyOutlined, LinkOutlined, UnlockOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Card, Flex, Input, List, Select, Space, Tag, Typography } from "antd";
+import { CheckOutlined, CloudDownloadOutlined, CopyOutlined, LinkOutlined } from "@ant-design/icons";
 import { apiGet, apiSend } from "../shared/api";
 import { formatFileSize } from "../shared/format";
 import {
-  fieldNameToLabel,
   isNewerVersion,
   type DownloadableQuiz,
   type IncomingFile,
-  type PendingUser,
   type TransferAction,
   type TransferRequest,
   type TunnelStatus,
 } from "./types";
-
-export function PendingApprovals({
-  users,
-  onApproved,
-}: {
-  users: Record<string, PendingUser>;
-  onApproved: (userId: string) => void;
-}) {
-  const { message } = App.useApp();
-  const ids = Object.keys(users);
-
-  const approve = async (userId: string) => {
-    try {
-      const result = await apiSend("PUT", "/api/admin/approve-user", { user_id: userId });
-      if (result.ok) {
-        message.success("Користувача підтверджено!");
-        onApproved(userId);
-      } else {
-        message.error(result.data.error || "Помилка підтвердження");
-      }
-    } catch (error) {
-      message.error(`Помилка з'єднання: ${(error as Error).message}`);
-    }
-  };
-
-  return (
-    <Card
-      data-testid="pending-approvals"
-      title={
-        <Space>
-          ⏳ Очікують підтвердження
-          <Badge count={ids.length} showZero color={ids.length > 0 ? "#faad14" : "#bfbfbf"} />
-        </Space>
-      }
-      extra={
-        <Button type="primary" size="small" disabled={ids.length === 0} onClick={() => ids.forEach(approve)}>
-          ✓ Підтвердити всіх
-        </Button>
-      }
-    >
-      <List
-        dataSource={ids}
-        locale={{ emptyText: "Немає користувачів, що очікують підтвердження" }}
-        renderItem={(userId) => (
-          <List.Item
-            actions={[
-              <Button key="approve" type="primary" size="small" icon={<CheckOutlined />} onClick={() => approve(userId)}>
-                Підтвердити
-              </Button>,
-            ]}
-          >
-            <List.Item.Meta
-              title={`👤 ${users[userId].username}`}
-              description={Object.entries(users[userId].registration_fields || {}).map(([key, value]) => (
-                <div key={key}>
-                  {fieldNameToLabel(key)}: {value}
-                </div>
-              ))}
-            />
-          </List.Item>
-        )}
-      />
-    </Card>
-  );
-}
 
 const TRANSFER_TYPE_LABELS: Record<string, string> = {
   quizzes: "тест",
@@ -234,45 +167,6 @@ export function TransferRequests({
           <TransferRequestItem key={request.id} request={request} onDone={(keep) => onDone(request.id, keep)} />
         ))}
       </Flex>
-    </Card>
-  );
-}
-
-export function ShowAnswersCard({ forced, onForced }: { forced: boolean; onForced: () => void }) {
-  const { message, modal } = App.useApp();
-  const force = () =>
-    modal.confirm({
-      title: "Відкрити відповіді для всіх учнів?",
-      content: "Цю дію неможливо скасувати (до перезапуску quiz).",
-      okText: "Відкрити",
-      onOk: async () => {
-        const result = await apiSend<{ completed_count: number; total_count: number }>(
-          "POST",
-          "/api/admin/force-show-answers",
-        );
-        if (result.ok) {
-          message.success(
-            `Відповіді відкрито! (${result.data.completed_count}/${result.data.total_count} учнів завершили тест)`,
-          );
-          onForced();
-        } else {
-          message.error(result.data.error || "Помилка відкриття відповідей");
-        }
-      },
-    });
-
-  return (
-    <Card title="Відповіді" data-testid="show-answers">
-      <Typography.Paragraph type="secondary">
-        Дозволяє відкрити правильні відповіді для всіх учнів, не чекаючи поки всі завершать тест.
-      </Typography.Paragraph>
-      {forced ? (
-        <Alert type="success" showIcon title="Відповіді відкрито для всіх учнів" />
-      ) : (
-        <Button type="primary" icon={<UnlockOutlined />} style={{ background: "#fa8c16" }} onClick={force}>
-          Відкрити відповіді для всіх
-        </Button>
-      )}
     </Card>
   );
 }

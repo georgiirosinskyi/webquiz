@@ -265,12 +265,14 @@ def register_user(browser, port, username="TestStudent", **additional_fields):
 # ============================================================================
 
 
-def admin_login(browser, port, master_key="test123"):
-    """Open /admin/, log in with the master key and wait for the panel."""
-    browser.get(f"http://localhost:{port}/admin/")
+def admin_login(browser, port, master_key="test123", section="quizzes"):
+    """Open a section of the admin app (/admin/{section}), log in with the master key and wait for the panel."""
+    browser.get(f"http://localhost:{port}/admin/{section}")
     wait_for_element(browser, By.ID, "master-key").send_keys(master_key)
     browser.find_element(By.XPATH, "//button[@type='submit']").click()
     wait_for_element(browser, By.CSS_SELECTOR, '[data-testid="admin-panel"]')
+    if section != "quizzes":
+        return
     # The quiz list is loaded right after the panel appears
     WebDriverWait(browser, 10).until(
         lambda d: d.find_elements(By.CSS_SELECTOR, '[data-testid="quiz-list"] tr[data-row-key]')

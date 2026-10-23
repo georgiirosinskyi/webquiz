@@ -1,9 +1,14 @@
+import type { ConfigData } from "../files/types";
+
 // window.__WEBQUIZ__.page of /admin/ (see serve_admin_page in server.py)
 export interface AdminPageData {
   isTrustedIp: boolean;
   networkUrls: string[];
   downloadableQuizzes: DownloadableQuiz[];
   tunnelPublicKey: string;
+  configPath: string | null;
+  configContent: string | null;
+  configData: ConfigData | null;
 }
 
 export interface DownloadableQuiz {
@@ -32,6 +37,53 @@ export interface TunnelStatus {
   connected?: boolean;
   url?: string | null;
   error?: string | null;
+}
+
+export type UserStatus = "pending" | "in_progress" | "completed" | "time_up";
+
+export type CellState = "think" | "ok" | "fail" | "skip";
+
+// One user on the overview page (see _admin_user_record in server.py)
+export interface AdminUser {
+  user_id: string;
+  username: string;
+  registration_fields: Record<string, string>;
+  status: UserStatus;
+  registered_at?: string;
+  answered: number;
+  correct: number;
+  skipped: number;
+  earned_points: number;
+  mark: string | number | null;
+  points_percentage: number | null;
+  elapsed_seconds: number | null;
+  remaining_seconds: number | null;
+  question_order: number[];
+  live_stats: Record<string, { state: CellState; time_taken: number | null }>;
+  // Client side: when the record arrived, so the timers can run on between updates
+  received_at?: number;
+}
+
+export interface QuizQuestionInfo {
+  id: number;
+  question: string;
+  image?: string | null;
+  points: number;
+}
+
+// The running quiz (see _admin_quiz_info in server.py)
+export interface CurrentQuiz {
+  filename: string | null;
+  title: string | null;
+  total_questions: number;
+  total_points: number;
+  time_limit: number;
+  randomize_questions: boolean;
+  allow_skip_questions: boolean;
+  show_answers_on_completion: boolean;
+  force_all_completed: boolean;
+  requires_approval: boolean;
+  questions: QuizQuestionInfo[];
 }
 
 export interface PendingUser {
@@ -66,8 +118,17 @@ export type AdminMessage =
       pending_users?: Record<string, PendingUser>;
       tunnel?: TunnelStatus;
       transfer_requests?: TransferRequest[];
+      quiz?: CurrentQuiz;
+      users?: AdminUser[];
     }
-  | { type: "quiz_switched"; requires_approval?: boolean; pending_users?: Record<string, PendingUser> }
+  | {
+      type: "quiz_switched";
+      requires_approval?: boolean;
+      pending_users?: Record<string, PendingUser>;
+      quiz?: CurrentQuiz;
+      users?: AdminUser[];
+    }
+  | { type: "user_updated"; user: AdminUser }
   | { type: "transfer_request"; request: TransferRequest }
   | { type: "transfer_request_removed"; id: string }
   | { type: "transfer_result"; offer: { to: string; status: string } }

@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Button, Card, Flex, Form, Input, Progress, Result, Spin, Tag, Typography } from "antd";
+import { ClockCircleOutlined, PaperClipOutlined, UserOutlined } from "@ant-design/icons";
 import { getServerData } from "../shared/serverData";
 import { createFetchWithRetry, shouldReloadForNewQuiz } from "./connection";
 import {
@@ -57,6 +59,8 @@ interface VerifyResponse {
 }
 
 const QUIZ_VERSION_POLL_MS = 5000;
+// How often the results page asks whether the correct answers are open (show_answers_on_completion)
+const ANSWERS_POLL_MS = 5000;
 const APPROVAL_POLL_MS = 1000;
 const ERROR_HIDE_MS = 5000;
 const REGISTRATION_STORAGE_KEY = "webquiz_registration_data";
@@ -87,8 +91,6 @@ function getCookie(name: string): string | null {
   return match ? match.slice(name.length + 1) : null;
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 // Quiz text may contain HTML written by the quiz author
 const html = (value: string) => ({ __html: value });
 
@@ -111,7 +113,7 @@ function useAutoHideError(): [string, (message: string) => void, () => void] {
 function ErrorMessage({ id, message }: { id: string; message: string }) {
   return (
     <div id={id} className={`error-message${message ? "" : " hidden"}`}>
-      {message}
+      {message && <Alert type="error" showIcon title={message} />}
     </div>
   );
 }
@@ -394,6 +396,25 @@ export function QuizApp({ page }: { page: QuizPageData }) {
     // Runs once on page load
   }, []);
 
+  // The correct answers open when every user has finished: the results page asks the
+  // server until then and shows them without a reload
+  const waitingForAnswers =
+    phase === "results" && !!results?.final?.show_answers_on_completion && !results.final.all_completed;
+  useEffect(() => {
+    if (!waitingForAnswers || !userIdRef.current) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const response = await fetch(`api/verify-user/${userIdRef.current}`, { cache: "no-store" });
+        if (!response.ok) return;
+        const data: VerifyResponse = await response.json();
+        if (data.test_completed && data.final_results?.all_completed) setResults({ final: data.final_results });
+      } catch {
+        // No connection: the next check tries again
+      }
+    }, ANSWERS_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [waitingForAnswers]);
+
   const registerUser = async () => {
     const name = (fieldRefs.current.username?.value || "").trim();
     if (!name) {
@@ -499,9 +520,8 @@ export function QuizApp({ page }: { page: QuizPageData }) {
         }
         setQuestions(all.map((question, i) => (i === index ? { ...question, status: "skipped" as const } : question)));
       }
+      // The next question is shown in the same render as the skipped state
       setMode("advancing");
-      // A brief pause before the next question
-      await sleep(100);
       await continueToQuestion();
     } catch (error) {
       showTestError(t.skip_error + (error as Error).message);
@@ -561,10 +581,10 @@ export function QuizApp({ page }: { page: QuizPageData }) {
 
       if (data.is_correct === undefined) {
         // show_right_answer is false: no feedback, move on by itself
+        // The answered state and the next question are rendered together, without a pause
         setMode("advancing");
         locked = false;
         setAnswerLocked(false);
-        await sleep(100);
         await continueToQuestion();
         return;
       }
@@ -598,254 +618,304 @@ export function QuizApp({ page }: { page: QuizPageData }) {
   const submitDisabled = isAnswered || answerLocked || (isText ? !textAnswer.trim() : selected.length === 0);
   const points = question?.points || 1;
 
-  const optionClass = (optionIndex: number) => {
-    const classes = ["option", "quiz-option"];
-    if (storedChoice.includes(optionIndex)) classes.push("selected");
-    if (feedback && !isText) {
-      if (question.is_multiple_choice) {
-        const correct = Array.isArray(feedback.correctAnswer) ? feedback.correctAnswer : [];
-        if (selected.includes(optionIndex)) classes.push(correct.includes(optionIndex) ? "feedback-correct" : "feedback-incorrect");
-        else if (correct.includes(optionIndex)) classes.push("feedback-missed");
-      } else if (selected[0] === optionIndex) {
-        classes.push(feedback.isCorrect ? "feedback-correct" : "feedback-incorrect");
-      } else if (!feedback.isCorrect && feedback.correctAnswer === optionIndex) {
-        classes.push("feedback-correct");
+  // "feedback-*" classes mark the result of the answer; the tag in the option says the same in words
+  const optionFeedback = (optionIndex: number): { className: string; label?: string; color?: string } => {
+    if (!feedback || isText) return { className: "" };
+    if (question.is_multiple_choice) {
+      const correct = Array.isArray(feedback.correctAnswer) ? feedback.correctAnswer : [];
+      if (selected.includes(optionIndex)) {
+        return correct.includes(optionIndex)
+          ? { className: "feedback-correct", label: t.correct_answer_label, color: "success" }
+          : { className: "feedback-incorrect", label: t.your_answer_label, color: "error" };
       }
+      if (correct.includes(optionIndex)) return { className: "feedback-missed", label: t.also_correct_label, color: "processing" };
+    } else if (selected[0] === optionIndex) {
+      return feedback.isCorrect
+        ? { className: "feedback-correct", label: t.correct_answer_label, color: "success" }
+        : { className: "feedback-incorrect", label: t.your_answer_label, color: "error" };
+    } else if (!feedback.isCorrect && feedback.correctAnswer === optionIndex) {
+      return { className: "feedback-correct", label: t.correct_answer_label, color: "success" };
     }
+    return { className: "" };
+  };
+
+  const optionClass = (optionIndex: number, feedbackClass: string) => {
+    const classes = ["option", "quiz-option", question.is_multiple_choice ? "multiple" : "single"];
+    if (storedChoice.includes(optionIndex)) classes.push("selected");
+    if (feedbackClass) classes.push(feedbackClass);
     if (optionsDisabled) classes.push("disabled");
     return classes.join(" ");
   };
 
-  const labels = {
-    "--t-correct": JSON.stringify(t.correct_answer_label),
-    "--t-yours": JSON.stringify(t.your_answer_label),
-    "--t-also": JSON.stringify(t.also_correct_label),
-  } as CSSProperties;
-
   const bannerText = quizChangedText || (waitingRequests > 0 ? t.connection_lost : "");
   const savedRegistration = useMemo(loadRegistrationData, []);
   const level = remaining !== null ? timerLevel(remaining) : "";
+  const answered = answeredCount(questions);
 
   return (
     <>
       <img src="img/top-left.png" className="corner-image top-left" alt="" />
       <img src="img/top-right.png" className="corner-image top-right" alt="" />
       <div id="connection-banner" className={`connection-banner${bannerText ? "" : " hidden"}`} role="status">
-        {bannerText}
+        {bannerText && <Alert type="warning" banner title={bannerText} />}
       </div>
-      <div className="container" style={labels}>
-        <div className="top-right-controls">
-          <div className={`user-info${username ? " visible" : ""}`} id="user-info">
-            👤 <span id="username-display">{username}</span>
+      <main className="quiz-page">
+        <Card className="container">
+          <Flex justify="space-between" align="center" gap={12} className="quiz-header">
+            <Typography.Title level={3} className="quiz-title">
+              {page.title}
+            </Typography.Title>
+            {username && (
+              <Tag id="user-info" icon={<UserOutlined />} className="user-info">
+                <span id="username-display">{username}</span>
+              </Tag>
+            )}
+          </Flex>
+
+          <div id="loading" className={`section${phase === "loading" ? "" : " hidden"}`}>
+            <Flex vertical align="center" gap={12}>
+              <Spin size="large" />
+              <Typography.Text strong>{t.loading}</Typography.Text>
+              <Typography.Text type="secondary">{t.checking_data}</Typography.Text>
+            </Flex>
           </div>
-        </div>
-        <h1>{page.title}</h1>
 
-        <div id="loading" className={`section${phase === "loading" ? "" : " hidden"}`}>
-          <h2>{t.loading}</h2>
-          <p>{t.checking_data}</p>
-        </div>
-
-        <div id="registration" className={`section${phase === "registration" ? "" : " hidden"}`}>
-          <h2>{t.register_title}</h2>
-          <ErrorMessage id="registration-error" message={registrationError} />
-          <table className="registration-table">
-            <tbody>
-              <tr>
-                <td className="registration-label">{`${page.usernameLabel}:`}</td>
-                <td className="registration-input">
-                  <input
-                    type="text"
-                    id="username"
-                    defaultValue={savedRegistration.username || ""}
-                    ref={(element) => {
-                      fieldRefs.current.username = element;
-                    }}
-                    onKeyDown={(event) => event.key === "Enter" && registerUser()}
-                  />
-                </td>
-              </tr>
+          <div id="registration" className={`section${phase === "registration" ? "" : " hidden"}`}>
+            <Typography.Paragraph type="secondary">{t.register_title}</Typography.Paragraph>
+            <ErrorMessage id="registration-error" message={registrationError} />
+            <Form layout="vertical" size="large" requiredMark={false} onFinish={registerUser} className="registration-form">
+              <Form.Item label={page.usernameLabel} htmlFor="username">
+                <Input
+                  id="username"
+                  defaultValue={savedRegistration.username || ""}
+                  autoComplete="off"
+                  ref={(element) => {
+                    fieldRefs.current.username = element?.input || null;
+                  }}
+                />
+              </Form.Item>
               {page.registrationFields.map((field) => (
-                <tr key={field.name}>
-                  <td className="registration-label">{`${field.label}:`}</td>
-                  <td className="registration-input">
-                    <input
-                      type="text"
-                      className="registration-field"
-                      data-field-name={field.name}
-                      defaultValue={savedRegistration[field.name] || ""}
-                      ref={(element) => {
-                        fieldRefs.current[field.name] = element;
-                      }}
-                    />
-                  </td>
-                </tr>
+                <Form.Item key={field.name} label={field.label} htmlFor={`field-${field.name}`}>
+                  <Input
+                    id={`field-${field.name}`}
+                    className="registration-field"
+                    data-field-name={field.name}
+                    defaultValue={savedRegistration[field.name] || ""}
+                    autoComplete="off"
+                    ref={(element) => {
+                      fieldRefs.current[field.name] = element?.input || null;
+                    }}
+                  />
+                </Form.Item>
               ))}
-            </tbody>
-          </table>
-          <div style={{ textAlign: "center", marginTop: 15 }}>
-            <button className="register-btn" onClick={registerUser} disabled={registering}>
-              {t.register_button}
-            </button>
+              <Button type="primary" htmlType="submit" block className="register-btn" disabled={registering} loading={registering}>
+                {t.register_button}
+              </Button>
+            </Form>
           </div>
-        </div>
 
-        <div id="waiting-approval" className={`section${phase === "waiting" ? "" : " hidden"}`}>
-          <p style={{ textAlign: "center", color: "var(--text-color)", margin: "20px 0" }}>{t.waiting_description}</p>
-          <ErrorMessage id="waiting-error" message={waitingError} />
-        </div>
-
-        <div id="test-section" className={`section${phase === "test" ? "" : " hidden"}`}>
-          <div
-            id="timer"
-            className={`user-info${remaining !== null ? " visible" : ""}${level ? ` ${level}` : ""}`}
-            style={{ display: remaining !== null ? undefined : "none" }}
-          >
-            ⏳ <span id="timer-value">{remaining !== null ? formatTimer(remaining) : ""}</span>
+          <div id="waiting-approval" className={`section${phase === "waiting" ? "" : " hidden"}`}>
+            <Result icon={<Spin size="large" />} title={t.waiting_title} subTitle={t.waiting_description} />
+            <ErrorMessage id="waiting-error" message={waitingError} />
           </div>
-          <ErrorMessage id="test-error" message={testError} />
-          <div id="current-question-container" onCopy={(event) => event.preventDefault()}>
-            {phase === "test" && question && (
-              <div
-                key={question.id}
-                className="current-question active-question"
-                style={{ position: "relative" }}
-              >
-                {points !== 1 && (
-                  <div className="question-points-badge">
-                    🏆 {formatPoints(points)} {pointsWord(points, t)}
-                  </div>
+
+          <div id="test-section" className={`section${phase === "test" ? "" : " hidden"}`}>
+            <Flex vertical gap={16}>
+              <Flex justify="space-between" align="center" gap={12} className="quiz-status">
+                <Flex vertical className="quiz-progress">
+                  <Typography.Text type="secondary">
+                    {t.question_n_of_m.replace("{n}", String(current + 1)).replace("{m}", String(questions.length))}
+                  </Typography.Text>
+                  <Progress
+                    percent={questions.length ? Math.round((answered / questions.length) * 100) : 0}
+                    showInfo={false}
+                    size="small"
+                  />
+                </Flex>
+                {remaining !== null && (
+                  <Tag
+                    id="timer"
+                    icon={<ClockCircleOutlined />}
+                    color={level === "danger" ? "error" : level === "warning" ? "warning" : "default"}
+                    className={`quiz-timer${level ? ` ${level}` : ""}`}
+                  >
+                    <span id="timer-value">{formatTimer(remaining)}</span>
+                  </Tag>
                 )}
-                {question.question && <h3 className="question-text" dangerouslySetInnerHTML={html(question.question)} />}
-                {question.image && (
-                  <a href={relativePath(question.image)} target="_blank" rel="noreferrer">
-                    <img src={relativePath(question.image)} alt="Question image" className="question-image quiz-question-img" />
-                  </a>
-                )}
-                {question.file && (
-                  <a href={relativePath(question.file)} download className="question-file">
-                    <span className="question-file-icon">📎</span>
-                    <span className="question-file-name">{question.file.split("/").pop()}</span>
-                  </a>
-                )}
-                {isText ? (
-                  <div className="text-input-container">
-                    <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 10 }}>{t.enter_answer_label}</p>
-                    <textarea
-                      id="text-answer-input"
-                      className={`text-answer-input${feedback ? (feedback.isCorrect ? " feedback-correct" : " feedback-incorrect") : ""}`}
-                      placeholder={t.enter_answer_placeholder}
-                      value={isAnswered && mode === "answering" ? String(question.selectedAnswer ?? "") : textAnswer}
-                      disabled={isAnswered || answerLocked || mode !== "answering"}
-                      onChange={(event) => setTextAnswer(event.target.value)}
-                    />
-                    <div id="checker-feedback">
-                      {feedback && !feedback.isCorrect && feedback.checkerError && (
-                        <div className="checker-error">⚠️ {feedback.checkerError}</div>
-                      )}
-                      {feedback && !feedback.isCorrect && feedback.correctValue && (
-                        <div className="correct-value-display">
-                          {t.correct_answer_value}
-                          <pre style={{ margin: "5px 0 0 0", whiteSpace: "pre-wrap" }}>{feedback.correctValue}</pre>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="options">
-                    {question.is_multiple_choice && (
-                      <p className="multiple-choice-hint" style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 10 }}>
-                        {t.multiple_choice_hint}
-                      </p>
+              </Flex>
+
+              <ErrorMessage id="test-error" message={testError} />
+
+              <div id="current-question-container" onCopy={(event) => event.preventDefault()}>
+                {phase === "test" && question && (
+                  <Card key={question.id} className="current-question active-question">
+                    {points !== 1 && (
+                      <Tag color="gold" className="question-points-badge">
+                        🏆 {formatPoints(points)} {pointsWord(points, t)}
+                      </Tag>
                     )}
-                    {(question.options || []).map((option, optionIndex) => (
-                      <div
-                        key={optionIndex}
-                        id={`option_${optionIndex}`}
-                        className={optionClass(optionIndex)}
-                        data-option-index={optionIndex}
-                        onClick={() => selectAnswer(optionIndex)}
-                      >
-                        {isImagePath(option) ? (
-                          <div className="option-content">
-                            <img src={relativePath(option)} alt={`Option ${optionIndex + 1}`} className="option-image" />
-                          </div>
-                        ) : (
-                          <span dangerouslySetInnerHTML={html(option)} />
-                        )}
+                    {question.question && <div className="question-text" dangerouslySetInnerHTML={html(question.question)} />}
+                    {question.image && (
+                      <a href={relativePath(question.image)} target="_blank" rel="noreferrer">
+                        <img src={relativePath(question.image)} alt="Question image" className="question-image quiz-question-img" />
+                      </a>
+                    )}
+                    {question.file && (
+                      <a href={relativePath(question.file)} download className="question-file">
+                        <PaperClipOutlined className="question-file-icon" />
+                        <span className="question-file-name">{question.file.split("/").pop()}</span>
+                      </a>
+                    )}
+                    {isText ? (
+                      <div className="text-input-container">
+                        <Typography.Text type="secondary">{t.enter_answer_label}</Typography.Text>
+                        <Input.TextArea
+                          id="text-answer-input"
+                          className={`text-answer-input${feedback ? (feedback.isCorrect ? " feedback-correct" : " feedback-incorrect") : ""}`}
+                          placeholder={t.enter_answer_placeholder}
+                          autoSize={{ minRows: 4 }}
+                          value={isAnswered && mode === "answering" ? String(question.selectedAnswer ?? "") : textAnswer}
+                          disabled={isAnswered || answerLocked || mode !== "answering"}
+                          status={feedback ? (feedback.isCorrect ? undefined : "error") : undefined}
+                          onChange={(event) => setTextAnswer(event.target.value)}
+                        />
+                        <div id="checker-feedback">
+                          {feedback && !feedback.isCorrect && feedback.checkerError && (
+                            <Alert className="checker-error" type="warning" showIcon title={feedback.checkerError} />
+                          )}
+                          {feedback && !feedback.isCorrect && feedback.correctValue && (
+                            <Alert
+                              className="correct-value-display"
+                              type="success"
+                              title={t.correct_answer_value}
+                              description={<pre className="correct-value">{feedback.correctValue}</pre>}
+                            />
+                          )}
+                          {feedback && feedback.isCorrect && (
+                            <Tag color="success" className="text-feedback-tag">
+                              {t.correct_answer_label}
+                            </Tag>
+                          )}
+                        </div>
                       </div>
-                    ))}
-                  </div>
+                    ) : (
+                      <div className="options">
+                        {question.is_multiple_choice && (
+                          <Typography.Paragraph type="secondary" className="multiple-choice-hint">
+                            {t.multiple_choice_hint}
+                          </Typography.Paragraph>
+                        )}
+                        {(question.options || []).map((option, optionIndex) => {
+                          const result = optionFeedback(optionIndex);
+                          return (
+                            <div
+                              key={optionIndex}
+                              id={`option_${optionIndex}`}
+                              className={optionClass(optionIndex, result.className)}
+                              data-option-index={optionIndex}
+                              onClick={() => selectAnswer(optionIndex)}
+                            >
+                              <span className="option-marker" />
+                              {isImagePath(option) ? (
+                                <div className="option-content">
+                                  <img src={relativePath(option)} alt={`Option ${optionIndex + 1}`} className="option-image" />
+                                </div>
+                              ) : (
+                                <span className="option-text" dangerouslySetInnerHTML={html(option)} />
+                              )}
+                              {result.label && (
+                                <Tag color={result.color} className="option-feedback">
+                                  {result.label}
+                                </Tag>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </Card>
                 )}
               </div>
-            )}
-          </div>
-          <div className="button-container">
-            <button
-              id="submit-answer-btn"
-              className={mode === "answering" ? undefined : "hidden"}
-              onClick={submitAnswer}
-              disabled={submitDisabled}
-            >
-              {t.submit_answer}
-            </button>
-            <button
-              id="continue-btn"
-              className={mode === "feedback" ? undefined : "hidden"}
-              onClick={() => continueToQuestion()}
-              disabled={continueBusy}
-            >
-              {t.continue_button}
-            </button>
-            <button
-              id="skip-question-btn"
-              className={`action${skipMode !== "hidden" && mode === "answering" ? "" : " hidden"}`}
-              onClick={skipQuestion}
-              disabled={skipBusy}
-            >
-              {skipMode === "next" ? t.next_button : t.skip_short}
-            </button>
-          </div>
-          <div id="nav">
-            {phase === "test" &&
-              questions.map((q, index) => {
-                const isCurrent = index === current;
-                return (
-                  <button
-                    key={q.id}
-                    className={`q-btn ${isCurrent ? "current" : q.status}`}
-                    onClick={() => !isCurrent && q.status !== "unseen" && continueToQuestion(index)}
-                  >
-                    {index + 1}
-                  </button>
-                );
-              })}
-          </div>
-        </div>
 
-        <div id="results" className={`section${phase === "results" ? "" : " hidden"}`}>
-          <div id="results-content">
-            {results?.final && (
-              <FinalResultsView
-                results={results.final}
-                totalQuestions={questions.length}
-                showFinalList={page.showFinalList}
-                showRightAnswer={page.showRightAnswer}
-                t={t}
-              />
-            )}
-            {results?.client && (
-              <ClientResultsView
-                results={results.client}
-                showFinalList={page.showFinalList}
-                showRightAnswer={page.showRightAnswer}
-                t={t}
-              />
-            )}
+              <Flex justify="space-between" align="center" gap={12} className="button-container">
+                <Button
+                  size="large"
+                  id="skip-question-btn"
+                  className={`action${skipMode !== "hidden" && mode === "answering" ? "" : " hidden"}`}
+                  onClick={skipQuestion}
+                  disabled={skipBusy}
+                >
+                  {skipMode === "next" ? t.next_button : t.skip_short}
+                </Button>
+                <span className="button-spacer" />
+                <Button
+                  type="primary"
+                  size="large"
+                  id="submit-answer-btn"
+                  className={mode === "answering" ? undefined : "hidden"}
+                  onClick={submitAnswer}
+                  disabled={submitDisabled}
+                  loading={answerLocked && mode === "answering"}
+                >
+                  {t.submit_answer}
+                </Button>
+                <Button
+                  type="primary"
+                  size="large"
+                  id="continue-btn"
+                  className={mode === "feedback" ? undefined : "hidden"}
+                  onClick={() => continueToQuestion()}
+                  disabled={continueBusy}
+                >
+                  {t.continue_button}
+                </Button>
+              </Flex>
+
+              <Flex wrap gap={8} id="nav">
+                {phase === "test" &&
+                  questions.map((q, index) => {
+                    const isCurrent = index === current;
+                    return (
+                      <Button
+                        key={q.id}
+                        className={`q-btn ${isCurrent ? "current" : q.status}`}
+                        type={isCurrent ? "primary" : "default"}
+                        ghost={isCurrent}
+                        disabled={!isCurrent && q.status === "unseen"}
+                        onClick={() => !isCurrent && q.status !== "unseen" && continueToQuestion(index)}
+                      >
+                        {index + 1}
+                      </Button>
+                    );
+                  })}
+              </Flex>
+            </Flex>
           </div>
-        </div>
-      </div>
-      <div className="page-footer">WebQuiz v{version}</div>
+
+          <div id="results" className={`section${phase === "results" ? "" : " hidden"}`}>
+            <div id="results-content">
+              {results?.final && (
+                <FinalResultsView
+                  results={results.final}
+                  totalQuestions={questions.length}
+                  showFinalList={page.showFinalList}
+                  showRightAnswer={page.showRightAnswer}
+                  t={t}
+                />
+              )}
+              {results?.client && (
+                <ClientResultsView
+                  results={results.client}
+                  showFinalList={page.showFinalList}
+                  showRightAnswer={page.showRightAnswer}
+                  t={t}
+                />
+              )}
+            </div>
+          </div>
+        </Card>
+        <div className="page-footer">WebQuiz v{version}</div>
+      </main>
     </>
   );
 }

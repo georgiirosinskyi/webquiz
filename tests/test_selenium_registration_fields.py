@@ -36,10 +36,9 @@ def test_registration_form_renders_extra_fields(temp_dir, browser):
         additional_fields = browser.find_elements(By.CLASS_NAME, "registration-field")
         assert len(additional_fields) == 2, "Should have 2 additional fields"
 
-        # Check field labels in table format
-        # Find the table rows containing labels
-        grade_label = browser.find_element(By.XPATH, "//td[contains(text(), 'Grade:')]")
-        school_label = browser.find_element(By.XPATH, "//td[contains(text(), 'School:')]")
+        # Each field has its label above it
+        grade_label = browser.find_element(By.XPATH, "//label[normalize-space()='Grade']")
+        school_label = browser.find_element(By.XPATH, "//label[normalize-space()='School']")
         assert grade_label.is_displayed()
         assert school_label.is_displayed()
 
@@ -249,8 +248,8 @@ def test_registration_with_cyrillic_labels_selenium(temp_dir, browser):
         assert len(additional_fields) == 2
 
         # Check labels are in Cyrillic
-        klas_label = browser.find_element(By.XPATH, "//td[contains(text(), 'Клас:')]")
-        shkola_label = browser.find_element(By.XPATH, "//td[contains(text(), 'Школа:')]")
+        klas_label = browser.find_element(By.XPATH, "//label[normalize-space()='Клас']")
+        shkola_label = browser.find_element(By.XPATH, "//label[normalize-space()='Школа']")
         assert klas_label.is_displayed()
         assert shkola_label.is_displayed()
 

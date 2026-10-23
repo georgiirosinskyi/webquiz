@@ -1,13 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { App, Button, Card, Empty, Flex, Input, Layout, Space, Table, Tabs, Typography } from "antd";
+import { App, Button, Empty, Flex, Input, Space, Table, Tabs, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { ReloadOutlined } from "@ant-design/icons";
-import { AdminAuth } from "../shared/AdminAuth";
-import { AdminLinks } from "../shared/AdminLinks";
 import { apiGet, downloadFile } from "../shared/api";
 import { formatDate, formatFileSize } from "../shared/format";
-import { getPageData } from "../shared/serverData";
-import { ConfigEditor } from "./ConfigEditor";
 import { FileViewerModal, type ViewRequest } from "./FileViewerModal";
 import { QuizEditorModal } from "./QuizEditorModal";
 import { TransferPanel } from "./TransferPanel";
@@ -17,12 +13,9 @@ import {
   transferKey,
   type FileInfo,
   type FileLists,
-  type FilesPageData,
   type FileType,
   type TransferState,
 } from "./types";
-
-const page = getPageData<FilesPageData>({ isTrustedIp: false, configPath: null, configContent: null, configData: null });
 
 const TABS: { key: FileType; label: string; empty: string }[] = [
   { key: "csv", label: "📊 CSV Files", empty: "No CSV files found" },
@@ -32,7 +25,8 @@ const TABS: { key: FileType; label: string; empty: string }[] = [
 
 const TRANSFER_POLL_MS = 5000;
 
-function FileManager() {
+// File lists (CSV, logs, quizzes) with viewing, editing, download and sending to another server.
+export function FileManager() {
   const { message } = App.useApp();
   const [files, setFiles] = useState<FileLists>({ csv: [], logs: [], quizzes: [] });
   const [loading, setLoading] = useState(true);
@@ -245,46 +239,11 @@ function FileManager() {
           setTab(key);
           setSearch("");
         }}
-        items={[
-          ...TABS.map(({ key, label, empty }) => ({ key, label, children: fileTable(key, empty) })),
-          ...(page.configPath
-            ? [
-                {
-                  key: "config",
-                  label: "⚙️ Config",
-                  children: (
-                    <ConfigEditor
-                      configPath={page.configPath}
-                      initialContent={page.configContent || ""}
-                      initialData={page.configData}
-                    />
-                  ),
-                },
-              ]
-            : []),
-        ]}
+        items={TABS.map(({ key, label, empty }) => ({ key, label, children: fileTable(key, empty) }))}
       />
 
       <FileViewerModal request={viewing} onClose={() => setViewing(null)} />
       <QuizEditorModal filename={editing} onClose={() => setEditing(null)} onSaved={loadFiles} />
     </Space>
-  );
-}
-
-export function FilesPage() {
-  return (
-    <Layout style={{ minHeight: "100vh" }}>
-      <div className="page-container">
-        <AdminAuth title="📁 WebQuiz File Manager" isTrustedIp={page.isTrustedIp}>
-          <Card>
-            <Typography.Title level={3} style={{ marginTop: 0, textAlign: "center" }}>
-              📁 WebQuiz File Manager
-            </Typography.Title>
-            <FileManager />
-            <AdminLinks current="/files/" />
-          </Card>
-        </AdminAuth>
-      </div>
-    </Layout>
   );
 }

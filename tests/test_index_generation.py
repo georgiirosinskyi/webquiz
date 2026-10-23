@@ -146,12 +146,14 @@ def test_page_data_and_assets(temp_dir):
         assert page["translations"]["register_button"] == "Зареєструватися"
 
 
-def test_quiz_page_loads_only_react(temp_dir):
-    """Weak student devices: the quiz page does not load the antd chunk of the admin pages."""
+def test_quiz_page_loads_shared_chunks(temp_dir):
+    """The quiz page uses antd like the admin pages: it loads the shared react and vendor chunks by relative URLs."""
     with custom_webquiz_server() as (proc, port):
         html_content = read_index(temp_dir, port)
-        assert "vendor-" not in html_content
-        assert re.search(r'ui/assets/react-[^"]+\.js', html_content)
+        for chunk in ("react", "vendor"):
+            asset = re.search(rf'ui/assets/{chunk}-[^"]+\.js', html_content)
+            assert asset, chunk
+            assert requests.get(f"http://localhost:{port}/{asset.group(0)}").status_code == 200, chunk
 
 
 def test_index_html_file_created_in_static_dir(temp_dir):

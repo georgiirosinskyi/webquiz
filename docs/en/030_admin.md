@@ -5,13 +5,62 @@ Access to the panel opens automatically if you connect from a local address (`12
 
 ---
 
-### Main Admin Panel
+### Navigation
+
+All admin pages are one application with a menu at the top:
+
+- **Overview** — the main screen: the current quiz and all participants, updated live. The badge shows how many participants wait for approval.
+- **Quizzes** — quiz files, the quiz editor, uniting quizzes and downloading quiz sets.
+- **Files** — CSV results, logs, quiz files and sending files to another server. The badge shows incoming file transfer requests.
+- **Settings** — the server configuration (`webquiz.yaml`). Shown only when the server was started with a config file.
+- **Access** — URLs for other devices and the SSH tunnel. A green dot shows that the tunnel is connected.
+- **Live Stats ↗** — opens the live statistics page in a new tab (for a projector).
+
+Every section has its own address (`/admin/quizzes`, `/admin/files`, `/admin/settings`, `/admin/access`), so you can bookmark it; the old `/files/` address opens the Files section. The browser Back button moves between sections. The version and the documentation link are at the bottom of every section.
+
+---
+
+### Overview
 
 ![WebQuiz Admin Panel](../imgs/admin_advanced.png)
 
-The main administrative panel page contains essential tools for managing quizzes, approving users, and downloading additional question sets.
+The **current quiz** card at the top shows the quiz title and file, its settings (questions, total points, time limit, shuffling, skipping, approval) and counters: registered, waiting, in progress, finished and the average score of finished participants.
 
-#### Main Panel Elements
+- The drop-down list switches to another quiz and **Restart** starts the current quiz again. Both ask for confirmation, because they clear all participants.
+- **Edit** opens the current quiz in the editor.
+- **On projector** opens Live Stats in a new tab.
+- **Open answers for all** is shown for quizzes with `show_answers_on_completion: true` (see **Answer Management** below).
+
+The table below lists every participant and changes as they answer:
+
+- **Status** — *Waiting for approval*, *In progress*, *Finished* or *Time is up*.
+- **Progress** — a dot per question in the order the participant sees the questions (blue — answering, green — correct, red — incorrect, yellow — skipped, grey — not opened yet) and the number of answers given.
+- **Points**, **Grade** (when the test is finished) and **Time** (with the remaining time when the quiz has a time limit).
+- Registration fields (for example, Class) get their own columns.
+
+When approval is enabled (`registration.approve: true`, see [Configuration](040_config.md)), participants waiting for approval come first, with a yellow background and an **Approve** button; **Approve all** approves everybody at once. The quiz timer starts only after approval.
+Click a row to see every question of the participant with its result and time. Filter the list with **All / Waiting / In progress / Finished** and the search field (it searches names and registration fields). **Matrix** switches the table to a questions × participants grid, like on the Live Stats page.
+
+- **Answer Management**
+  This section appears only for quizzes with `show_answers_on_completion: true` enabled (see "Quiz File Format" section for details about this option).
+
+  Allows the administrator to force open correct answers for all students without waiting for everyone to complete the test.
+
+  **When this is useful:**
+  - Most students have completed the test, but 2-3 students are lagging
+  - You don't want to wait for stragglers and are ready to show answers to everyone
+
+  **How it works:**
+  1. Click the **"Show Answers for All"** button
+  2. Confirm the action in the dialog box
+  3. All students (including those who haven't finished yet) will see the correct answers after completing the test
+  4. New students who register later will also see the answers
+
+  > ⚠️ **Important:** This is a one-way action — it can only be undone by restarting the quiz or switching to another test.
+
+---
+
+### Quizzes
 
 - **Available Quiz Files**
   The **Quiz** card displays a table of all quizzes available in the `quizzes` folder with their filename and title (if set).
@@ -31,36 +80,17 @@ The main administrative panel page contains essential tools for managing quizzes
 - **"Delete" Button**
   Deletes the selected quizzes from the file system after a confirmation.
 
-- **Pending Approvals**
-  This panel appears if manual user approval is enabled in the configuration (`registration.approve: true`, see [Configuration](040_config.md) for details).
-  It displays a list of users who have registered but are waiting for approval to start the quiz.
-  Each user shows their name and registration time. Click the **"Approve"** button to allow them to begin.
-  The quiz timer starts only after approval, ensuring fair timing for all participants.
-
-- **Answer Management**
-  This section appears only for quizzes with `show_answers_on_completion: true` enabled (see "Quiz File Format" section for details about this option).
-
-  Allows the administrator to force open correct answers for all students without waiting for everyone to complete the test.
-
-  **When this is useful:**
-  - Most students have completed the test, but 2-3 students are lagging
-  - You don't want to wait for stragglers and are ready to show answers to everyone
-
-  **How it works:**
-  1. Click the **"Show Answers for All"** button
-  2. Confirm the action in the dialog box
-  3. All students (including those who haven't finished yet) will see the correct answers after completing the test
-  4. New students who register later will also see the answers
-
-  > ⚠️ **Important:** This is a one-way action — it can only be undone by restarting the quiz or switching to another test.
-
 - **Available Quizzes for Download**
   This section appears only if the `quizzes` section is configured in `webquiz.yaml` (see [Configuration](040_config.md) for details).
   It shows quizzes available for download from external sources (e.g., GitHub repositories).
   The **"Download"** button automatically downloads the archive and extracts it to the `quizzes` folder.
 
+---
+
+### Access
+
 - **URL for Access from Other Devices**
-  At the bottom of the panel, links are displayed that other participants can use to connect to the quiz.
+  The section shows links that other participants can use to connect to the quiz.
   This includes the local network address (e.g., `http://192.168.1.100:8080/`).
   When an SSH tunnel is connected, an external URL is also shown with a green background.
 
@@ -73,6 +103,15 @@ The main administrative panel page contains essential tools for managing quizzes
 
   When connected, a public URL appears in the "URL for Access from Other Devices" section with a green background, allowing participants outside your local network to join the quiz.
 
+---
+
+### Files
+
+![WebQuiz File Manager](../imgs/file_manager.png)
+
+The **Files** section of the menu.
+It allows you to quickly view, download, edit, and diagnose files created by the server.
+
 - **File Transfer Requests**
   This panel appears when another WebQuiz server on the same tunnel server wants to send files (see [Sending Files to Another Server](#sending-files-to-another-server)).
   It shows the name of the sending server and every file with its case:
@@ -84,15 +123,6 @@ The main administrative panel page contains essential tools for managing quizzes
   For **Rename**, a free name is suggested; you can change it. Then click:
   - **Accept** — download the files as chosen. They appear in the File Manager. If a choice is not possible, an error is shown and nothing is downloaded, so you can choose again.
   - **Reject** — refuse the files. The sender sees that the request was rejected.
-
----
-
-### File Manager
-
-![WebQuiz File Manager](../imgs/file_manager.png)
-
-The File Manager is accessed via the **File Manager** link at the bottom of the admin panel.
-It allows you to quickly view, download, edit, and diagnose files created by the server.
 
 At the top of the page, there's a **search field** to filter files by name, and a **Refresh** button to reload the file list.
 
@@ -111,9 +141,6 @@ At the top of the page, there's a **search field** to filter files by name, and 
 - **Quiz Files** — list of quiz YAML files from the `quizzes` folder.
   You can view and edit quiz files directly. When editing, a **Validate** button checks the YAML syntax before saving.
 
-- **Config** — the server configuration file (`webquiz.yaml`).
-  You can edit the configuration directly in the browser with syntax highlighting.
-
 #### Sending Files to Another Server
 
 You can send quiz, log and CSV files to another WebQuiz server, for example from one classroom computer to another. Both servers must:
@@ -131,7 +158,7 @@ The **Send files to another server** panel appears only while the tunnel is conn
 Notes:
 - A request expires if it is not answered in 30 minutes. Keep both servers connected until then.
 - Images and attached files used by a sent quiz (from `quizzes/imgs/` and `quizzes/attach/`) are sent with it automatically. You do not need to select them.
-- On the other server, the admin chooses for every file: save, replace, rename or skip (see [File Transfer Requests](#main-panel-elements)). Logs and CSV files are saved with the sender name (`room-12_0001.log`).
+- On the other server, the admin chooses for every file: save, replace, rename or skip (see **File Transfer Requests** above). Logs and CSV files are saved with the sender name (`room-12_0001.log`).
 - If an image or attachment is saved under a new name, the received quiz is changed to use it, so the quiz shows the right image.
 
 #### Table View
@@ -148,11 +175,13 @@ When you click the **Table** button for a CSV file, a modal window opens display
 
 This view makes it easy to analyze quiz results without downloading the file.
 
-#### Config Tab
+---
+
+### Settings
 
 ![Config Tab](../imgs/file_manager_config.png)
 
-The **Config** tab provides two ways to edit the server configuration:
+The **Settings** section provides two ways to edit the server configuration:
 
 **Form view** (default) — a structured form for editing registration settings:
 - **Require admin approval** — checkbox to enable/disable approval workflow
@@ -165,8 +194,6 @@ Use the **Form** / **YAML** toggle to switch between views. If you have unsaved 
 
 - Click **Save Configuration** to save changes
 - Changes are validated before saving, and a backup is created automatically
-
-At the bottom of the page, there are quick navigation links: **Back to Admin Panel**, **Quiz Home**, and **Live Stats**.
 
 ---
 
@@ -233,7 +260,7 @@ Before saving, the editor checks every question: it needs text or an image, fill
 
 ![Live Statistics](../imgs/livestats.png)
 
-The Live Statistics page provides real-time monitoring of quiz progress for all participants. Access it via the **Live Stats** link at the bottom of any admin page.
+The Live Statistics page provides real-time monitoring of quiz progress for all participants. Open it with **Live Stats ↗** in the admin menu or **On projector** on the Overview.
 
 The page title shows the name of the current quiz.
 
@@ -271,10 +298,7 @@ This view allows you to monitor quiz progress in real-time and identify particip
 
 ### Quick Access
 
-At the bottom of each admin interface page, there are convenient links:
-- **← Back to Quiz** — return to the main quiz page.
-- **Quiz Home** — go to the participant interface.
-- **Live Stats** — page with live statistics (number of users, quiz status, active sessions).
+The menu at the top of the admin app leads to every section and to **Live Stats ↗**. The participant page is at the root address of the server (`/`).
 
 ---
 

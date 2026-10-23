@@ -70,3 +70,21 @@ def test_ui_assets_are_public(temp_dir):
         asset = re.search(r'src="(/ui/assets/[^"]+\.js)"', html).group(1)
         response = requests.get(f"http://localhost:{port}{asset}", headers={"X-Forwarded-For": "8.8.8.8"})
         assert response.status_code == 200
+
+
+def test_admin_sections_serve_the_admin_app(temp_dir):
+    """/admin/{section} and the old /files/ URL serve the same admin app with all its page data."""
+    with custom_webquiz_server(quizzes=QUIZ) as (proc, port):
+        admin = injected_data(requests.get(f"http://localhost:{port}/admin/").text)
+        for path in ["/admin/quizzes", "/admin/files", "/admin/settings", "/admin/access", "/files/"]:
+            response = requests.get(f"http://localhost:{port}{path}")
+            assert response.status_code == 200, path
+            data = injected_data(response.text)
+            assert data["page"].keys() == admin["page"].keys(), path
+            assert "configContent" in data["page"] and "networkUrls" in data["page"]
+
+
+def test_admin_sections_are_local_only(temp_dir):
+    with custom_webquiz_server(quizzes=QUIZ) as (proc, port):
+        response = requests.get(f"http://localhost:{port}/admin/settings", headers={"X-Forwarded-For": "8.8.8.8"})
+        assert response.status_code == 403

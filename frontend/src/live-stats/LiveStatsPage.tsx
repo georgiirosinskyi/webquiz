@@ -1,36 +1,9 @@
-import { useMemo, useState, type HTMLAttributes } from "react";
-import { Alert, Badge, Button, Card, Empty, Flex, Grid, Layout, Segmented, Space, Table, Tag, Tooltip, Typography } from "antd";
-import type { ColumnsType } from "antd/es/table";
-import { CheckCircleFilled, SyncOutlined } from "@ant-design/icons";
-import { formatPoints } from "../shared/points";
-import {
-  STATE_STYLES,
-  computeStats,
-  filterUsers,
-  formatTime,
-  questionPoints,
-  type CellState,
-  type Filter,
-  type Question,
-  type QuestionStats,
-} from "./stats";
+import { useMemo, useState } from "react";
+import { Alert, Badge, Button, Card, Empty, Flex, Grid, Layout, Segmented, Space, Typography } from "antd";
+import { SyncOutlined } from "@ant-design/icons";
+import { filterUsers, type Filter } from "./stats";
+import { Legend, LiveStatsTable } from "./LiveStatsTable";
 import { useLiveStatsSocket, type ConnectionStatus } from "./useLiveStatsSocket";
-
-const STATE_ICONS: Record<CellState, string> = {
-  think: "🔵",
-  ok: "🟢",
-  fail: "🔴",
-  skip: "🟡",
-  empty: "⚪",
-};
-
-const LEGEND: [CellState, string][] = [
-  ["think", "Answering"],
-  ["ok", "Correct"],
-  ["fail", "Incorrect"],
-  ["skip", "Skipped"],
-  ["empty", "Not reached"],
-];
 
 function ConnectionAlert({
   status,
@@ -66,104 +39,13 @@ function ConnectionAlert({
   );
 }
 
-function QuestionHeader({ question, index, stats }: { question: Question; index: number; stats: QuestionStats }) {
-  const points = questionPoints(question);
-  const imageOnly = question.image && !question.question;
-  const label = imageOnly
-    ? question.image!.split("/").pop()!.split(".").slice(0, -1).join(".")
-    : question.question || `Q${index + 1}`;
-  const hint = `${label} - Correct: ${stats.correct}/${stats.attempts}${points !== 1 ? ` - ${formatPoints(points)} points` : ""}`;
-
-  return (
-    <Tooltip title={hint}>
-      <Flex vertical align="center" gap={4}>
-        {imageOnly && <img src={question.image} alt={label} className="header-image" />}
-        <Typography.Text strong className="question-text">
-          {label}
-        </Typography.Text>
-        <Space size={4} wrap style={{ justifyContent: "center" }}>
-          <Tag variant="filled" style={{ marginInlineEnd: 0 }}>
-            {stats.correct}/{stats.attempts}
-          </Tag>
-          {question.file && <span title={question.file.split("/").pop()}>📎</span>}
-          {points !== 1 && (
-            <span data-testid="points-indicator" className="points-indicator" title={`${formatPoints(points)} points`}>
-              🏆 {formatPoints(points)}
-            </span>
-          )}
-        </Space>
-      </Flex>
-    </Tooltip>
-  );
-}
-
 export function LiveStatsPage() {
   const { state, status, reconnect, maxAttempts } = useLiveStatsSocket();
   const [filter, setFilter] = useState<Filter>("all");
   const screens = Grid.useBreakpoint();
   const mobile = screens.md === false;
 
-  const stats = useMemo(() => computeStats(state), [state]);
   const { visible, counts } = useMemo(() => filterUsers(state, filter), [state, filter]);
-
-  const columns: ColumnsType<string> = [
-    {
-      key: "user",
-      title: "User",
-      fixed: "left",
-      width: mobile ? 120 : 200,
-      render: (_, userId) => {
-        const userStats = stats.users[userId];
-        return (
-          <Flex vertical gap={4}>
-            <Typography.Text strong className="username-text">
-              {state.users[userId]}
-            </Typography.Text>
-            <Flex align="center" justify="space-between" gap={6}>
-              {state.completed[userId] ? (
-                <CheckCircleFilled style={{ color: "#52c41a" }} title="Completed" />
-              ) : (
-                <SyncOutlined style={{ color: "#1677ff" }} title="In progress" />
-              )}
-              <Tag variant="filled" style={{ marginInlineEnd: 0 }} data-testid="user-score">
-                {formatPoints(userStats?.earnedPoints || 0)}/{formatPoints(state.totalPoints)}
-              </Tag>
-            </Flex>
-          </Flex>
-        );
-      },
-    },
-    ...state.questions.map((question, index) => {
-      const questionId = index + 1;
-      const cellState = (userId: string): CellState => state.liveStats[userId]?.[questionId]?.state || "empty";
-      return {
-        key: `q${questionId}`,
-        title: (
-          <QuestionHeader
-            question={question}
-            index={index}
-            stats={stats.questions[questionId] || { correct: 0, attempts: 0 }}
-          />
-        ),
-        width: mobile ? 80 : 130,
-        align: "center" as const,
-        onCell: (userId: string) =>
-          ({
-            style: { ...STATE_STYLES[cellState(userId)], fontWeight: 600 },
-            "data-state": cellState(userId),
-          }) as HTMLAttributes<HTMLElement>,
-        render: (_: unknown, userId: string) => {
-          const time = formatTime(state.liveStats[userId]?.[questionId]?.time_taken);
-          return (
-            <Flex vertical align="center">
-              <span style={{ fontSize: mobile ? 14 : 18, lineHeight: 1 }}>{STATE_ICONS[cellState(userId)]}</span>
-              {time && <span style={{ fontSize: mobile ? 9 : 11, fontWeight: 400, opacity: 0.8 }}>{time}</span>}
-            </Flex>
-          );
-        },
-      };
-    }),
-  ];
 
   const filterOption = (value: Filter, label: string, count: number) => ({
     value,
@@ -207,25 +89,11 @@ export function LiveStatsPage() {
               }
             />
           ) : (
-            <Table<string>
-              rowKey={(userId) => userId}
-              dataSource={visible}
-              columns={columns}
-              pagination={false}
-              bordered
-              size="small"
-              scroll={{ x: "max-content", y: "calc(100vh - 240px)" }}
-            />
+            <LiveStatsTable state={state} visible={visible} scrollY="calc(100vh - 240px)" />
           )}
         </Card>
 
-        <Flex wrap gap={8}>
-          {LEGEND.map(([cellState, label]) => (
-            <Tag key={cellState} style={{ ...STATE_STYLES[cellState], border: "none" }}>
-              {STATE_ICONS[cellState]} {label}
-            </Tag>
-          ))}
-        </Flex>
+        <Legend />
       </Flex>
     </Layout>
   );
