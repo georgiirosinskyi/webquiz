@@ -97,7 +97,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("dictionary" in error.lower() for error in data["errors"])
+        assert any("словником" in error for error in data["errors"])
 
 
 def test_validate_quiz_missing_required_fields(temp_dir):
@@ -153,7 +153,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("question text or image" in error.lower() for error in data["errors"])
+        assert any("текст або зображення" in error for error in data["errors"])
 
 
 def test_validate_quiz_options_not_list(temp_dir):
@@ -174,7 +174,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("options must be a list" in error.lower() for error in data["errors"])
+        assert any("options має бути списком" in error for error in data["errors"])
 
 
 def test_validate_quiz_options_too_few(temp_dir):
@@ -195,7 +195,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("at least 2 options" in error.lower() for error in data["errors"])
+        assert any("принаймні 2 варіанти" in error for error in data["errors"])
 
 
 def test_validate_quiz_options_not_all_strings(temp_dir):
@@ -216,7 +216,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("all options must be strings" in error.lower() for error in data["errors"])
+        assert any("усі варіанти мають бути рядками" in error for error in data["errors"])
 
 
 def test_validate_quiz_correct_answer_out_of_range(temp_dir):
@@ -237,7 +237,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("out of range" in error.lower() for error in data["errors"])
+        assert any("поза межами" in error for error in data["errors"])
 
 
 def test_validate_quiz_correct_answer_array_empty(temp_dir):
@@ -258,7 +258,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("cannot be empty" in error.lower() for error in data["errors"])
+        assert any("не може бути порожнім" in error for error in data["errors"])
 
 
 def test_validate_quiz_correct_answer_array_non_integers(temp_dir):
@@ -279,7 +279,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("only integers" in error.lower() for error in data["errors"])
+        assert any("лише цілі числа" in error for error in data["errors"])
 
 
 def test_validate_quiz_correct_answer_array_out_of_range(temp_dir):
@@ -300,7 +300,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("out of range" in error.lower() for error in data["errors"])
+        assert any("поза межами" in error for error in data["errors"])
 
 
 def test_validate_quiz_correct_answer_array_duplicates(temp_dir):
@@ -321,7 +321,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("duplicate" in error.lower() for error in data["errors"])
+        assert any("повтори" in error for error in data["errors"])
 
 
 def test_validate_quiz_correct_answer_wrong_type(temp_dir):
@@ -342,7 +342,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("integer or array" in error.lower() for error in data["errors"])
+        assert any("цілим числом або списком" in error for error in data["errors"])
 
 
 def test_validate_quiz_min_correct_without_correct_answer(temp_dir):
@@ -363,7 +363,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("min_correct but no correct_answer" in error.lower() for error in data["errors"])
+        assert any("але не має correct_answer" in error for error in data["errors"])
 
 
 def test_validate_quiz_min_correct_with_single_answer(temp_dir):
@@ -385,7 +385,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("only valid for multiple answer" in error.lower() for error in data["errors"])
+        assert any("лише для питань із кількома" in error for error in data["errors"])
 
 
 def test_validate_quiz_min_correct_not_integer(temp_dir):
@@ -407,7 +407,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("min_correct must be an integer" in error.lower() for error in data["errors"])
+        assert any("min_correct має бути цілим числом" in error for error in data["errors"])
 
 
 def test_validate_quiz_min_correct_too_low(temp_dir):
@@ -429,7 +429,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("at least 1" in error.lower() for error in data["errors"])
+        assert any("не менше 1" in error for error in data["errors"])
 
 
 def test_validate_quiz_min_correct_exceeds_answers(temp_dir):
@@ -451,7 +451,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("cannot exceed" in error.lower() for error in data["errors"])
+        assert any("не може перевищувати" in error for error in data["errors"])
 
 
 def test_validate_quiz_show_right_answer_not_boolean(temp_dir):
@@ -473,7 +473,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("show_right_answer" in error and "boolean" in error.lower() for error in data["errors"])
+        assert any("show_right_answer" in error and "true або false" in error for error in data["errors"])
 
 
 def test_validate_quiz_randomize_questions_not_boolean(temp_dir):
@@ -495,7 +495,7 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("randomize_questions" in error and "boolean" in error.lower() for error in data["errors"])
+        assert any("randomize_questions" in error and "true або false" in error for error in data["errors"])
 
 
 def test_validate_quiz_title_not_string(temp_dir):
@@ -516,4 +516,4 @@ questions:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-        assert any("title" in error and "string" in error.lower() for error in data["errors"])
+        assert any("title" in error and "рядком" in error for error in data["errors"])

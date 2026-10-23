@@ -34,6 +34,8 @@ export interface QuizPageData {
   usernameLabel: string;
   registrationFields: { label: string; name: string }[];
   translations: Record<string, string>;
+  // config `question_navigation`: the question bar also when skipping is off
+  questionNavigation?: boolean;
   // config `appearance`: page background color and optional image
   background?: Background;
 }
@@ -95,6 +97,12 @@ export function nextQuestionIndex(questions: QuizQuestion[], current: number): n
 export function skipButtonMode(questions: QuizQuestion[], current: number, allowSkip: boolean): "hidden" | "skip" | "next" {
   if (!allowSkip || current >= questions.length - 1) return "hidden";
   return questions[current].status === "answered" || questions[current + 1].status !== "unseen" ? "next" : "skip";
+}
+
+// The numbered question bar: always with skipping (to come back to skipped questions),
+// otherwise only when the config turns it on (`question_navigation`)
+export function showNavigation(allowSkip: boolean, questionNavigation: boolean): boolean {
+  return allowSkip || questionNavigation;
 }
 
 // Leaving with Skip sends /api/skip-question only for a new unanswered question

@@ -1,13 +1,14 @@
+import type { MessageKey } from "../shared/i18n";
 import type { LiveState } from "../live-stats/stats";
 import type { AdminUser, CellState, CurrentQuiz, UserStatus } from "./types";
 
 export type OverviewFilter = "all" | "pending" | "in_progress" | "finished";
 
-export const STATUS_LABELS: Record<UserStatus, { text: string; color: string }> = {
-  pending: { text: "Чекає підтвердження", color: "gold" },
-  in_progress: { text: "Проходить", color: "processing" },
-  completed: { text: "Завершив", color: "success" },
-  time_up: { text: "Час вийшов", color: "error" },
+export const STATUS_LABELS: Record<UserStatus, { key: MessageKey; color: string }> = {
+  pending: { key: "status.pending", color: "gold" },
+  in_progress: { key: "status.in_progress", color: "processing" },
+  completed: { key: "status.completed", color: "success" },
+  time_up: { key: "status.time_up", color: "error" },
 };
 
 // Pending users first (they need the admin), then those still answering, then finished ones

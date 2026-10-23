@@ -1,3 +1,5 @@
+import { getLanguage } from "./i18n";
+
 export function formatFileSize(bytes: number): string {
   if (!bytes) return "0 B";
   const sizes = ["B", "KB", "MB", "GB"];
@@ -6,11 +8,7 @@ export function formatFileSize(bytes: number): string {
 }
 
 export function formatDate(isoDate: string): string {
-  return new Date(isoDate).toLocaleString();
-}
-
-export function plural(count: number, word: string): string {
-  return `${count} ${word}${count === 1 ? "" : "s"}`;
+  return new Date(isoDate).toLocaleString(getLanguage() === "en" ? "en-GB" : "uk-UA");
 }
 
 // RFC 4180 style: quoted fields may contain commas, quotes ("") and newlines.

@@ -2,6 +2,7 @@ import type { HTMLAttributes } from "react";
 import { Flex, Grid, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { CheckCircleFilled, SyncOutlined } from "@ant-design/icons";
+import { t, tn, type MessageKey } from "../shared/i18n";
 import { formatPoints } from "../shared/points";
 import {
   STATE_STYLES,
@@ -23,21 +24,26 @@ export const STATE_ICONS: Record<CellState, string> = {
   empty: "⚪",
 };
 
-export const LEGEND: [CellState, string][] = [
-  ["think", "Answering"],
-  ["ok", "Correct"],
-  ["fail", "Incorrect"],
-  ["skip", "Skipped"],
-  ["empty", "Not reached"],
-];
+const STATE_LABELS: Record<CellState, MessageKey> = {
+  think: "state.think",
+  ok: "state.ok",
+  fail: "state.fail",
+  skip: "state.skip",
+  empty: "state.empty",
+};
+
+export const stateLabel = (state: CellState) => t(STATE_LABELS[state]);
 
 function QuestionHeader({ question, index, stats }: { question: Question; index: number; stats: QuestionStats }) {
   const points = questionPoints(question);
   const imageOnly = question.image && !question.question;
   const label = imageOnly
     ? question.image!.split("/").pop()!.split(".").slice(0, -1).join(".")
-    : question.question || `Q${index + 1}`;
-  const hint = `${label} - Correct: ${stats.correct}/${stats.attempts}${points !== 1 ? ` - ${formatPoints(points)} points` : ""}`;
+    : question.question || t("live.question_short", { n: index + 1 });
+  const pointsText = tn("plural.points", points, { n: formatPoints(points) });
+  const hint =
+    t("live.question_hint", { label, correct: stats.correct, attempts: stats.attempts }) +
+    (points !== 1 ? ` - ${pointsText}` : "");
 
   return (
     <Tooltip title={hint}>
@@ -52,7 +58,7 @@ function QuestionHeader({ question, index, stats }: { question: Question; index:
           </Tag>
           {question.file && <span title={question.file.split("/").pop()}>📎</span>}
           {points !== 1 && (
-            <span data-testid="points-indicator" className="points-indicator" title={`${formatPoints(points)} points`}>
+            <span data-testid="points-indicator" className="points-indicator" title={pointsText}>
               🏆 {formatPoints(points)}
             </span>
           )}
@@ -67,7 +73,7 @@ export function LiveStatsTable({
   state,
   visible,
   scrollY,
-  userTitle = "User",
+  userTitle = t("live.user"),
 }: {
   state: LiveState;
   visible: string[];
@@ -93,9 +99,9 @@ export function LiveStatsTable({
             </Typography.Text>
             <Flex align="center" justify="space-between" gap={6}>
               {state.completed[userId] ? (
-                <CheckCircleFilled style={{ color: "#52c41a" }} title="Completed" />
+                <CheckCircleFilled style={{ color: "#52c41a" }} title={t("live.user_completed")} />
               ) : (
-                <SyncOutlined style={{ color: "#1677ff" }} title="In progress" />
+                <SyncOutlined style={{ color: "#1677ff" }} title={t("live.user_in_progress")} />
               )}
               <Tag variant="filled" style={{ marginInlineEnd: 0 }} data-testid="user-score">
                 {formatPoints(userStats?.earnedPoints || 0)}/{formatPoints(state.totalPoints)}
@@ -150,12 +156,12 @@ export function LiveStatsTable({
   );
 }
 
-export function Legend({ items = LEGEND }: { items?: [CellState, string][] }) {
+export function Legend() {
   return (
     <Flex wrap gap={8}>
-      {items.map(([cellState, label]) => (
+      {(Object.keys(STATE_LABELS) as CellState[]).map((cellState) => (
         <Tag key={cellState} style={{ ...STATE_STYLES[cellState], border: "none" }}>
-          {STATE_ICONS[cellState]} {label}
+          {STATE_ICONS[cellState]} {stateLabel(cellState)}
         </Tag>
       ))}
     </Flex>

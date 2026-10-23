@@ -100,7 +100,7 @@ def test_download_quiz_path_validation_parent_directory_blocked():
             assert response.status_code == 400
             data = response.json()
             assert "error" in data
-            assert "parent directory" in data["error"].lower() or "traversal" in data["error"].lower()
+            assert "батьківської теки" in data["error"] or "за межі теки" in data["error"]
 
 
 def test_download_quiz_path_validation_absolute_path_blocked():
@@ -130,7 +130,7 @@ def test_download_quiz_path_validation_absolute_path_blocked():
             assert response.status_code == 400
             data = response.json()
             assert "error" in data
-            assert "absolute" in data["error"].lower() or "not allowed" in data["error"].lower()
+            assert "абсолютні шляхи" in data["error"]
 
 
 def test_download_quiz_empty_folder_path():

@@ -1,6 +1,10 @@
 # WebQuiz Server Configuration
 # Copy this file to server_config.yaml and customize as needed
 
+# Optional: numbered question buttons on the quiz page in quizzes without skipping
+# (quizzes with allow_skip_questions always have them). Default: false
+# question_navigation: true
+
 server:
   host: "0.0.0.0"  # Listen on all interfaces (use "127.0.0.1" for localhost only)
   port: 8080       # Server port

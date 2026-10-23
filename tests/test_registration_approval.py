@@ -192,7 +192,7 @@ def test_update_registration_after_approval():
 
         assert response.status_code == 400
         data = response.json()
-        assert "Cannot update registration data after approval" in data["error"]
+        assert "Після підтвердження дані реєстрації змінити не можна" in data["error"]
 
 
 def test_update_registration_invalid_user():
@@ -203,7 +203,7 @@ def test_update_registration_invalid_user():
         )
 
         assert response.status_code == 404
-        assert "User not found" in response.json()["error"]
+        assert "Користувача не знайдено" in response.json()["error"]
 
 
 def test_update_registration_validates_required_fields():
@@ -282,7 +282,7 @@ def test_approve_user_successfully():
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert "User approved successfully" in data["message"]
+        assert "Користувача підтверджено" in data["message"]
 
 
 def test_approve_user_starts_timing():
@@ -347,7 +347,7 @@ def test_approve_user_invalid_user_id():
         )
 
         assert response.status_code == 404
-        assert "User not found" in response.json()["error"]
+        assert "Користувача не знайдено" in response.json()["error"]
 
 
 def test_approve_user_broadcasts_websocket():

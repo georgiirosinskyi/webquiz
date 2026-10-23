@@ -17,6 +17,7 @@ import httpx
 import yaml
 
 from webquiz.config import TunnelConfig
+from webquiz.translations import admin_text
 
 
 logger = logging.getLogger(__name__)
@@ -25,15 +26,19 @@ logger = logging.getLogger(__name__)
 class TunnelManager:
     """Manages SSH tunnel connections for public access to WebQuiz server"""
 
-    def __init__(self, config: TunnelConfig, local_port: int = 8080):
+    def __init__(
+        self, config: TunnelConfig, local_port: int = 8080, get_language: Optional[Callable[[], str]] = None
+    ):
         """Initialize tunnel manager
 
         Args:
             config: TunnelConfig with server and key paths
             local_port: Local port where WebQuiz server is running
+            get_language: Returns the language of the status errors shown to the admin ("uk"/"en", default English)
         """
         self.config = config
         self.local_port = local_port
+        self.get_language = get_language or (lambda: "en")
         self.connection: Optional[asyncssh.SSHClientConnection] = None
         self.listener = None
         self.socket_id: Optional[str] = None
@@ -50,6 +55,9 @@ class TunnelManager:
         self._max_reconnect_delay = 300  # Max 5 minutes
         self._should_be_connected = False  # Track if we should maintain connection
         self.status_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+
+    def _t(self, key: str, **params) -> str:
+        return admin_text(self.get_language(), key, **params)
 
     def set_status_callback(self, callback: Callable[[Dict[str, Any]], None]):
         """Set callback function to be called when status changes
@@ -75,8 +83,8 @@ class TunnelManager:
         """
         if not self.config.public_key or not self.config.private_key:
             self.status["keys_status"] = "not_configured"
-            self.status["error"] = "SSH key paths not configured"
-            return False, "SSH key paths not configured in tunnel section"
+            self.status["error"] = self._t("tunnel_key_paths")
+            return False, self.status["error"]
 
         public_key_path = Path(self.config.public_key)
         private_key_path = Path(self.config.private_key)
@@ -87,12 +95,12 @@ class TunnelManager:
 
         if public_exists and not private_exists:
             self.status["keys_status"] = "partial"
-            self.status["error"] = "Public key exists but private key is missing"
-            return False, "Public key exists but private key is missing"
+            self.status["error"] = self._t("tunnel_no_private_key")
+            return False, self.status["error"]
         elif private_exists and not public_exists:
             self.status["keys_status"] = "partial"
-            self.status["error"] = "Private key exists but public key is missing"
-            return False, "Private key exists but public key is missing"
+            self.status["error"] = self._t("tunnel_no_public_key")
+            return False, self.status["error"]
         elif public_exists and private_exists:
             # Both exist - verify they're readable and valid
             try:
@@ -112,8 +120,8 @@ class TunnelManager:
                 return True, "SSH keys found and validated"
             except Exception as e:
                 self.status["keys_status"] = "invalid"
-                self.status["error"] = f"Keys exist but are invalid: {e}"
-                return False, f"Keys exist but are invalid: {e}"
+                self.status["error"] = self._t("tunnel_keys_invalid", error=e)
+                return False, self.status["error"]
 
         # Neither exists - generate new keys
         try:
@@ -156,9 +164,9 @@ class TunnelManager:
 
         except Exception as e:
             self.status["keys_status"] = "error"
-            self.status["error"] = f"Failed to generate keys: {e}"
+            self.status["error"] = self._t("tunnel_keys_failed", error=e)
             logger.error(f"Failed to generate SSH keys: {e}")
-            return False, f"Failed to generate SSH keys: {e}"
+            return False, self.status["error"]
 
     async def fetch_tunnel_config(self) -> Optional[Dict[str, Any]]:
         """Fetch tunnel configuration from remote server or use local config
@@ -209,7 +217,7 @@ class TunnelManager:
 
         except Exception as e:
             logger.error(f"Failed to fetch tunnel config from {url}: {e}")
-            self.status["error"] = f"Failed to fetch config from server: {e}"
+            self.status["error"] = self._t("tunnel_fetch_failed", error=e)
             return None
 
     def _generate_socket_id(self) -> str:
@@ -230,7 +238,7 @@ class TunnelManager:
         """
         # Check if server is configured
         if not self.config.server:
-            error_msg = "Tunnel server not configured"
+            error_msg = self._t("tunnel_server_not_configured")
             self.status["error"] = error_msg
             return False, error_msg
 
@@ -242,7 +250,7 @@ class TunnelManager:
         # Fetch tunnel config from server
         tunnel_config = await self.fetch_tunnel_config()
         if not tunnel_config:
-            return False, self.status.get("error", "Failed to fetch tunnel config")
+            return False, self.status.get("error") or self._t("tunnel_fetch_failed", error="")
 
         # Use custom socket name if provided, otherwise generate random ID
         self.socket_id = self.config.socket_name if self.config.socket_name else self._generate_socket_id()
@@ -288,7 +296,7 @@ class TunnelManager:
             return True, public_url
 
         except Exception as e:
-            error_msg = f"Failed to establish SSH tunnel: {e}"
+            error_msg = self._t("tunnel_connect_failed", error=e)
             logger.error(error_msg)
             self.status["error"] = error_msg
             self.status["connected"] = False
@@ -341,7 +349,7 @@ class TunnelManager:
                 logger.warning("SSH tunnel connection lost")
                 self.status["connected"] = False
                 self.status["url"] = None
-                self.status["error"] = "Connection lost"
+                self.status["error"] = self._t("tunnel_connection_lost")
                 await self._notify_status_change()
 
                 # Start reconnect attempts

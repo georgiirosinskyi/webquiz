@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, App, Button, Checkbox, Flex, Form, Input, InputNumber, Modal, Space } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import { apiGet, apiSend } from "../shared/api";
+import { t } from "../shared/i18n";
 import { ImagePicker, FilePicker } from "./Pickers";
 import { QuestionCard, type CheckerTemplate } from "./QuestionCard";
 import { formToQuiz, newQuestion, questionErrors, quizErrors, quizToForm, type QuestionForm, type QuizForm } from "./quizForm";
@@ -87,7 +88,7 @@ export function QuizEditor({
 
   const removeQuestion = (key: number) =>
     modal.confirm({
-      title: "Ви впевнені, що хочете видалити це питання?",
+      title: t("editor.delete_question"),
       okType: "danger",
       onOk: () => setItems((current) => current.filter((item) => item.key !== key)),
     });
@@ -124,7 +125,7 @@ export function QuizEditor({
             quiz_data: formToQuiz(form),
           });
       if (!result.ok) {
-        message.error(result.data.error || "Не вдалося зберегти quiz");
+        message.error(result.data.error || t("editor.save_failed"));
         setContinueResult("error");
         return;
       }
@@ -140,7 +141,7 @@ export function QuizEditor({
         onClose();
       }
     } catch (error) {
-      message.error(`Помилка збереження quiz: ${(error as Error).message}`);
+      message.error(t("editor.save_failed_error", { error: (error as Error).message }));
       setContinueResult("error");
     } finally {
       setSaving(null);
@@ -159,7 +160,7 @@ export function QuizEditor({
           ? { ...question, image: path }
           : { ...question, options: question.options.map((o, i) => (i === imageTarget.field ? path : o)) },
       );
-      message.success(`Зображення вибрано: ${path}`);
+      message.success(t("editor.image_selected", { path }));
     }
     setImageTarget(null);
   };
@@ -168,12 +169,12 @@ export function QuizEditor({
     const item = items.find((entry) => entry.key === fileTarget);
     if (item) {
       updateQuestion(item.key, { ...item.question, file: filename });
-      message.success(`Файл вибрано: ${filename}`);
+      message.success(t("editor.file_selected", { name: filename }));
     }
     setFileTarget(null);
   };
 
-  const title = editingName ? `Редагувати Quiz: ${editingName}` : "Створити Новий Quiz";
+  const title = editingName ? t("editor.title_edit", { name: editingName }) : t("editor.title_new");
 
   return (
     <Modal
@@ -187,7 +188,7 @@ export function QuizEditor({
       footer={
         <Space wrap>
           <Button type="primary" loading={saving === "close"} onClick={() => save(false)} data-testid="save-quiz">
-            💾 Зберегти Quiz
+            {t("editor.save")}
           </Button>
           <Button
             loading={saving === "continue"}
@@ -197,27 +198,31 @@ export function QuizEditor({
             danger={continueResult === "error"}
             style={continueResult === "ok" ? { background: "#52c41a" } : undefined}
           >
-            {continueResult === "ok" ? "✅ Збережено" : continueResult === "error" ? "❌ Помилка" : "💾 Зберегти і Продовжити"}
+            {continueResult === "ok"
+              ? t("editor.saved")
+              : continueResult === "error"
+                ? t("editor.save_error")
+                : t("editor.save_continue")}
           </Button>
-          <Button onClick={onClose}>Скасувати</Button>
+          <Button onClick={onClose}>{t("common.cancel")}</Button>
         </Space>
       }
     >
       <Form layout="vertical" component="div">
-        <Form.Item label="Ім'я файлу quiz" required>
+        <Form.Item label={t("editor.filename")} required>
           <Input
             id="quiz-filename"
             value={settings.filename}
-            placeholder="без розширення .yaml, можна з папкою: grade5/math"
+            placeholder={t("editor.filename_placeholder")}
             onChange={(event) => setSettings({ ...settings, filename: event.target.value })}
             status={showErrors && !settings.filename.trim() ? "error" : undefined}
           />
         </Form.Item>
-        <Form.Item label="Назва quiz (необов'язково)">
+        <Form.Item label={t("editor.quiz_title")}>
           <Input
             id="quiz-title"
             value={settings.title}
-            placeholder="наприклад, Математичний Quiz"
+            placeholder={t("editor.quiz_title_placeholder")}
             onChange={(event) => setSettings({ ...settings, title: event.target.value })}
           />
         </Form.Item>
@@ -234,7 +239,7 @@ export function QuizEditor({
               })
             }
           >
-            Показувати правильні відповіді
+            {t("editor.show_right_answer")}
           </Checkbox>
           {!settings.show_right_answer && (
             <Checkbox
@@ -242,7 +247,7 @@ export function QuizEditor({
               checked={settings.show_answers_on_completion}
               onChange={(event) => setSettings({ ...settings, show_answers_on_completion: event.target.checked })}
             >
-              Показувати відповіді після завершення всіма
+              {t("editor.show_answers_on_completion")}
             </Checkbox>
           )}
           <Checkbox
@@ -250,25 +255,25 @@ export function QuizEditor({
             checked={settings.randomize_questions}
             onChange={(event) => setSettings({ ...settings, randomize_questions: event.target.checked })}
           >
-            Рандомізувати порядок питань
+            {t("editor.randomize")}
           </Checkbox>
           <Checkbox
             id="show-final-list"
             checked={settings.show_final_list}
             onChange={(event) => setSettings({ ...settings, show_final_list: event.target.checked })}
           >
-            Показувати список питань у кінці
+            {t("editor.show_final_list")}
           </Checkbox>
           <Checkbox
             id="allow-skip-questions"
             checked={settings.allow_skip_questions}
             onChange={(event) => setSettings({ ...settings, allow_skip_questions: event.target.checked })}
           >
-            Дозволити пропускати питання
+            {t("editor.allow_skip")}
           </Checkbox>
         </Flex>
 
-        <Form.Item label="Обмеження часу, секунд (порожньо або 0 — без обмеження)">
+        <Form.Item label={t("editor.time_limit")}>
           <InputNumber
             id="time-limit"
             min={0}
@@ -332,7 +337,7 @@ export function QuizEditor({
         <div ref={listEnd} />
         <div>
           <Button icon={<PlusOutlined />} onClick={addQuestion}>
-            Додати питання
+            {t("editor.add_question")}
           </Button>
         </div>
       </Flex>
@@ -342,7 +347,7 @@ export function QuizEditor({
           type="error"
           showIcon
           style={{ marginTop: 16 }}
-          title="Виправте помилки перед збереженням"
+          title={t("editor.fix_errors")}
           description={
             <ul style={{ margin: 0, paddingInlineStart: 20 }}>
               {errors.map((error) => (

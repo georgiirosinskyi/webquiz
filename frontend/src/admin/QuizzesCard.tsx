@@ -10,6 +10,7 @@ import {
   ReloadOutlined,
 } from "@ant-design/icons";
 import { apiGet, apiSend } from "../shared/api";
+import { t } from "../shared/i18n";
 import type { QuizInfo, QuizList } from "./types";
 import type { EditorTarget } from "./QuizEditor";
 
@@ -42,7 +43,7 @@ export function QuizzesCard({
       `/api/admin/quiz/${encodeURIComponent(filename)}`,
     );
     if (result.ok) onEdit({ mode: "edit", filename, parsed: result.data.parsed || null });
-    else message.error(result.data.error || "Не вдалося завантажити quiz");
+    else message.error(result.data.error || t("quizzes.load_failed"));
   };
 
   const switchQuiz = async () => {
@@ -52,14 +53,14 @@ export function QuizzesCard({
     try {
       const result = await apiSend<{ csv_file: string }>("POST", "/api/admin/switch-quiz", { quiz_filename: single });
       if (result.ok) {
-        message.success(`Successfully ${restart ? "restarted" : "switched to"} "${single}". CSV file: ${result.data.csv_file}`);
+        message.success(t(restart ? "quizzes.restarted" : "quizzes.switched", { name: single, csv: result.data.csv_file }));
         setSelected([]);
         await reload();
       } else {
-        message.error(result.data.error || `Failed to ${restart ? "restart" : "switch"} quiz`);
+        message.error(result.data.error || t(restart ? "quizzes.restart_failed" : "quizzes.switch_failed"));
       }
     } catch (error) {
-      message.error(`Помилка: ${(error as Error).message}`);
+      message.error(t("common.error", { error: (error as Error).message }));
     } finally {
       setBusy(null);
     }
@@ -67,10 +68,10 @@ export function QuizzesCard({
 
   const duplicate = () => {
     if (!single) return;
-    askName("Введіть ім'я для дубльованого quiz:", single.replace(/\.ya?ml$/, "_copy"), async (name) => {
+    askName(t("quizzes.duplicate_prompt"), single.replace(/\.ya?ml$/, "_copy"), async (name) => {
       const original = await apiGet<{ content: string }>(`/api/admin/quiz/${encodeURIComponent(single)}`);
       if (!original.ok) {
-        message.error(original.data.error || "Не вдалося завантажити оригінальний quiz");
+        message.error(original.data.error || t("quizzes.load_original_failed"));
         return;
       }
       const created = await apiSend<{ filename: string }>("POST", "/api/admin/create-quiz", {
@@ -79,18 +80,18 @@ export function QuizzesCard({
         content: original.data.content,
       });
       if (created.ok) {
-        message.success(`Quiz duplicated successfully as "${created.data.filename}"`);
+        message.success(t("quizzes.duplicated", { name: created.data.filename }));
         await reload();
         await openEditor(created.data.filename);
       } else {
-        message.error(created.data.error || "Не вдалося дублювати quiz");
+        message.error(created.data.error || t("quizzes.duplicate_failed"));
       }
     });
   };
 
   const unite = () => {
     askName(
-      `Введіть ім'я для об'єднаного quiz (${selected.length} quizzes):`,
+      t("quizzes.unite_prompt", { count: selected.length }),
       selected[0].replace(/\.ya?ml$/, "_united"),
       async (name) => {
         const result = await apiSend<{ filename: string; total_questions: number; warning?: string }>(
@@ -100,14 +101,14 @@ export function QuizzesCard({
         );
         if (result.ok) {
           message.success(
-            `Quiz успішно об'єднано в "${result.data.filename}". Загалом питань: ${result.data.total_questions}` +
+            t("quizzes.united", { name: result.data.filename, count: result.data.total_questions }) +
               (result.data.warning ? `. ${result.data.warning}` : ""),
           );
           setSelected([]);
           await reload();
           await openEditor(result.data.filename);
         } else {
-          message.error(result.data.error || "Не вдалося об'єднати quizzes");
+          message.error(result.data.error || t("quizzes.unite_failed"));
         }
       },
     );
@@ -116,20 +117,20 @@ export function QuizzesCard({
   const remove = () => {
     const names = [...selected];
     modal.confirm({
-      title: names.length === 1 ? `Видалити "${names[0]}"?` : `Видалити ${names.length} quiz(ів)?`,
-      content: "Ця дія не може бути скасована.",
+      title: names.length === 1 ? t("quizzes.delete_one", { name: names[0] }) : t("quizzes.delete_many", { count: names.length }),
+      content: t("quizzes.delete_content"),
       okType: "danger",
-      okText: "Видалити",
+      okText: t("common.delete"),
       onOk: async () => {
         const errors: string[] = [];
         for (const name of names) {
           const result = await apiSend("DELETE", `/api/admin/quiz/${encodeURIComponent(name)}`);
-          if (!result.ok) errors.push(`${name}: ${result.data.error || "Помилка"}`);
+          if (!result.ok) errors.push(`${name}: ${result.data.error || result.status}`);
         }
         const deleted = names.length - errors.length;
-        if (errors.length === 0) message.success(`Успішно видалено ${deleted} quiz(ів)`);
-        else if (deleted > 0) message.warning(`Видалено ${deleted} quiz(ів). Помилки: ${errors.join(", ")}`);
-        else message.error(`Помилка видалення: ${errors.join(", ")}`);
+        if (errors.length === 0) message.success(t("quizzes.deleted", { count: deleted }));
+        else if (deleted > 0) message.warning(t("quizzes.deleted_partly", { count: deleted, errors: errors.join(", ") }));
+        else message.error(t("quizzes.delete_failed", { errors: errors.join(", ") }));
         setSelected([]);
         await reload();
       },
@@ -140,34 +141,34 @@ export function QuizzesCard({
 
   return (
     <Card
-      title="Quiz"
+      title={t("quizzes.card_title")}
       extra={
         <Button
           icon={<ReloadOutlined />}
-          title="Оновити список"
+          title={t("quizzes.refresh")}
           onClick={async () => {
             await reload();
-            message.success("Список quiz оновлено");
+            message.success(t("quizzes.refreshed"));
           }}
         />
       }
     >
       <Typography.Paragraph data-testid="current-quiz">
-        Поточний quiz:{" "}
+        {t("quizzes.current")}{" "}
         {current ? (
           <Tag color="green">
             {current}
             {currentInfo?.title ? ` - ${currentInfo.title}` : ""}
           </Tag>
         ) : (
-          <Tag>не вибрано</Tag>
+          <Tag>{t("quizzes.none")}</Tag>
         )}
       </Typography.Paragraph>
 
       <Space wrap style={{ marginBottom: 12 }}>
         {selected.length > 1 ? (
           <Button type="primary" icon={<MergeCellsOutlined />} onClick={unite} data-testid="unite-btn">
-            Об'єднати quizzes
+            {t("quizzes.unite")}
           </Button>
         ) : (
           <>
@@ -179,17 +180,17 @@ export function QuizzesCard({
               onClick={switchQuiz}
               data-testid="switch-btn"
             >
-              {single && single === current ? "Перезапустити поточний" : "Переключитися"}
+              {single && single === current ? t("quizzes.restart_current") : t("quizzes.switch")}
             </Button>
             <Button icon={<EditOutlined />} disabled={!single} onClick={() => single && openEditor(single)} data-testid="edit-btn">
-              Редагувати
+              {t("common.edit")}
             </Button>
             <Button icon={<CopyOutlined />} disabled={!single} onClick={duplicate} data-testid="duplicate-btn">
-              Дублювати
+              {t("quizzes.duplicate")}
             </Button>
           </>
         )}
-        <Tooltip title={current && selected.includes(current) ? "Неможливо видалити поточний активний quiz" : undefined}>
+        <Tooltip title={current && selected.includes(current) ? t("quizzes.cannot_delete_current") : undefined}>
           <Button
             danger
             icon={<DeleteOutlined />}
@@ -197,11 +198,11 @@ export function QuizzesCard({
             onClick={remove}
             data-testid="delete-btn"
           >
-            Видалити
+            {t("common.delete")}
           </Button>
         </Tooltip>
         <Button icon={<PlusOutlined />} onClick={() => onEdit({ mode: "create" })} data-testid="create-btn">
-          Новий quiz
+          {t("quizzes.new")}
         </Button>
       </Space>
 
@@ -212,7 +213,7 @@ export function QuizzesCard({
         pagination={false}
         scroll={{ y: 360 }}
         dataSource={list.quizzes}
-        locale={{ emptyText: "Файли quiz не знайдені" }}
+        locale={{ emptyText: t("quizzes.empty") }}
         rowSelection={{ selectedRowKeys: selected, onChange: (keys) => setSelected(keys as string[]) }}
         onRow={(quiz) => ({
           // A click selects only this quiz; Ctrl/Cmd+click adds it to the selection
@@ -232,20 +233,20 @@ export function QuizzesCard({
         columns={[
           {
             key: "filename",
-            title: "Файл",
+            title: t("quizzes.col_file"),
             dataIndex: "filename",
             render: (filename: string) => (
               <Space size={4} wrap>
                 <Typography.Text strong={filename === current}>{filename}</Typography.Text>
-                {filename === current && <Tag color="green">поточний</Tag>}
+                {filename === current && <Tag color="green">{t("quizzes.current_tag")}</Tag>}
               </Space>
             ),
           },
-          { key: "title", title: "Назва", dataIndex: "title", render: (title: string | null) => title || "", responsive: ["sm"] },
+          { key: "title", title: t("quizzes.col_title"), dataIndex: "title", render: (title: string | null) => title || "", responsive: ["sm"] },
         ]}
       />
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        Ctrl+клік — вибрати декілька, подвійний клік — редагувати
+        {t("quizzes.hint")}
       </Typography.Text>
 
       <Modal
@@ -262,7 +263,7 @@ export function QuizzesCard({
             await prompt.onOk(promptValue.trim());
             setPrompt(null);
           } catch (error) {
-            message.error(`Помилка: ${(error as Error).message}`);
+            message.error(t("common.error", { error: (error as Error).message }));
           } finally {
             setBusy(null);
           }

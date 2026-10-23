@@ -22,7 +22,7 @@ def test_config_hot_reload_registration_fields():
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert "saved and applied" in data["message"]
+        assert "збережено й застосовано" in data["message"]
 
         # Verify the index.html now has the new fields
         index_response = requests.get(f"http://localhost:{port}/")
@@ -259,7 +259,7 @@ def test_config_hot_reload_quizzes_list():
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert "saved and applied" in data["message"]
+        assert "збережено й застосовано" in data["message"]
 
         # Verify admin page shows the quizzes (they're embedded in the HTML)
         admin_response = requests.get(f"http://localhost:{port}/admin/", cookies=cookies)
@@ -285,7 +285,7 @@ def test_config_hot_reload_tunnel_config():
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert "saved and applied" in data["message"]
+        assert "збережено й застосовано" in data["message"]
         # Tunnel config is applied but connection is not automatic
 
 
@@ -305,7 +305,7 @@ def test_config_hot_reload_restart_required_message():
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert "restart required" in data["message"].lower()
+        assert "потрібен перезапуск" in data["message"].lower()
         assert "server.port" in data["message"]
         assert "restart_required" in data
         assert "server.port" in data["restart_required"]
@@ -328,7 +328,7 @@ def test_config_hot_reload_restart_required_paths():
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert "restart required" in data["message"].lower()
+        assert "потрібен перезапуск" in data["message"].lower()
         assert "paths.quizzes_dir" in data["message"]
         assert "paths.csv_dir" in data["message"]
 
@@ -350,5 +350,5 @@ def test_config_hot_reload_restart_required_master_key():
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert "restart required" in data["message"].lower()
+        assert "потрібен перезапуск" in data["message"].lower()
         assert "admin.master_key" in data["message"]

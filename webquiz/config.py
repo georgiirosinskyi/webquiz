@@ -176,6 +176,8 @@ class WebQuizConfig:
 
     language: str = "uk"
     extra_answers_with_users_csv: bool = False
+    # Numbered question bar on the quiz page when the quiz does not allow skipping
+    question_navigation: bool = False
     server: ServerConfig = field(default_factory=ServerConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
     admin: AdminConfig = field(default_factory=AdminConfig)
@@ -252,10 +254,12 @@ def load_config_from_yaml(config_path: str) -> WebQuizConfig:
 
         # Parse extra_answers_with_users_csv setting
         extra_answers_with_users_csv = bool(config_data.get("extra_answers_with_users_csv", False))
+        question_navigation = bool(config_data.get("question_navigation", False))
 
         return WebQuizConfig(
             language=language,
             extra_answers_with_users_csv=extra_answers_with_users_csv,
+            question_navigation=question_navigation,
             server=server_config,
             paths=paths_config,
             admin=admin_config,

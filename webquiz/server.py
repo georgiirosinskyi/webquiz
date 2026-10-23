@@ -27,7 +27,7 @@ import ipaddress
 from importlib import resources
 
 from .config import DEFAULT_BACKGROUND_COLOR, WebQuizConfig, load_config_from_yaml
-from .translations import get_translations
+from .translations import admin_text, get_translations
 from .tunnel import TunnelManager
 from .transfer import TransferManager, TransferError
 
@@ -93,6 +93,7 @@ def config_form_data(parsed) -> dict:
     return {
         "language": parsed.get("language", "uk"),
         "extra_answers_with_users_csv": bool(parsed.get("extra_answers_with_users_csv", False)),
+        "question_navigation": bool(parsed.get("question_navigation", False)),
         "registration": registration if isinstance(registration, dict) else {},
         "appearance": {
             "background_color": appearance.get("background_color") or DEFAULT_BACKGROUND_COLOR,
@@ -406,6 +407,7 @@ def log_startup_environment(config: WebQuizConfig):
     logger.info(
         f"Extra answers-with-users CSV (per-answer + user info): {config.extra_answers_with_users_csv}"
     )
+    logger.info(f"Question navigation without skipping: {config.question_navigation}")
 
     # Tunnel configuration
     if config.tunnel.server:
@@ -574,7 +576,7 @@ def admin_auth_required(func):
 
         # Check if master key is configured
         if not self.master_key:
-            return web.json_response({"error": "Admin functionality disabled - no master key set"}, status=403)
+            return web.json_response({"error": self._t("admin_disabled")}, status=403)
 
         # Check for valid session cookie
         session_token = request.cookies.get("admin_session")
@@ -725,6 +727,7 @@ class TestingServer:
                 self.answers_with_users_csv_file,
                 self.current_quiz_file,
             ],
+            get_language=lambda: self.config.language,
         )
 
         # Admin session storage for cookie-based authentication
@@ -735,6 +738,10 @@ class TestingServer:
 
         # Preload templates
         self.templates = self._load_templates()
+
+    def _t(self, key: str, **params) -> str:
+        """Admin API message in the configured language (see ADMIN_TRANSLATIONS)."""
+        return admin_text(self.config.language, key, **params)
 
     def _load_templates(self) -> Dict[str, str]:
         """Preload all templates at startup.
@@ -924,6 +931,9 @@ class TestingServer:
         # Update extra_answers_with_users_csv flag (takes effect on next quiz switch / quiz restart)
         self.config.extra_answers_with_users_csv = new_config.extra_answers_with_users_csv
 
+        # Question navigation on the quiz page (the quiz restart after a config save regenerates the page)
+        self.config.question_navigation = new_config.question_navigation
+
         # Update registration config
         self.config.registration = new_config.registration
 
@@ -1093,7 +1103,7 @@ class TestingServer:
                 "quiz_version": self.quiz_version,
                 "questions": self.questions,
                 "total_questions": len(self.questions),
-                "message": f"Quiz switched to: {quiz_filename}",
+                "message": self._t("quiz_switched", name=quiz_filename),
             }
         )
         # Users were cleared, so the admin page must drop its list of users waiting for approval
@@ -1162,7 +1172,9 @@ class TestingServer:
         logger.info(f"Initializing SSH tunnel for server: {self.config.tunnel.server}")
 
         # Create tunnel manager
-        self.tunnel_manager = TunnelManager(self.config.tunnel, local_port=self.config.server.port)
+        self.tunnel_manager = TunnelManager(
+            self.config.tunnel, local_port=self.config.server.port, get_language=lambda: self.config.language
+        )
 
         # Set up status callback to broadcast changes to admin clients
         async def tunnel_status_callback(status):
@@ -1389,6 +1401,7 @@ class TestingServer:
             "questions": questions_for_client,
             "showRightAnswer": self.show_right_answer,
             "showFinalList": self.show_final_list,
+            "questionNavigation": self.config.question_navigation,
             "usernameLabel": username_label,
             "registrationFields": registration_fields,
             "translations": self.translations,
@@ -2167,7 +2180,7 @@ class TestingServer:
         user_id = data.get("user_id")
 
         if not user_id:
-            return web.json_response({"error": "User ID is required"}, status=400)
+            return web.json_response({"error": self._t("user_id_required")}, status=400)
 
         # Check if user exists
         if user_id not in self.users:
@@ -3020,7 +3033,7 @@ class TestingServer:
         return web.json_response(
             {
                 "success": True,
-                "message": f"Switched to quiz: {quiz_filename}",
+                "message": self._t("quiz_switched", name=quiz_filename),
                 "current_quiz": self._current_quiz_name(),
                 "csv_file": os.path.basename(self.csv_file),
             }
@@ -3044,7 +3057,7 @@ class TestingServer:
         if not is_trusted:
             # Check if master key is configured
             if not self.master_key:
-                return web.json_response({"error": "Admin functionality disabled - no master key set"}, status=403)
+                return web.json_response({"error": self._t("admin_disabled")}, status=403)
 
             # Get master key from request body only
             provided_key = None
@@ -3064,7 +3077,7 @@ class TestingServer:
         self.admin_sessions[session_token] = datetime.now()
 
         # Create response with session cookie
-        response = web.json_response({"authenticated": True, "message": "Admin authentication successful"})
+        response = web.json_response({"authenticated": True, "message": self._t("auth_success")})
         response.set_cookie(
             "admin_session",
             session_token,
@@ -3091,7 +3104,7 @@ class TestingServer:
         if session_token not in self.admin_sessions:
             return web.json_response({"valid": False, "reason": "Invalid session"}, status=401)
 
-        return web.json_response({"valid": True, "message": "Session is valid"})
+        return web.json_response({"valid": True, "message": self._t("session_valid")})
 
     @local_network_only
     async def admin_version_check(self, request):
@@ -3131,17 +3144,17 @@ class TestingServer:
         user_id = data.get("user_id")
 
         if not user_id:
-            return web.json_response({"error": "User ID is required"}, status=400)
+            return web.json_response({"error": self._t("user_id_required")}, status=400)
 
         # Check if user exists
         if user_id not in self.users:
-            return web.json_response({"error": "User not found"}, status=404)
+            return web.json_response({"error": self._t("user_not_found")}, status=404)
 
         user_data = self.users[user_id]
 
         # Check if already approved
         if user_data.get("approved", False):
-            return web.json_response({"success": True, "message": "User already approved"})
+            return web.json_response({"success": True, "message": self._t("user_already_approved")})
 
         # Approve the user
         user_data["approved"] = True
@@ -3186,7 +3199,7 @@ class TestingServer:
         await self.notify_admin_user_updated(user_id)
 
         logger.info(f"Approved user: {user_id}")
-        return web.json_response({"success": True, "message": "User approved successfully", "user_id": user_id})
+        return web.json_response({"success": True, "message": self._t("user_approved"), "user_id": user_id})
 
     @admin_auth_required
     async def admin_force_show_answers(self, request):
@@ -3215,14 +3228,14 @@ class TestingServer:
 
         # Broadcast to admin WebSocket clients
         await self.broadcast_to_admin_websockets(
-            {"type": "answers_forced", "forced": True, "message": "Відповіді тепер доступні для всіх користувачів"}
+            {"type": "answers_forced", "forced": True, "message": self._t("answers_opened")}
         )
 
         return web.json_response(
             {
                 "success": True,
                 "forced": True,
-                "message": "Відповіді успішно відкриті для всіх користувачів",
+                "message": self._t("answers_opened"),
                 "completed_count": len(self.user_stats),
                 "total_count": len(self.users),
             }
@@ -3241,10 +3254,10 @@ class TestingServer:
         filename = request.match_info["filename"]
         quiz_path = self._resolve_quiz_path(filename)
         if not quiz_path:
-            return web.json_response({"error": "Invalid quiz filename"}, status=400)
+            return web.json_response({"error": self._t("invalid_quiz_filename")}, status=400)
 
         if not os.path.exists(quiz_path):
-            return web.json_response({"error": "Quiz file not found"}, status=404)
+            return web.json_response({"error": self._t("quiz_not_found")}, status=404)
 
         with open(quiz_path, "r", encoding="utf-8") as f:
             quiz_content = f.read()
@@ -3275,22 +3288,22 @@ class TestingServer:
         mode = data.get("mode", "wizard")  # 'wizard' or 'text'
 
         if not filename:
-            return web.json_response({"error": "Filename is required"}, status=400)
+            return web.json_response({"error": self._t("filename_required")}, status=400)
 
         filename = self._with_quiz_extension(filename).replace("\\", "/")
         quiz_path = self._resolve_quiz_path(filename)
         if not quiz_path:
-            return web.json_response({"error": "Invalid quiz filename"}, status=400)
+            return web.json_response({"error": self._t("invalid_quiz_filename")}, status=400)
 
         # Check if file already exists
         if os.path.exists(quiz_path):
-            return web.json_response({"error": "Quiz file already exists"}, status=409)
+            return web.json_response({"error": self._t("quiz_exists")}, status=409)
 
         # Validate and create quiz content
         if mode == "wizard":
             quiz_data = data.get("quiz_data", {})
             if not self._validate_quiz_data(quiz_data):
-                return web.json_response({"error": "Неправильна структура даних квізу"}, status=400)
+                return web.json_response({"error": self._t("invalid_quiz_structure")}, status=400)
 
             import yaml
 
@@ -3298,7 +3311,7 @@ class TestingServer:
         else:  # text mode
             quiz_content = data.get("content", "").strip()
             if not quiz_content:
-                return web.json_response({"error": "Quiz content is required"}, status=400)
+                return web.json_response({"error": self._t("quiz_content_required")}, status=400)
 
             # Validate YAML
             try:
@@ -3306,9 +3319,9 @@ class TestingServer:
 
                 parsed = yaml.safe_load(quiz_content)
                 if not self._validate_quiz_data(parsed):
-                    return web.json_response({"error": "Неправильна структура даних квізу"}, status=400)
+                    return web.json_response({"error": self._t("invalid_quiz_structure")}, status=400)
             except yaml.YAMLError as e:
-                return web.json_response({"error": f"Неправильний YAML: {str(e)}"}, status=400)
+                return web.json_response({"error": self._t("invalid_yaml", error=str(e))}, status=400)
 
         # Write the quiz file with fsync for SD card/slow storage reliability
         self._ensure_parent_dir(quiz_path)
@@ -3319,7 +3332,7 @@ class TestingServer:
 
         logger.info(f"Created new quiz: {filename}")
         return web.json_response(
-            {"success": True, "message": f'Quiz "{filename}" created successfully', "filename": filename}
+            {"success": True, "message": self._t("quiz_created", name=filename), "filename": filename}
         )
 
     @admin_auth_required
@@ -3349,10 +3362,10 @@ class TestingServer:
         old_path = self._resolve_quiz_path(old_filename)
         new_path = self._resolve_quiz_path(new_filename)
         if not old_path or not new_path:
-            return web.json_response({"error": "Invalid quiz filename"}, status=400)
+            return web.json_response({"error": self._t("invalid_quiz_filename")}, status=400)
 
         if not os.path.exists(old_path):
-            return web.json_response({"error": "Quiz file not found"}, status=404)
+            return web.json_response({"error": self._t("quiz_not_found")}, status=404)
 
         # Check if filename is being changed
         filename_changed = old_filename != new_filename
@@ -3360,12 +3373,12 @@ class TestingServer:
             # Prevent renaming of currently active quiz
             if self._is_current_quiz(old_filename):
                 return web.json_response(
-                    {"error": "Cannot rename active quiz. Please switch to a different quiz first."}, status=409
+                    {"error": self._t("cannot_rename_active")}, status=409
                 )
 
             # Check for filename conflicts
             if os.path.exists(new_path):
-                return web.json_response({"error": f"Quiz file already exists: {new_filename}"}, status=409)
+                return web.json_response({"error": self._t("quiz_exists_named", name=new_filename)}, status=409)
 
         # Use old_path for all operations until rename
         quiz_path = old_path
@@ -3379,21 +3392,21 @@ class TestingServer:
         if mode == "wizard":
             quiz_data = data.get("quiz_data", {})
             if not self._validate_quiz_data(quiz_data):
-                return web.json_response({"error": "Неправильна структура даних квізу"}, status=400)
+                return web.json_response({"error": self._t("invalid_quiz_structure")}, status=400)
 
             quiz_content = yaml.dump(quiz_data, default_flow_style=False, allow_unicode=True)
         else:  # text mode
             quiz_content = data.get("content", "").strip()
             if not quiz_content:
-                return web.json_response({"error": "Quiz content is required"}, status=400)
+                return web.json_response({"error": self._t("quiz_content_required")}, status=400)
 
             # Validate YAML
             try:
                 parsed = yaml.safe_load(quiz_content)
                 if not self._validate_quiz_data(parsed):
-                    return web.json_response({"error": "Неправильна структура даних квізу"}, status=400)
+                    return web.json_response({"error": self._t("invalid_quiz_structure")}, status=400)
             except yaml.YAMLError as e:
-                return web.json_response({"error": f"Неправильний YAML: {str(e)}"}, status=400)
+                return web.json_response({"error": self._t("invalid_yaml", error=str(e))}, status=400)
 
         # Write updated content with fsync for SD card/slow storage reliability
         async with aiofiles.open(quiz_path, "w", encoding="utf-8") as f:
@@ -3418,7 +3431,7 @@ class TestingServer:
         return web.json_response(
             {
                 "success": True,
-                "message": f'Quiz "{final_filename}" updated successfully',
+                "message": self._t("quiz_updated", name=final_filename),
                 "backup_created": os.path.basename(backup_path),
                 "filename": final_filename,
                 "renamed": filename_changed,
@@ -3440,14 +3453,14 @@ class TestingServer:
         filename = request.match_info["filename"]
         quiz_path = self._resolve_quiz_path(filename)
         if not quiz_path:
-            return web.json_response({"error": "Invalid quiz filename"}, status=400)
+            return web.json_response({"error": self._t("invalid_quiz_filename")}, status=400)
 
         if not os.path.exists(quiz_path):
-            return web.json_response({"error": "Quiz file not found"}, status=404)
+            return web.json_response({"error": self._t("quiz_not_found")}, status=404)
 
         # Don't allow deleting the current quiz
         if self._is_current_quiz(filename):
-            return web.json_response({"error": "Cannot delete the currently active quiz"}, status=400)
+            return web.json_response({"error": self._t("cannot_delete_active")}, status=400)
 
         # Create backup before deletion
         backup_path = quiz_path + ".deleted_backup"
@@ -3462,7 +3475,7 @@ class TestingServer:
         return web.json_response(
             {
                 "success": True,
-                "message": f'Quiz "{filename}" deleted successfully',
+                "message": self._t("quiz_deleted", name=filename),
                 "backup_created": os.path.basename(backup_path),
             }
         )
@@ -3488,13 +3501,13 @@ class TestingServer:
         # Validation
         if not quiz_filenames or len(quiz_filenames) < 2:
             return web.json_response(
-                {"error": "Потрібно вибрати принаймні 2 quiz для об'єднання"},
+                {"error": self._t("unite_two_needed")},
                 status=400,
             )
 
         if not new_name:
             return web.json_response(
-                {"error": "Ім'я нового quiz обов'язкове"},
+                {"error": self._t("unite_name_required")},
                 status=400,
             )
 
@@ -3502,12 +3515,12 @@ class TestingServer:
         new_name = self._with_quiz_extension(new_name).replace("\\", "/")
         new_quiz_path = self._resolve_quiz_path(new_name)
         if not new_quiz_path:
-            return web.json_response({"error": "Invalid quiz filename"}, status=400)
+            return web.json_response({"error": self._t("invalid_quiz_filename")}, status=400)
 
         # Check new filename doesn't exist
         if os.path.exists(new_quiz_path):
             return web.json_response(
-                {"error": f"Quiz '{new_name}' вже існує"},
+                {"error": self._t("unite_exists", name=new_name)},
                 status=409,
             )
 
@@ -3517,7 +3530,7 @@ class TestingServer:
             quiz_path = self._resolve_quiz_path(filename)
             if not quiz_path or not os.path.exists(quiz_path):
                 return web.json_response(
-                    {"error": f"Quiz '{filename}' не знайдено"},
+                    {"error": self._t("unite_not_found", name=filename)},
                     status=404,
                 )
 
@@ -3528,14 +3541,18 @@ class TestingServer:
                     if not self._validate_quiz_data(quiz_content, errors):
                         return web.json_response(
                             {
-                                "error": f"Quiz '{filename}' має неправильну структуру: {errors[0] if errors else 'Unknown error'}"
+                                "error": self._t(
+                                    "unite_invalid",
+                                    name=filename,
+                                    error=errors[0] if errors else self._t("unite_unknown_error"),
+                                )
                             },
                             status=400,
                         )
                     quizzes_data.append(quiz_content)
             except yaml.YAMLError as e:
                 return web.json_response(
-                    {"error": f"Помилка читання quiz '{filename}': {str(e)}"},
+                    {"error": self._t("unite_read_error", name=filename, error=str(e))},
                     status=400,
                 )
 
@@ -3588,14 +3605,14 @@ class TestingServer:
 
         response_data = {
             "success": True,
-            "message": "Quiz успішно об'єднано",
+            "message": self._t("united"),
             "filename": new_name,
             "total_questions": len(united_quiz["questions"]),
             "source_quizzes": quiz_filenames,
         }
 
         if duplicate_count > 0:
-            response_data["warning"] = f"Знайдено {duplicate_count} можливих дублікатів питань"
+            response_data["warning"] = self._t("unite_duplicates", count=duplicate_count)
 
         return web.json_response(response_data)
 
@@ -3648,25 +3665,25 @@ class TestingServer:
             errors = []
 
         if not isinstance(data, dict):
-            errors.append("Дані квізу повинні бути словником")
+            errors.append(self._t("quiz_not_dict"))
             return False
 
         if "questions" not in data:
-            errors.append("Квіз повинен містити поле 'questions'")
+            errors.append(self._t("quiz_no_questions"))
             return False
 
         questions = data["questions"]
         if not isinstance(questions, list):
-            errors.append("'questions' повинно бути списком")
+            errors.append(self._t("questions_not_list"))
             return False
 
         if len(questions) == 0:
-            errors.append("Квіз повинен містити принаймні одне питання")
+            errors.append(self._t("quiz_empty"))
             return False
 
         for i, question in enumerate(questions):
             if not isinstance(question, dict):
-                errors.append(f"Question {i+1} must be a dictionary")
+                errors.append(self._t("q_not_dict", n=i + 1))
                 continue
 
             # Check if this is a text input question (has checker)
@@ -3676,17 +3693,17 @@ class TestingServer:
             has_question = "question" in question and question["question"]
             has_image = "image" in question and question["image"]
             if not has_question and not has_image:
-                errors.append(f"Question {i+1} must have either question text or image")
+                errors.append(self._t("q_text_or_image", n=i + 1))
 
             if is_text_question:
                 # Text input question validation
                 # Optional fields: default_value, correct_value, checker
                 if "default_value" in question and not isinstance(question["default_value"], str):
-                    errors.append(f"Question {i+1} default_value must be a string")
+                    errors.append(self._t("q_field_str", n=i + 1, field="default_value"))
                 if "correct_value" in question and not isinstance(question["correct_value"], str):
-                    errors.append(f"Question {i+1} correct_value must be a string")
+                    errors.append(self._t("q_field_str", n=i + 1, field="correct_value"))
                 if "checker" in question and not isinstance(question["checker"], str):
-                    errors.append(f"Question {i+1} checker must be a string")
+                    errors.append(self._t("q_field_str", n=i + 1, field="checker"))
 
                 # Validate checker is valid Python syntax
                 checker_code = question.get("checker", "")
@@ -3694,7 +3711,7 @@ class TestingServer:
                     try:
                         compile(checker_code, f"<question {i+1} checker>", "exec")
                     except SyntaxError as e:
-                        errors.append(f"Question {i+1} checker has invalid Python syntax: {e.msg} (line {e.lineno})")
+                        errors.append(self._t("q_checker_syntax", n=i + 1, error=e.msg, line=e.lineno))
 
             else:
                 # Choice question validation
@@ -3702,17 +3719,17 @@ class TestingServer:
                 required_fields = ["options", "correct_answer"]
                 for field in required_fields:
                     if field not in question:
-                        errors.append(f"Question {i+1} missing required field: {field}")
+                        errors.append(self._t("q_missing_field", n=i + 1, field=field))
 
                 # Validate options
                 if "options" in question:
                     options = question["options"]
                     if not isinstance(options, list):
-                        errors.append(f"Question {i+1} options must be a list")
+                        errors.append(self._t("q_options_list", n=i + 1))
                     elif len(options) < 2:
-                        errors.append(f"Question {i+1} must have at least 2 options")
+                        errors.append(self._t("q_two_options", n=i + 1))
                     elif not all(isinstance(opt, str) for opt in options):
-                        errors.append(f"Question {i+1} all options must be strings")
+                        errors.append(self._t("q_options_strings", n=i + 1))
 
             # Validate correct_answer (can be integer for single answer or list for multiple answers)
             # Only for choice questions
@@ -3723,66 +3740,64 @@ class TestingServer:
                 if isinstance(correct_answer, int):
                     # Single answer validation
                     if correct_answer < 0 or correct_answer >= options_count:
-                        errors.append(f"Question {i+1} correct_answer index out of range")
+                        errors.append(self._t("q_correct_range", n=i + 1))
                 elif isinstance(correct_answer, list):
                     # Multiple answers validation
                     if len(correct_answer) == 0:
-                        errors.append(f"Question {i+1} correct_answer array cannot be empty")
+                        errors.append(self._t("q_correct_empty", n=i + 1))
                     elif not all(isinstance(idx, int) for idx in correct_answer):
-                        errors.append(f"Question {i+1} correct_answer array must contain only integers")
+                        errors.append(self._t("q_correct_ints", n=i + 1))
                     elif any(idx < 0 or idx >= options_count for idx in correct_answer):
-                        errors.append(f"Question {i+1} correct_answer array contains index out of range")
+                        errors.append(self._t("q_correct_array_range", n=i + 1))
                     elif len(set(correct_answer)) != len(correct_answer):
-                        errors.append(f"Question {i+1} correct_answer array contains duplicate indices")
+                        errors.append(self._t("q_correct_duplicates", n=i + 1))
                 else:
-                    errors.append(f"Question {i+1} correct_answer must be an integer or array of integers")
+                    errors.append(self._t("q_correct_type", n=i + 1))
 
             # Validate min_correct (only valid for multiple choice questions)
             if not is_text_question and "min_correct" in question:
                 min_correct = question["min_correct"]
                 if "correct_answer" not in question:
-                    errors.append(f"Question {i+1} has min_correct but no correct_answer")
+                    errors.append(self._t("q_min_no_correct", n=i + 1))
                 elif not isinstance(question["correct_answer"], list):
-                    errors.append(f"Question {i+1} min_correct is only valid for multiple answer questions")
+                    errors.append(self._t("q_min_multiple_only", n=i + 1))
                 elif not isinstance(min_correct, int):
-                    errors.append(f"Question {i+1} min_correct must be an integer")
+                    errors.append(self._t("q_min_int", n=i + 1))
                 elif min_correct < 1:
-                    errors.append(f"Question {i+1} min_correct must be at least 1")
+                    errors.append(self._t("q_min_positive", n=i + 1))
                 elif min_correct > len(question["correct_answer"]):
-                    errors.append(f"Question {i+1} min_correct cannot exceed number of correct answers")
+                    errors.append(self._t("q_min_exceeds", n=i + 1))
 
             # Validate points (valid for all question types)
             if "points" in question:
                 points = question["points"]
                 if isinstance(points, bool) or not isinstance(points, (int, float)):
-                    errors.append(f"Question {i+1} points must be a positive number")
+                    errors.append(self._t("q_points_number", n=i + 1))
                 elif points <= 0:
-                    errors.append(f"Question {i+1} points must be greater than 0")
+                    errors.append(self._t("q_points_positive", n=i + 1))
                 elif round(points, POINTS_DECIMAL_PLACES) != points:
-                    errors.append(f"Question {i+1} points can have at most {POINTS_DECIMAL_PLACES} decimal places")
+                    errors.append(self._t("q_points_decimals", n=i + 1, places=POINTS_DECIMAL_PLACES))
 
             # Validate stick_to_the_previous (valid for all question types)
             if "stick_to_the_previous" in question:
                 stick_value = question["stick_to_the_previous"]
                 if not isinstance(stick_value, bool):
-                    errors.append(f"Question {i+1} 'stick_to_the_previous' must be a boolean (true or false)")
+                    errors.append(self._t("q_sticky_bool", n=i + 1))
                 elif i == 0 and stick_value is True:
-                    errors.append(
-                        "Question 1 cannot have 'stick_to_the_previous: true' (no previous question to stick to)"
-                    )
+                    errors.append(self._t("q_first_sticky"))
 
         # Validate optional top-level fields
         if "show_right_answer" in data and not isinstance(data["show_right_answer"], bool):
-            errors.append("'show_right_answer' must be a boolean (true or false)")
+            errors.append(self._t("quiz_field_bool", field="show_right_answer"))
 
         if "randomize_questions" in data and not isinstance(data["randomize_questions"], bool):
-            errors.append("'randomize_questions' must be a boolean (true or false)")
+            errors.append(self._t("quiz_field_bool", field="randomize_questions"))
 
         if "show_final_list" in data and not isinstance(data["show_final_list"], bool):
-            errors.append("'show_final_list' must be a boolean (true or false)")
+            errors.append(self._t("quiz_field_bool", field="show_final_list"))
 
         if "title" in data and not isinstance(data["title"], str):
-            errors.append("'title' must be a string")
+            errors.append(self._t("quiz_title_str"))
 
         return len(errors) == 0
 
@@ -3807,7 +3822,7 @@ class TestingServer:
             return True
 
         if not isinstance(data, dict):
-            errors.append("Config must be a dictionary")
+            errors.append(self._t("config_not_dict"))
             return False
 
         # Validate language (optional)
@@ -3815,75 +3830,80 @@ class TestingServer:
             if data["language"] == "ru":
                 errors.append("російська мова не підтримується, але ти москалику попався")
             elif data["language"] not in ("uk", "en"):
-                errors.append("'language' must be 'uk' or 'en'")
+                errors.append(self._t("language_invalid"))
 
         # Validate extra_answers_with_users_csv (optional)
         if "extra_answers_with_users_csv" in data:
             if not isinstance(data["extra_answers_with_users_csv"], bool):
-                errors.append("'extra_answers_with_users_csv' must be a boolean")
+                errors.append(self._t("field_bool", field="extra_answers_with_users_csv"))
+
+        # Validate question_navigation (optional)
+        if "question_navigation" in data:
+            if not isinstance(data["question_navigation"], bool):
+                errors.append(self._t("field_bool", field="question_navigation"))
 
         # Validate server section (optional)
         if "server" in data:
             server = data["server"]
             if not isinstance(server, dict):
-                errors.append("'server' section must be a dictionary")
+                errors.append(self._t("section_dict", field="server"))
             else:
                 if "host" in server and not isinstance(server["host"], str):
-                    errors.append("'server.host' must be a string")
+                    errors.append(self._t("field_str", field="server.host"))
                 if "port" in server:
                     if not isinstance(server["port"], int):
-                        errors.append("'server.port' must be an integer")
+                        errors.append(self._t("port_int"))
                     elif server["port"] < 1 or server["port"] > 65535:
-                        errors.append("'server.port' must be between 1 and 65535")
+                        errors.append(self._t("port_range"))
 
         # Validate paths section (optional)
         if "paths" in data:
             paths = data["paths"]
             if not isinstance(paths, dict):
-                errors.append("'paths' section must be a dictionary")
+                errors.append(self._t("section_dict", field="paths"))
             else:
                 path_fields = ["quizzes_dir", "logs_dir", "csv_dir", "static_dir"]
                 for field in path_fields:
                     if field in paths and not isinstance(paths[field], str):
-                        errors.append(f"'paths.{field}' must be a string")
+                        errors.append(self._t("field_str", field=f"paths.{field}"))
 
         # Validate admin section (optional)
         if "admin" in data:
             admin = data["admin"]
             if not isinstance(admin, dict):
-                errors.append("'admin' section must be a dictionary")
+                errors.append(self._t("section_dict", field="admin"))
             else:
                 if "master_key" in admin:
                     if admin["master_key"] is not None and not isinstance(admin["master_key"], str):
-                        errors.append("'admin.master_key' must be a string or null")
+                        errors.append(self._t("master_key_type"))
                 if "trusted_ips" in admin:
                     if not isinstance(admin["trusted_ips"], list):
-                        errors.append("'admin.trusted_ips' must be a list")
+                        errors.append(self._t("field_list", field="admin.trusted_ips"))
                     elif not all(isinstance(ip, str) for ip in admin["trusted_ips"]):
-                        errors.append("'admin.trusted_ips' must contain only strings")
+                        errors.append(self._t("field_list_str", field="admin.trusted_ips"))
 
         # Validate registration section (optional)
         if "registration" in data:
             registration = data["registration"]
             if not isinstance(registration, dict):
-                errors.append("'registration' section must be a dictionary")
+                errors.append(self._t("section_dict", field="registration"))
             else:
                 if "fields" in registration:
                     if not isinstance(registration["fields"], list):
-                        errors.append("'registration.fields' must be a list")
+                        errors.append(self._t("field_list", field="registration.fields"))
                     elif not all(isinstance(field, str) for field in registration["fields"]):
-                        errors.append("'registration.fields' must contain only strings")
+                        errors.append(self._t("field_list_str", field="registration.fields"))
                 if "disabled_fields" in registration:
                     if not isinstance(registration["disabled_fields"], list):
-                        errors.append("'registration.disabled_fields' must be a list")
+                        errors.append(self._t("field_list", field="registration.disabled_fields"))
                     elif not all(isinstance(field, str) for field in registration["disabled_fields"]):
-                        errors.append("'registration.disabled_fields' must contain only strings")
+                        errors.append(self._t("field_list_str", field="registration.disabled_fields"))
                 if "approve" in registration:
                     if not isinstance(registration["approve"], bool):
-                        errors.append("'registration.approve' must be a boolean")
+                        errors.append(self._t("field_bool", field="registration.approve"))
                 if "username_label" in registration:
                     if not isinstance(registration["username_label"], str):
-                        errors.append("'registration.username_label' must be a string")
+                        errors.append(self._t("field_str", field="registration.username_label"))
 
         # Validate appearance section (optional)
         if "appearance" in data:
@@ -3891,33 +3911,33 @@ class TestingServer:
             if appearance is None:
                 pass
             elif not isinstance(appearance, dict):
-                errors.append("'appearance' section must be a dictionary")
+                errors.append(self._t("section_dict", field="appearance"))
             else:
                 color = appearance.get("background_color")
                 if color is not None and (not isinstance(color, str) or not HEX_COLOR_RE.match(color)):
-                    errors.append("'appearance.background_color' must be a hex color like '#1f2937'")
+                    errors.append(self._t("hex_color", field="appearance.background_color"))
                 image = appearance.get("background_image")
                 if image is not None and not isinstance(image, str):
-                    errors.append("'appearance.background_image' must be a string")
+                    errors.append(self._t("field_str", field="appearance.background_image"))
 
         # Validate quizzes section (optional)
         if "quizzes" in data:
             quizzes = data["quizzes"]
             if not isinstance(quizzes, list):
-                errors.append("'quizzes' section must be a list")
+                errors.append(self._t("section_list", field="quizzes"))
             else:
                 for i, quiz in enumerate(quizzes):
                     if not isinstance(quiz, dict):
-                        errors.append(f"Quiz {i+1} must be a dictionary")
+                        errors.append(self._t("quiz_item_dict", n=i + 1))
                         continue
 
                     # Check required fields for each quiz
                     required_quiz_fields = ["name", "download_path", "folder"]
                     for field in required_quiz_fields:
                         if field not in quiz:
-                            errors.append(f"Quiz {i+1} missing required field: '{field}'")
+                            errors.append(self._t("quiz_item_missing", n=i + 1, field=field))
                         elif not isinstance(quiz[field], str):
-                            errors.append(f"Quiz {i+1} field '{field}' must be a string")
+                            errors.append(self._t("quiz_item_str", n=i + 1, field=field))
 
         return len(errors) == 0
 
@@ -4009,18 +4029,18 @@ class TestingServer:
 
         # Validate filename (prevent path traversal)
         if not self._is_safe_filename(filename):
-            return web.json_response({"error": "Invalid filename"}, status=400)
+            return web.json_response({"error": self._t("invalid_filename")}, status=400)
 
         files_dir = os.path.join(self.quizzes_dir, "attach")
         file_path = os.path.join(files_dir, filename)
 
         # Check if file exists
         if not os.path.exists(file_path):
-            return web.json_response({"error": "File not found"}, status=404)
+            return web.json_response({"error": self._t("file_not_found")}, status=404)
 
         # Check if it's actually a file (not directory)
         if not os.path.isfile(file_path):
-            return web.json_response({"error": "Not a file"}, status=400)
+            return web.json_response({"error": self._t("not_a_file")}, status=400)
 
         # Return file response with attachment disposition to force download
         return web.FileResponse(
@@ -4046,23 +4066,23 @@ class TestingServer:
         folder = data.get("folder")
 
         if not name or not download_path:
-            return web.json_response({"error": "Name and download_path are required"}, status=400)
+            return web.json_response({"error": self._t("download_fields_required")}, status=400)
 
         # Check for absolute paths (Unix-style or Windows-style). Rooted paths are
         # checked explicitly: on Windows, Python 3.13+ isabs("/etc") is False (no drive)
         if os.path.isabs(folder) or folder.startswith(("/", "\\")) or (len(folder) >= 2 and folder[1] == ":"):
-            return web.json_response({"error": "Invalid folder path: absolute paths not allowed"}, status=400)
+            return web.json_response({"error": self._t("folder_absolute")}, status=400)
 
         # Check for path traversal attempts before normalization
         if ".." in folder:
-            return web.json_response({"error": "Invalid folder path: parent directory access not allowed"}, status=400)
+            return web.json_response({"error": self._t("folder_parent")}, status=400)
 
         # Normalize the path to handle different separators
         normalized_folder = os.path.normpath(folder)
 
         # Double-check after normalization
         if ".." in normalized_folder:
-            return web.json_response({"error": "Invalid folder path: parent directory access not allowed"}, status=400)
+            return web.json_response({"error": self._t("folder_parent")}, status=400)
 
         # Ensure the normalized path doesn't escape the quizzes directory
         test_path = os.path.normpath(os.path.join(self.quizzes_dir, normalized_folder))
@@ -4070,7 +4090,7 @@ class TestingServer:
         test_path_normalized = test_path + os.sep
 
         if not test_path_normalized.startswith(quizzes_dir_normalized):
-            return web.json_response({"error": "Invalid folder path: path traversal detected"}, status=400)
+            return web.json_response({"error": self._t("folder_traversal")}, status=400)
 
         folder = normalized_folder
 
@@ -4111,19 +4131,19 @@ class TestingServer:
                     # Update the quiz list
                     await self.list_available_quizzes()
 
-                    return web.json_response({"success": True, "message": f"Quiz '{name}' downloaded successfully"})
+                    return web.json_response({"success": True, "message": self._t("quiz_downloaded", name=name)})
 
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error downloading quiz: {e.response.status_code} - {e}")
-            return web.json_response({"error": f"Failed to download quiz: HTTP {e.response.status_code}"}, status=500)
+            return web.json_response({"error": self._t("download_http", status=e.response.status_code)}, status=500)
 
         except httpx.RequestError as e:
             logger.error(f"Network error downloading quiz: {e}")
-            return web.json_response({"error": f"Network error: {str(e)}"}, status=500)
+            return web.json_response({"error": self._t("network_error", error=str(e))}, status=500)
 
         except zipfile.BadZipFile as e:
             logger.error(f"Invalid ZIP file: {e}")
-            return web.json_response({"error": "Downloaded file is not a valid ZIP archive"}, status=500)
+            return web.json_response({"error": self._t("not_zip")}, status=500)
 
         except ValueError as e:
             logger.error(f"Validation error: {e}")
@@ -4152,7 +4172,7 @@ class TestingServer:
         config_path = self.config.config_path
         if not config_path:
             return web.json_response(
-                {"error": "No config file was specified. Server started without --config parameter."}, status=400
+                {"error": self._t("no_config_file")}, status=400
             )
 
         # Determine format: JSON data merge or direct YAML content
@@ -4160,7 +4180,7 @@ class TestingServer:
             # JSON partial update: merge into existing config
             merge_data = request_data["data"]
             if not isinstance(merge_data, dict):
-                return web.json_response({"error": "data must be a dictionary"}, status=400)
+                return web.json_response({"error": self._t("data_not_dict")}, status=400)
 
             # Use ruamel.yaml in round-trip mode so comments and blank lines
             # between sections survive partial saves from the admin web form.
@@ -4202,12 +4222,12 @@ class TestingServer:
         try:
             parsed_config = yaml.safe_load(content) if content else {}
         except yaml.YAMLError as e:
-            return web.json_response({"error": f"Invalid YAML syntax: {str(e)}"}, status=400)
+            return web.json_response({"error": self._t("invalid_yaml_syntax", error=str(e))}, status=400)
 
         # Validate config structure
         errors = []
         if not self._validate_config_data(parsed_config, errors):
-            return web.json_response({"error": "Configuration validation failed", "errors": errors}, status=400)
+            return web.json_response({"error": self._t("config_invalid"), "errors": errors}, status=400)
 
         # Read original config for rollback if apply fails
         original_content = None
@@ -4252,7 +4272,7 @@ class TestingServer:
             return web.json_response(
                 {
                     "success": False,
-                    "error": f"Failed to apply configuration: {str(e)}. Changes rolled back.",
+                    "error": self._t("config_apply_failed", error=str(e)),
                     "config_path": config_path,
                 },
                 status=500,
@@ -4260,11 +4280,11 @@ class TestingServer:
 
         # Build response message based on restart requirements
         if restart_reasons:
-            message = f"Configuration saved. Server restart required for: {', '.join(restart_reasons)}. Other changes applied."
+            message = self._t("config_saved_restart", reasons=", ".join(restart_reasons))
         elif self.current_quiz_file:
-            message = "Configuration saved and applied. Quiz restarted."
+            message = self._t("config_saved_restarted")
         else:
-            message = "Configuration saved and applied."
+            message = self._t("config_saved")
 
         # Read back saved content and parse for response
         saved_content = ""
@@ -4298,7 +4318,7 @@ class TestingServer:
             JSON response with success status and URL or error
         """
         if not self.tunnel_manager:
-            return web.json_response({"error": "Tunnel not configured"}, status=400)
+            return web.json_response({"error": self._t("tunnel_not_configured")}, status=400)
 
         success, result = await self.tunnel_manager.connect()
 
@@ -4320,7 +4340,7 @@ class TestingServer:
             JSON response with success status
         """
         if not self.tunnel_manager:
-            return web.json_response({"error": "Tunnel not configured"}, status=400)
+            return web.json_response({"error": self._t("tunnel_not_configured")}, status=400)
 
         await self.tunnel_manager.disconnect()
         logger.info("Tunnel disconnected")
@@ -4340,9 +4360,9 @@ class TestingServer:
         try:
             data = await request.json()
         except Exception:
-            return web.json_response({"error": "Invalid JSON"}, status=400)
+            return web.json_response({"error": self._t("invalid_json")}, status=400)
         if not isinstance(data, dict):
-            return web.json_response({"error": "Invalid request"}, status=400)
+            return web.json_response({"error": self._t("invalid_request")}, status=400)
         try:
             offer = await self.transfer.send_offer(data.get("to"), data.get("files"))
         except TransferError as e:
@@ -4362,7 +4382,7 @@ class TestingServer:
             try:
                 data = await request.json()
             except Exception:
-                return web.json_response({"error": "Invalid JSON"}, status=400)
+                return web.json_response({"error": self._t("invalid_json")}, status=400)
             choices = data.get("files") if isinstance(data, dict) else None
         try:
             result = await self.transfer.accept(request.match_info["request_id"], choices)
@@ -4459,21 +4479,21 @@ class TestingServer:
         elif file_type == "quizzes":
             base_dir = self.quizzes_dir
         else:
-            return None, web.json_response({"error": "Invalid file type"}, status=400)
+            return None, web.json_response({"error": self._t("invalid_file_type")}, status=400)
 
         # Validate filename (prevent path traversal)
         if not self._is_safe_filename(filename):
-            return None, web.json_response({"error": "Invalid filename"}, status=400)
+            return None, web.json_response({"error": self._t("invalid_filename")}, status=400)
 
         file_path = os.path.join(base_dir, filename)
 
         # Check if file exists
         if not os.path.exists(file_path):
-            return None, web.json_response({"error": "File not found"}, status=404)
+            return None, web.json_response({"error": self._t("file_not_found")}, status=404)
 
         # Check if it's actually a file (not directory)
         if not os.path.isfile(file_path):
-            return None, web.json_response({"error": "Path is not a file"}, status=400)
+            return None, web.json_response({"error": self._t("not_a_file")}, status=400)
 
         return file_path, None
 
@@ -4502,7 +4522,7 @@ class TestingServer:
         if file_size > MAX_VIEW_SIZE:
             return web.json_response(
                 {
-                    "error": f"File too large for viewing (>10MB). Size: {file_size} bytes. Use download instead.",
+                    "error": self._t("file_too_large", size=file_size),
                     "size": file_size,
                 },
                 status=400,
@@ -4513,7 +4533,7 @@ class TestingServer:
             async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
                 content = await f.read()
         except UnicodeDecodeError:
-            return web.json_response({"error": "File contains non-UTF-8 content. Use download instead."}, status=400)
+            return web.json_response({"error": self._t("file_not_utf8")}, status=400)
 
         return web.Response(
             text=content, content_type="text/plain", headers={"Content-Disposition": f'inline; filename="{filename}"'}
@@ -4566,25 +4586,25 @@ class TestingServer:
         content = data.get("content", "").strip()
 
         if not content:
-            return web.json_response({"error": "Content is required"}, status=400)
+            return web.json_response({"error": self._t("content_required")}, status=400)
 
         # Validate filename
         if not self._is_safe_filename(filename):
-            return web.json_response({"error": "Invalid filename"}, status=400)
+            return web.json_response({"error": self._t("invalid_filename")}, status=400)
 
         quiz_path = os.path.join(self.quizzes_dir, filename)
 
         if not os.path.exists(quiz_path):
-            return web.json_response({"error": "Quiz file not found"}, status=404)
+            return web.json_response({"error": self._t("quiz_not_found")}, status=404)
 
         # Validate YAML
         try:
             parsed = yaml.safe_load(content)
             errors = []
             if not self._validate_quiz_data(parsed, errors):
-                return web.json_response({"error": "Неправильна структура даних квізу", "errors": errors}, status=400)
+                return web.json_response({"error": self._t("invalid_quiz_structure"), "errors": errors}, status=400)
         except yaml.YAMLError as e:
-            return web.json_response({"error": f"Неправильний YAML: {str(e)}"}, status=400)
+            return web.json_response({"error": self._t("invalid_yaml", error=str(e))}, status=400)
 
         # Create backup
         backup_path = quiz_path + ".backup"
@@ -4606,7 +4626,7 @@ class TestingServer:
         return web.json_response(
             {
                 "success": True,
-                "message": f'Quiz "{filename}" saved successfully (backup created)',
+                "message": self._t("quiz_saved_backup", name=filename),
                 "backup": backup_path,
             }
         )

@@ -491,7 +491,8 @@ Templates appear in the admin quiz editor for easy insertion.
 Optional server configuration file (`webquiz.yaml`):
 
 ```yaml
-language: en  # Quiz interface language: "uk" (Ukrainian, default) or "en" (English)
+language: en  # Interface language (quiz page and admin panel): "uk" (Ukrainian, default) or "en" (English)
+question_navigation: false  # Question buttons on the quiz page when the quiz does not allow skipping
 
 server:
   host: "0.0.0.0"
@@ -521,12 +522,12 @@ All configuration sections are optional and have sensible defaults.
 
 ### Language
 
-The quiz interface language can be set via the `language` option in `webquiz.yaml`:
+The interface language can be set via the `language` option in `webquiz.yaml`:
 
 - `language: uk` (default) — Ukrainian interface
 - `language: en` — English interface
 
-This affects all user-facing text: registration form, quiz buttons, progress indicators, error messages, and results display. The setting is hot-reloadable — changes are applied immediately when saved via the admin panel without requiring a server restart.
+This affects all user-facing text: registration form, quiz buttons, progress indicators, error messages, and results display, as well as the admin panel (overview, quizzes, files, settings, access, live stats) and the messages of the admin API. The setting is hot-reloadable — changes are applied immediately when saved via the admin panel without requiring a server restart (an open admin page switches language after a reload).
 
 ### Answer Visibility Options
 

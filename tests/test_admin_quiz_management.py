@@ -86,7 +86,7 @@ def test_admin_create_quiz_already_exists(temp_dir):
 
         assert response.status_code == 409
         data = response.json()
-        assert "already exists" in data["error"]
+        assert "вже існує" in data["error"]
 
 
 def test_admin_get_quiz_content(temp_dir):
@@ -124,7 +124,7 @@ def test_admin_get_nonexistent_quiz(temp_dir):
 
         assert response.status_code == 404
         data = response.json()
-        assert "not found" in data["error"]
+        assert "не знайдено" in data["error"]
 
 
 def test_admin_update_quiz_wizard_mode(temp_dir):
@@ -152,7 +152,7 @@ def test_admin_update_quiz_wizard_mode(temp_dir):
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert "updated successfully" in data["message"]
+        assert "оновлено" in data["message"]
         assert "backup_created" in data
 
         # Verify the file was actually updated by retrieving it
@@ -240,7 +240,7 @@ def test_admin_delete_quiz(temp_dir):
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert "deleted successfully" in data["message"]
+        assert "видалено" in data["message"]
         assert "backup_created" in data
 
 
@@ -260,7 +260,7 @@ def test_admin_delete_active_quiz(temp_dir):
 
         assert response.status_code == 400
         data = response.json()
-        assert "currently active" in data["error"]
+        assert "активний тест" in data["error"]
 
 
 def test_admin_delete_nonexistent_quiz(temp_dir):
@@ -271,7 +271,7 @@ def test_admin_delete_nonexistent_quiz(temp_dir):
 
         assert response.status_code == 404
         data = response.json()
-        assert "not found" in data["error"]
+        assert "не знайдено" in data["error"]
 
 
 def test_validate_quiz_valid_structure(temp_dir):
@@ -396,7 +396,7 @@ questions:
         assert response2.status_code == 200
         data2 = response2.json()
         assert data2["valid"] is False
-        assert any("out of range" in error for error in data2["errors"])
+        assert any("поза межами" in error for error in data2["errors"])
 
 
 def test_validate_quiz_image_only_questions(temp_dir):

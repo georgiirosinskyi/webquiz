@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, App, Button, Card, Flex, Input, List, Select, Space, Tag, Typography } from "antd";
 import { CheckOutlined, CloudDownloadOutlined, CopyOutlined, LinkOutlined } from "@ant-design/icons";
 import { apiGet, apiSend } from "../shared/api";
+import { getLanguage, t, type MessageKey } from "../shared/i18n";
 import { formatFileSize } from "../shared/format";
 import {
   isNewerVersion,
@@ -12,24 +13,24 @@ import {
   type TunnelStatus,
 } from "./types";
 
-const TRANSFER_TYPE_LABELS: Record<string, string> = {
-  quizzes: "тест",
-  logs: "лог",
-  csv: "CSV",
-  images: "зображення",
-  attachments: "вкладення",
+const TRANSFER_TYPE_LABELS: Record<string, MessageKey> = {
+  quizzes: "transfer.type_quizzes",
+  logs: "transfer.type_logs",
+  csv: "transfer.type_csv",
+  images: "transfer.type_images",
+  attachments: "transfer.type_attachments",
 };
-const TRANSFER_CASE: Record<IncomingFile["case"], { color: string; text: (target: string) => string }> = {
-  new: { color: "green", text: (target) => `🆕 Новий файл: ${target}` },
-  same: { color: "default", text: (target) => `✓ Такий самий файл вже є: ${target}` },
-  different: { color: "orange", text: (target) => `⚠️ Вже є інший файл ${target}` },
-  in_use: { color: "red", text: (target) => `🔒 ${target} зараз використовується сервером` },
+const TRANSFER_CASE: Record<IncomingFile["case"], { color: string; key: MessageKey }> = {
+  new: { color: "green", key: "transfer.case_new" },
+  same: { color: "default", key: "transfer.case_same" },
+  different: { color: "orange", key: "transfer.case_different" },
+  in_use: { color: "red", key: "transfer.case_in_use" },
 };
-const TRANSFER_ACTION_TEXT: Record<TransferAction, string> = {
-  save: "Зберегти",
-  replace: "Замінити",
-  rename: "Перейменувати",
-  skip: "Пропустити",
+const TRANSFER_ACTION_TEXT: Record<TransferAction, MessageKey> = {
+  save: "transfer.action_save",
+  replace: "transfer.action_replace",
+  rename: "transfer.action_rename",
+  skip: "transfer.action_skip",
 };
 
 type Choice = { action: TransferAction; new_name: string };
@@ -65,22 +66,22 @@ function TransferRequestItem({ request, onDone }: { request: TransferRequest; on
         failed: { name: string; error: string }[];
       }>("POST", `/api/admin/transfer/${encodeURIComponent(request.id)}/${action}`, action === "accept" ? { files } : {});
       if (!result.ok) {
-        const text = result.data.error || "Помилка обробки запиту";
+        const text = result.data.error || t("transfer.request_failed");
         message.error(text);
         // Invalid choices: nothing was downloaded, the request is still open
         keep = result.status === 400;
         setError(text);
       } else if (action === "reject") {
-        message.success("Запит відхилено");
+        message.success(t("transfer.rejected"));
       } else {
         const { saved, skipped, failed } = result.data;
         if (saved.length > 0)
-          message.success(`Отримано файлів: ${saved.length} (${saved.map((file) => file.saved_as).join(", ")})`);
-        if (skipped.length > 0) message.success(`Пропущено файлів: ${skipped.length}`);
-        failed.forEach((file) => message.error(`Не вдалося отримати ${file.name}: ${file.error}`));
+          message.success(t("transfer.received", { count: saved.length, names: saved.map((file) => file.saved_as).join(", ") }));
+        if (skipped.length > 0) message.success(t("transfer.skipped", { count: skipped.length }));
+        failed.forEach((file) => message.error(t("transfer.file_failed", { name: file.name, error: file.error })));
       }
     } catch (caught) {
-      const text = `Помилка з'єднання: ${(caught as Error).message}`;
+      const text = t("common.connection_error", { error: (caught as Error).message });
       message.error(text);
       setError(text);
       keep = true;
@@ -91,11 +92,11 @@ function TransferRequestItem({ request, onDone }: { request: TransferRequest; on
   };
 
   return (
-    <Card size="small" type="inner" title={`🖥️ Від: ${request.from}`} data-testid="transfer-request">
+    <Card size="small" type="inner" title={t("transfer.from", { name: request.from })} data-testid="transfer-request">
       <Flex vertical gap={10}>
         {request.files.map((file) => {
           const choice = choices[fileKey(file)];
-          const caseInfo = TRANSFER_CASE[file.case] || { color: "default", text: (target: string) => target };
+          const caseInfo = TRANSFER_CASE[file.case];
           return (
             <Flex key={fileKey(file)} wrap gap={8} align="center" justify="space-between">
               <div style={{ minWidth: 160 }}>
@@ -104,24 +105,24 @@ function TransferRequestItem({ request, onDone }: { request: TransferRequest; on
                 </Typography.Text>
                 <br />
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {TRANSFER_TYPE_LABELS[file.type] || file.type}, {formatFileSize(file.size)}
+                  {TRANSFER_TYPE_LABELS[file.type] ? t(TRANSFER_TYPE_LABELS[file.type]) : file.type}, {formatFileSize(file.size)}
                 </Typography.Text>
               </div>
-              <Tag color={caseInfo.color} style={{ whiteSpace: "normal" }}>
-                {caseInfo.text(file.target)}
+              <Tag color={caseInfo?.color || "default"} style={{ whiteSpace: "normal" }}>
+                {caseInfo ? t(caseInfo.key, { target: file.target }) : file.target}
               </Tag>
               <Space.Compact>
                 <Select<TransferAction>
-                  aria-label="Дія для файлу"
+                  aria-label={t("transfer.file_action")}
                   value={choice.action}
                   disabled={!!busy}
                   style={{ width: 150 }}
-                  options={file.actions.map((action) => ({ value: action, label: TRANSFER_ACTION_TEXT[action] || action }))}
+                  options={file.actions.map((action) => ({ value: action, label: TRANSFER_ACTION_TEXT[action] ? t(TRANSFER_ACTION_TEXT[action]) : action }))}
                   onChange={(action) => setChoices({ ...choices, [fileKey(file)]: { ...choice, action } })}
                 />
                 {choice.action === "rename" && (
                   <Input
-                    aria-label="Нова назва файлу"
+                    aria-label={t("transfer.new_name")}
                     value={choice.new_name}
                     disabled={!!busy}
                     style={{ width: 180 }}
@@ -137,10 +138,10 @@ function TransferRequestItem({ request, onDone }: { request: TransferRequest; on
         {error && <Alert type="error" title={error} showIcon />}
         <Space>
           <Button type="primary" loading={busy === "accept"} disabled={!!busy} onClick={() => answer("accept")}>
-            ✓ Прийняти
+            {t("transfer.accept")}
           </Button>
           <Button danger loading={busy === "reject"} disabled={!!busy} onClick={() => answer("reject")}>
-            ✗ Відхилити
+            {t("transfer.reject")}
           </Button>
         </Space>
       </Flex>
@@ -157,11 +158,8 @@ export function TransferRequests({
 }) {
   if (requests.length === 0) return null;
   return (
-    <Card title="📥 Запити на отримання файлів" data-testid="transfer-requests">
-      <Typography.Paragraph type="secondary">
-        Інший сервер хоче надіслати файли. Оберіть, що зробити з кожним файлом, і натисніть «Прийняти». Файли
-        з'являться в менеджері файлів.
-      </Typography.Paragraph>
+    <Card title={t("transfer.requests_title")} data-testid="transfer-requests">
+      <Typography.Paragraph type="secondary">{t("transfer.requests_hint")}</Typography.Paragraph>
       <Flex vertical gap={12}>
         {requests.map((request) => (
           <TransferRequestItem key={request.id} request={request} onDone={(keep) => onDone(request.id, keep)} />
@@ -210,10 +208,10 @@ export function AccessCard({
         "POST",
         connected ? "/api/admin/tunnel/disconnect" : "/api/admin/tunnel/connect",
       );
-      if (!result.ok) throw new Error(result.data.error || "Operation failed");
-      message.success(connected ? "Tunnel disconnected" : `Tunnel connected! Public URL: ${result.data.url}`);
+      if (!result.ok) throw new Error(result.data.error || t("access.failed"));
+      message.success(connected ? t("access.disconnected") : t("access.connected", { url: result.data.url || "" }));
     } catch (error) {
-      message.error(`Tunnel operation failed: ${(error as Error).message}`);
+      message.error(t("access.operation_failed", { error: (error as Error).message }));
     } finally {
       setBusy(false);
     }
@@ -225,23 +223,23 @@ export function AccessCard({
         setCopied(true);
         window.setTimeout(() => setCopied(false), 2000);
       } else {
-        message.error("Failed to copy to clipboard. Please copy manually.");
+        message.error(t("access.copy_failed"));
       }
     } catch (error) {
-      message.error(`Failed to copy: ${(error as Error).message}`);
+      message.error(t("access.copy_error", { error: (error as Error).message }));
     }
   };
 
   return (
-    <Card title="🌐 Доступ" data-testid="access-card">
-      <Typography.Text strong>URL для доступу з інших пристроїв:</Typography.Text>
+    <Card title={t("access.title")} data-testid="access-card">
+      <Typography.Text strong>{t("access.urls")}</Typography.Text>
       <Flex vertical gap={6} style={{ margin: "8px 0 0" }} data-testid="url-list">
         {tunnel?.connected && tunnel.url && (
           <Alert
             type="success"
             title={
               <>
-                <strong>🌐 Зовнішній URL:</strong>{" "}
+                <strong>{t("access.public_url")}</strong>{" "}
                 <a href={tunnel.url} target="_blank" rel="noreferrer">
                   {tunnel.url}
                 </a>
@@ -258,30 +256,30 @@ export function AccessCard({
         ) : (
           <Alert
             type="warning"
-            title="Зовнішні мережеві інтерфейси не знайдені"
-            description="Сервер доступний тільки локально. Перевірте мережеві налаштування або параметри файрвола."
+            title={t("access.no_interfaces")}
+            description={t("access.no_interfaces_hint")}
           />
         )}
       </Flex>
 
       {showTunnel && (
         <div style={{ marginTop: 16 }} data-testid="tunnel-section">
-          <Typography.Title level={5}>SSH Tunnel</Typography.Title>
+          <Typography.Title level={5}>{t("access.tunnel")}</Typography.Title>
           <div>
-            <strong>Server:</strong> {tunnel.server}
+            <strong>{t("access.server")}</strong> {tunnel.server}
           </div>
           {tunnel.socket_name && (
             <div>
-              <strong>Socket Name:</strong> {tunnel.socket_name}
+              <strong>{t("access.socket")}</strong> {tunnel.socket_name}
             </div>
           )}
           {tunnel.keys_status === "ok" && publicKey && (
             <div style={{ marginTop: 8 }}>
-              <strong>Public Key:</strong>
+              <strong>{t("access.public_key")}</strong>
               <Space.Compact style={{ width: "100%", marginTop: 4 }}>
                 <Input.TextArea readOnly value={publicKey} autoSize={{ minRows: 1, maxRows: 4 }} className="code-editor" />
                 <Button icon={copied ? <CheckOutlined /> : <CopyOutlined />} onClick={copyKey}>
-                  {copied ? "Copied!" : "Copy"}
+                  {copied ? t("access.copied") : t("access.copy")}
                 </Button>
               </Space.Compact>
             </div>
@@ -294,10 +292,10 @@ export function AccessCard({
             onClick={toggleTunnel}
             data-testid="tunnel-connect-btn"
           >
-            {tunnel.connected ? "Disconnect" : "Connect"}
+            {tunnel.connected ? t("access.disconnect") : t("access.connect")}
           </Button>
           {!tunnel.connected && tunnel.error && (
-            <Alert type="error" style={{ marginTop: 10 }} title={`Error: ${tunnel.error}`} />
+            <Alert type="error" style={{ marginTop: 10 }} title={t("access.error", { error: tunnel.error })} />
           )}
         </div>
       )}
@@ -312,8 +310,8 @@ export function DownloadableQuizzes({ quizzes, onDownloaded }: { quizzes: Downlo
 
   const download = (quiz: DownloadableQuiz, index: number) =>
     modal.confirm({
-      title: `Завантажити quiz "${quiz.name}"?`,
-      content: `Це завантажить та розпакує файли з ${quiz.download_path}. Файли будуть перезаписані в директорії quizzes.`,
+      title: t("quizzes.download_title", { name: quiz.name }),
+      content: t("quizzes.download_content", { url: quiz.download_path }),
       onOk: async () => {
         setBusy(index);
         try {
@@ -322,10 +320,10 @@ export function DownloadableQuizzes({ quizzes, onDownloaded }: { quizzes: Downlo
             message.success(`✅ ${result.data.message}`);
             onDownloaded();
           } else {
-            message.error(`❌ Помилка завантаження: ${result.data.error}`);
+            message.error(t("quizzes.download_failed", { error: result.data.error || result.status }));
           }
         } catch (error) {
-          message.error(`❌ Помилка мережі: ${(error as Error).message}`);
+          message.error(t("quizzes.network_error", { error: (error as Error).message }));
         } finally {
           setBusy(null);
         }
@@ -333,7 +331,7 @@ export function DownloadableQuizzes({ quizzes, onDownloaded }: { quizzes: Downlo
     });
 
   return (
-    <Card title="Quiz для завантаження" data-testid="downloadable-quizzes">
+    <Card title={t("quizzes.downloadable_title")} data-testid="downloadable-quizzes">
       <List
         dataSource={quizzes}
         renderItem={(quiz, index) => (
@@ -345,7 +343,7 @@ export function DownloadableQuizzes({ quizzes, onDownloaded }: { quizzes: Downlo
                 loading={busy === index}
                 onClick={() => download(quiz, index)}
               >
-                Завантажити
+                {t("common.download")}
               </Button>,
             ]}
           >
@@ -357,7 +355,7 @@ export function DownloadableQuizzes({ quizzes, onDownloaded }: { quizzes: Downlo
                     {quiz.download_path}
                   </Typography.Text>
                   <br />
-                  <Typography.Text type="secondary">Папка: {quiz.folder}</Typography.Text>
+                  <Typography.Text type="secondary">{t("quizzes.folder", { folder: quiz.folder })}</Typography.Text>
                 </>
               }
             />
@@ -405,19 +403,19 @@ export function AdminFooter({ version }: { version: string }) {
         WebQuiz v{version}
         {" | "}
         <a
-          href={`https://github.com/oduvan/webquiz/releases/download/v${version}/webquiz-documentation-uk.pdf`}
+          href={`https://github.com/oduvan/webquiz/releases/download/v${version}/webquiz-documentation-${getLanguage()}.pdf`}
           target="_blank"
           rel="noreferrer"
         >
-          📄 Документація
+          {t("footer.docs")}
         </a>
       </Typography.Text>
       {installed ? (
-        <Tag color="red">New version installed (v{installed}), restart required</Tag>
+        <Tag color="red">{t("footer.restart_required", { version: installed })}</Tag>
       ) : (
         latest && (
           <Tag color="blue">
-            ⬆️ Update available:{" "}
+            {t("footer.update")}{" "}
             <a href={`https://github.com/oduvan/webquiz/releases/tag/v${latest}`} target="_blank" rel="noreferrer">
               v{latest}
             </a>

@@ -42,6 +42,8 @@ import yaml
 from aiohttp import web
 from ruamel.yaml import YAML as RuamelYAML
 
+from .translations import admin_text
+
 logger = logging.getLogger(__name__)
 
 # File types that can be transferred and their allowed extensions (None: any)
@@ -210,6 +212,7 @@ class TransferManager:
         get_endpoint: Callable[[], Optional[Tuple[str, str]]],
         notify: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
         get_files_in_use: Optional[Callable[[], List[Optional[str]]]] = None,
+        get_language: Optional[Callable[[], str]] = None,
     ):
         """Initialize transfer manager
 
@@ -221,13 +224,18 @@ class TransferManager:
             notify: Async function called with admin WebSocket messages
             get_files_in_use: Returns paths the running server writes or uses
                 (current log, CSV files, active quiz); they cannot be replaced
+            get_language: Returns the language of the error messages ("uk"/"en", default English)
         """
         self.get_directories = get_directories
         self.get_endpoint = get_endpoint
         self.notify = notify
         self.get_files_in_use = get_files_in_use or (lambda: [])
+        self.get_language = get_language or (lambda: "en")
         self.outgoing: Dict[str, Dict[str, Any]] = {}  # token -> offer
         self.incoming: Dict[str, Dict[str, Any]] = {}  # request id -> request
+
+    def _t(self, key: str, **params) -> str:
+        return admin_text(self.get_language(), key, **params)
 
     async def _notify(self, message: Dict[str, Any]):
         if self.notify:
@@ -239,7 +247,7 @@ class TransferManager:
     def _require_endpoint(self) -> Tuple[str, str]:
         endpoint = self.get_endpoint()
         if not endpoint:
-            raise TransferError("SSH tunnel is not connected", 409)
+            raise TransferError(self._t("transfer_not_connected"), 409)
         return endpoint
 
     def _remove_expired(self):
@@ -295,18 +303,17 @@ class TransferManager:
             "incoming": self.list_incoming(),
         }
 
-    @staticmethod
-    def _parse_file_list(files: Any) -> List[Dict[str, Any]]:
+    def _parse_file_list(self, files: Any) -> List[Dict[str, Any]]:
         if not isinstance(files, list) or not files:
-            raise TransferError("No files selected")
+            raise TransferError(self._t("transfer_no_files"))
         if len(files) > MAX_FILES_PER_OFFER:
-            raise TransferError(f"Too many files (maximum {MAX_FILES_PER_OFFER})")
+            raise TransferError(self._t("transfer_too_many", max=MAX_FILES_PER_OFFER))
         result = []
         for item in files:
             file_type = item.get("type") if isinstance(item, dict) else None
             name = item.get("name") if isinstance(item, dict) else None
             if not is_allowed_file(file_type, name):
-                raise TransferError(f"This file cannot be transferred: {name}")
+                raise TransferError(self._t("transfer_not_allowed", name=name))
             result.append({"type": file_type, "name": name})
         return result
 
@@ -333,16 +340,16 @@ class TransferManager:
         """
         base_url, own_name = self._require_endpoint()
         if not is_valid_server_name(target):
-            raise TransferError("Invalid server name. Use letters, digits, '-', '_' and '.'")
+            raise TransferError(self._t("transfer_invalid_name"))
         if target == own_name:
-            raise TransferError("This is the name of this server")
+            raise TransferError(self._t("transfer_own_name"))
 
         directories = self.get_directories()
         entries = []
         for item in self._parse_file_list(files):
             path = os.path.join(directories[item["type"]], item["name"])
             if not os.path.isfile(path):
-                raise TransferError(f"File not found: {item['name']}", 404)
+                raise TransferError(self._t("transfer_file_not_found", name=item["name"]), 404)
             entries.append({**item, "path": path})
 
         # Files used by the quizzes; a missing file is skipped (the quiz shows it as broken anyway)
@@ -357,7 +364,7 @@ class TransferManager:
         for entry in entries:
             unique.setdefault((entry["type"], entry["name"]), entry)
         if len(unique) > MAX_FILES_PER_OFFER:
-            raise TransferError(f"Too many files with images and attachments (maximum {MAX_FILES_PER_OFFER})")
+            raise TransferError(self._t("transfer_too_many_media", max=MAX_FILES_PER_OFFER))
         # The checksum lets the receiver see if it already has the same file
         entries = [
             {
@@ -390,15 +397,15 @@ class TransferManager:
                 )
         except httpx.HTTPError as e:
             del self.outgoing[token]
-            raise TransferError(f"Cannot reach the tunnel server: {e}", 502)
+            raise TransferError(self._t("transfer_unreachable", error=e), 502)
 
         if response.status_code >= 400:
             del self.outgoing[token]
             if response.status_code in (502, 503, 504):
-                raise TransferError(f"Server '{target}' is not online", 404)
+                raise TransferError(self._t("transfer_offline", name=target), 404)
             if response.status_code in (404, 405):
-                raise TransferError(f"Server '{target}' does not support file transfer. Update WebQuiz there", 404)
-            raise TransferError(f"Server '{target}' refused the request: {self._response_error(response)}", 502)
+                raise TransferError(self._t("transfer_unsupported", name=target), 404)
+            raise TransferError(self._t("transfer_refused", name=target, error=self._response_error(response)), 502)
 
         logger.info(f"Offered {len(entries)} file(s) to '{target}'")
         return self._offer_view(offer)
@@ -450,13 +457,13 @@ class TransferManager:
         """Validate and store an offer from another server"""
         _, own_name = self._require_endpoint()
         if not isinstance(data, dict):
-            raise TransferError("Invalid request")
+            raise TransferError(self._t("invalid_request"))
         sender = data.get("from")
         token = data.get("token")
         if not is_valid_server_name(sender) or sender == own_name:
-            raise TransferError("Invalid sender name")
+            raise TransferError(self._t("transfer_invalid_sender"))
         if not isinstance(token, str) or not TOKEN_PATTERN.match(token):
-            raise TransferError("Invalid token")
+            raise TransferError(self._t("transfer_invalid_token"))
 
         entries = self._parse_file_list(data.get("files"))
         for entry, item in zip(entries, data["files"]):
@@ -467,7 +474,7 @@ class TransferManager:
 
         self._remove_expired()
         if len(self.incoming) >= MAX_INCOMING_REQUESTS:
-            raise TransferError("Too many waiting requests on this server", 429)
+            raise TransferError(self._t("transfer_too_many_waiting"), 429)
 
         request = {
             "id": secrets.token_hex(8),
@@ -576,7 +583,7 @@ class TransferManager:
             choice = by_file.get((entry["type"], entry["name"]), {})
             action = choice.get("action") or file_plan["default_action"]
             if action not in file_plan["actions"]:
-                errors.append(f"{entry['name']}: '{action}' is not possible for this file now")
+                errors.append(self._t("transfer_action_impossible", name=entry["name"], action=action))
                 continue
             if action == "skip":
                 plan.append((entry, action, None))
@@ -586,13 +593,13 @@ class TransferManager:
             if action == "rename":
                 name = choice.get("new_name") or file_plan["suggested_name"]
                 if not is_allowed_file(entry["type"], name):
-                    errors.append(f"{entry['name']}: '{name}' is not a valid name for this file")
+                    errors.append(self._t("transfer_bad_name", name=entry["name"], new_name=name))
                     continue
                 if os.path.exists(os.path.join(directories[entry["type"]], name)):
-                    errors.append(f"{entry['name']}: a file named '{name}' already exists")
+                    errors.append(self._t("transfer_name_exists", name=entry["name"], new_name=name))
                     continue
             if (entry["type"], name) in chosen:
-                errors.append(f"'{name}' is chosen for two files")
+                errors.append(self._t("transfer_chosen_twice", new_name=name))
                 continue
             chosen.add((entry["type"], name))
             plan.append((entry, action, name))
@@ -628,25 +635,25 @@ class TransferManager:
             with os.fdopen(fd, "wb") as temp_file:
                 async with client.stream("GET", url) as response:
                     if response.status_code in (502, 503, 504):
-                        raise TransferError(f"Server '{sender}' is not online")
+                        raise TransferError(self._t("transfer_offline", name=sender))
                     if response.status_code != 200:
-                        raise TransferError("The sender does not offer this file anymore")
+                        raise TransferError(self._t("transfer_not_offered"))
                     size = 0
                     async for chunk in response.aiter_bytes():
                         size += len(chunk)
                         if size > MAX_FILE_SIZE:
-                            raise TransferError(f"File is larger than {MAX_FILE_SIZE // (1024 * 1024)} MB")
+                            raise TransferError(self._t("transfer_too_large", mb=MAX_FILE_SIZE // (1024 * 1024)))
                         temp_file.write(chunk)
             if entry["type"] == "quizzes" and renamed_media:
                 rewrite_quiz_media(temp_path, renamed_media)
             final_path = os.path.join(directory, save_as)
             if not overwrite and os.path.exists(final_path):
-                raise TransferError(f"A file named '{save_as}' appeared meanwhile")
+                raise TransferError(self._t("transfer_appeared", name=save_as))
             if overwrite and self._is_in_use(final_path):
-                raise TransferError(f"'{save_as}' is used by the running server")
+                raise TransferError(self._t("transfer_in_use", name=save_as))
             os.replace(temp_path, final_path)
         except httpx.HTTPError as e:
-            raise TransferError(f"Download failed: {e}")
+            raise TransferError(self._t("transfer_download_failed", error=e))
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
@@ -660,7 +667,7 @@ class TransferManager:
     def _take_pending(self, request_id: Any) -> Dict[str, Any]:
         request = self.incoming.get(request_id) if isinstance(request_id, str) else None
         if not request or request["status"] != "pending":
-            raise TransferError("Request not found or expired", 404)
+            raise TransferError(self._t("transfer_request_not_found"), 404)
         return request
 
     async def accept(self, request_id: Any, choices: Any = None) -> Dict[str, Any]:

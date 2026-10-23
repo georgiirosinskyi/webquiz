@@ -6,9 +6,10 @@
 language: en
 ```
 
-- **language** — quiz interface language. Supported values: `"uk"` (Ukrainian, default) and `"en"` (English).
+- **language** — interface language. Supported values: `"uk"` (Ukrainian, default) and `"en"` (English).
   This setting controls all user-facing text: registration form labels, quiz buttons, progress indicators, validation error messages, and results display.
-  Hot-reloadable — changes are applied immediately when saved via the admin panel.
+  The admin panel (overview, quizzes, files, settings, access, live stats) and the server messages it shows use the same language.
+  Hot-reloadable — changes are applied immediately when saved via the admin panel; an open admin page switches language after a reload.
 
 ### Extra answers-with-users CSV export
 
@@ -27,6 +28,18 @@ extra_answers_with_users_csv: true
   join the two existing CSVs yourself.
   Default is `false`. Hot-reloadable — the change takes effect on the next
   quiz switch or quiz restart.
+
+### Question navigation
+
+```
+question_navigation: true
+```
+
+- **question_navigation** — shows the numbered question buttons on the quiz page in quizzes
+  that do not allow skipping (`allow_skip_questions` is off). With them a user can go back to
+  questions they have already opened. Quizzes that allow skipping always have the buttons.
+  Default is `false`: no buttons, questions go one after another.
+  Hot-reloadable. In the admin **Settings** section (Form view): **Question navigation when skipping is off**.
 
 ---
 

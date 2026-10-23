@@ -26,7 +26,7 @@ In this section, you'll learn how to effectively use AI for:
 - Manual verification of specific questions
 - Working with sensitive data
 
-> **Tip:** To view CSV files, open **Files** → **CSV Files** tab (see [Administrative Interface](030_admin.md) for details).
+> **Tip:** To view CSV files, open **Files** → **CSV files** tab (see [Administrative Interface](030_admin.md) for details).
 
 ---
 
@@ -367,7 +367,7 @@ questions:
 **After generation:**
 1. Copy generated YAML to a file (e.g., `history_test.yaml`)
 2. Place the file in the `quizzes/` folder
-3. Validate the quiz via **Files** → **Quiz Files** → **Validate** button
+3. Validate the quiz via **Files** → **Quizzes** → **Validate** button
 4. Try the quiz yourself before using with students
 
 ---
@@ -718,7 +718,7 @@ Process of continuous quiz improvement based on AI analysis:
 
 **Step 1:** Conduct quiz with students
 
-**Step 2:** Export CSV results via **Files** → **CSV Files**
+**Step 2:** Export CSV results via **Files** → **CSV files**
 
 **Step 3:** Use AI for difficulty analysis (Prompt 1)
 
@@ -743,7 +743,7 @@ Task: Make harder or replace with another
 Output format: WebQuiz YAML (only these 2 questions)
 ```
 
-**Step 6:** Replace problematic questions in YAML file via **Files** → **Quiz Files** → **Edit** button
+**Step 6:** Replace problematic questions in YAML file via **Files** → **Quizzes** → **Edit** button
 
 **Step 7:** Run quiz again and compare results
 

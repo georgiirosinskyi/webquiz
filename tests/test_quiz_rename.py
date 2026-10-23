@@ -174,8 +174,8 @@ def test_rename_active_quiz_blocked(temp_dir):
         assert response.status_code == 409
         data = response.json()
         assert "error" in data
-        assert "Cannot rename active quiz" in data["error"]
-        assert "switch to a different quiz" in data["error"]
+        assert "Не можна перейменувати активний тест" in data["error"]
+        assert "переключіться на інший тест" in data["error"]
 
         # Verify quiz still accessible with old name
         response = requests.get(
@@ -221,7 +221,7 @@ def test_rename_quiz_filename_conflict(temp_dir):
         assert response.status_code == 409
         data = response.json()
         assert "error" in data
-        assert "already exists" in data["error"]
+        assert "вже існує" in data["error"]
         assert "quiz_b.yaml" in data["error"]
 
         # Verify quiz_a still has original title
@@ -258,7 +258,7 @@ def test_rename_nonexistent_quiz(temp_dir):
         assert response.status_code == 404
         data = response.json()
         assert "error" in data
-        assert "not found" in data["error"].lower()
+        assert "не знайдено" in data["error"]
 
 
 def test_rename_quiz_text_mode(temp_dir):

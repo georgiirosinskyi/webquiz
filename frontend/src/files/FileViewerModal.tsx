@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Empty, Modal, Spin, Table } from "antd";
 import { apiText } from "../shared/api";
+import { t } from "../shared/i18n";
 import { parseCsv } from "../shared/format";
 import type { FileType } from "./types";
 
@@ -12,7 +13,7 @@ export interface ViewRequest {
 
 function CsvTable({ text }: { text: string }) {
   const rows = parseCsv(text);
-  if (rows.length === 0) return <Empty description="No data to display" />;
+  if (rows.length === 0) return <Empty description={t("common.no_data")} />;
   const [header, ...body] = rows;
   return (
     <Table
@@ -35,8 +36,8 @@ export function FileViewerModal({ request, onClose }: { request: ViewRequest | n
     if (!request) return;
     setContent(null);
     apiText(`/api/files/${request.type}/view/${encodeURIComponent(request.name)}`)
-      .then((result) => setContent(result.ok ? { text: result.text } : { error: `Error: ${result.error}` }))
-      .catch((error) => setContent({ error: `Error loading file: ${error.message}` }));
+      .then((result) => setContent(result.ok ? { text: result.text } : { error: t("files.view_error", { error: result.error || "" }) }))
+      .catch((error) => setContent({ error: t("files.view_load_error", { error: error.message }) }));
   }, [request]);
 
   return (

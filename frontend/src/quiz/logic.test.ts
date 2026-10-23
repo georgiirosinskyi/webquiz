@@ -12,6 +12,7 @@ import {
   pointsWord,
   relativePath,
   remainingSeconds,
+  showNavigation,
   skipButtonMode,
   skipNeedsRequest,
   timerLevel,
@@ -67,6 +68,12 @@ describe("navigation", () => {
     expect(skipButtonMode(withStatuses("unseen", "unseen", "unseen", "unseen"), 0, true)).toBe("skip");
     expect(skipButtonMode(withStatuses("answered", "unseen", "unseen", "unseen"), 0, true)).toBe("next");
     expect(skipButtonMode(withStatuses("skipped", "skipped", "unseen", "unseen"), 0, true)).toBe("next");
+  });
+
+  it("shows the navigation bar with skipping or when the config turns it on", () => {
+    expect(showNavigation(false, false)).toBe(false);
+    expect(showNavigation(false, true)).toBe(true);
+    expect(showNavigation(true, false)).toBe(true);
   });
 
   it("sends a skip request only for a new unanswered question", () => {

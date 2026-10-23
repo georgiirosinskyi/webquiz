@@ -350,7 +350,7 @@ class TestTextInputQuizValidation:
             assert response.status_code == 400
             data = response.json()
             assert "error" in data
-            assert "Неправильна структура даних квізу" in data["error"]
+            assert "Неправильна структура даних тесту" in data["error"]
 
 
 class TestCheckerTemplates:

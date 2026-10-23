@@ -20,12 +20,14 @@ describe("config form", () => {
     const form = configToForm({
       language: "en",
       extra_answers_with_users_csv: true,
+      question_navigation: true,
       registration: { approve: true, username_label: "Name", fields: ["Grade"], disabled_fields: ["School"] },
       appearance: { background_color: "#ffffff", background_image: "/imgs/bg.jpg" },
     });
     expect(form).toEqual({
       language: "en",
       extra_answers_with_users_csv: true,
+      question_navigation: true,
       approve: true,
       username_label: "Name",
       fields: [
@@ -42,6 +44,7 @@ describe("config form", () => {
     const data = formToConfig({
       language: "uk",
       extra_answers_with_users_csv: false,
+      question_navigation: true,
       approve: false,
       username_label: "",
       fields: [
@@ -53,6 +56,7 @@ describe("config form", () => {
       background_color: "#336699",
       background_image: "/imgs/old.jpg",
     });
+    expect(data.question_navigation).toBe(true);
     expect(data.registration).toEqual({
       approve: false,
       username_label: "",
@@ -64,6 +68,7 @@ describe("config form", () => {
   it("defaults a missing config to Ukrainian with no fields and the dark color", () => {
     expect(configToForm(null)).toMatchObject({
       language: "uk",
+      question_navigation: false,
       approve: false,
       fields: [],
       background_mode: "color",

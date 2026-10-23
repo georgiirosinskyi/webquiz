@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, App, Button, Input, Modal, Space, Spin } from "antd";
 import { apiSend, apiText } from "../shared/api";
+import { t } from "../shared/i18n";
 
 type Feedback = { type: "success" | "error"; text: string; details?: string[] } | null;
 
@@ -25,13 +26,13 @@ export function QuizEditorModal({
     setFeedback(null);
     apiText(`/api/files/quizzes/view/${encodeURIComponent(filename)}`).then((result) => {
       setContent(result.text);
-      if (!result.ok) setFeedback({ type: "error", text: `Error: ${result.error}` });
+      if (!result.ok) setFeedback({ type: "error", text: t("common.error", { error: result.error || "" }) });
     });
   }, [filename]);
 
   const validate = async () => {
     if (!content?.trim()) {
-      setFeedback({ type: "error", text: "Content is empty" });
+      setFeedback({ type: "error", text: t("yaml.empty") });
       return;
     }
     setBusy(true);
@@ -41,12 +42,12 @@ export function QuizEditorModal({
         "/api/admin/validate-quiz",
         { content },
       );
-      if (!result.ok) setFeedback({ type: "error", text: `Error: ${result.data.error}` });
+      if (!result.ok) setFeedback({ type: "error", text: t("common.error", { error: result.data.error || result.status }) });
       else if (result.data.valid)
-        setFeedback({ type: "success", text: `✅ Valid YAML! Found ${result.data.question_count} questions.` });
-      else setFeedback({ type: "error", text: "❌ Validation errors:", details: result.data.errors });
+        setFeedback({ type: "success", text: t("yaml.valid", { count: result.data.question_count }) });
+      else setFeedback({ type: "error", text: t("yaml.invalid"), details: result.data.errors });
     } catch (error) {
-      setFeedback({ type: "error", text: `Error: ${(error as Error).message}` });
+      setFeedback({ type: "error", text: t("common.error", { error: (error as Error).message }) });
     } finally {
       setBusy(false);
     }
@@ -55,7 +56,7 @@ export function QuizEditorModal({
   const save = async () => {
     if (!filename) return;
     if (!content?.trim()) {
-      setFeedback({ type: "error", text: "Content cannot be empty" });
+      setFeedback({ type: "error", text: t("yaml.empty") });
       return;
     }
     setBusy(true);
@@ -66,14 +67,14 @@ export function QuizEditorModal({
         { content },
       );
       if (result.ok) {
-        message.success(`Saved ${filename}`);
+        message.success(t("yaml.saved", { name: filename }));
         onSaved();
         onClose();
       } else {
-        setFeedback({ type: "error", text: result.data.error || "Failed to save quiz", details: result.data.errors });
+        setFeedback({ type: "error", text: result.data.error || t("yaml.save_failed"), details: result.data.errors });
       }
     } catch (error) {
-      setFeedback({ type: "error", text: `Error: ${(error as Error).message}` });
+      setFeedback({ type: "error", text: t("common.error", { error: (error as Error).message }) });
     } finally {
       setBusy(false);
     }
@@ -82,19 +83,19 @@ export function QuizEditorModal({
   return (
     <Modal
       open={!!filename}
-      title={`Edit Quiz: ${filename}`}
+      title={t("yaml.title", { name: filename || "" })}
       onCancel={onClose}
       width={1000}
       destroyOnHidden
       footer={
         <Space wrap>
           <Button onClick={validate} loading={busy}>
-            ✅ Validate YAML
+            {t("yaml.validate")}
           </Button>
           <Button type="primary" onClick={save} loading={busy}>
-            💾 Save
+            {t("yaml.save")}
           </Button>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={onClose}>{t("common.cancel")}</Button>
         </Space>
       }
     >
@@ -102,7 +103,7 @@ export function QuizEditorModal({
         <Alert
           type="warning"
           showIcon
-          title="Changes will create a backup. If this is the active quiz, it will be reloaded."
+          title={t("yaml.backup_hint")}
         />
         {content === null ? (
           <Spin style={{ display: "block", padding: 40 }} />

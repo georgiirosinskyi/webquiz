@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Alert, Badge, Button, Card, Empty, Flex, Grid, Layout, Segmented, Space, Typography } from "antd";
 import { SyncOutlined } from "@ant-design/icons";
+import { t } from "../shared/i18n";
 import { filterUsers, type Filter } from "./stats";
 import { Legend, LiveStatsTable } from "./LiveStatsTable";
 import { useLiveStatsSocket, type ConnectionStatus } from "./useLiveStatsSocket";
@@ -21,7 +22,7 @@ function ConnectionAlert({
         type="info"
         showIcon
         icon={<SyncOutlined spin />}
-        title={`Disconnected from server. Reconnecting in ${status.delaySeconds}s... (${status.attempt}/${maxAttempts})`}
+        title={t("live.reconnecting", { seconds: status.delaySeconds, attempt: status.attempt, max: maxAttempts })}
       />
     );
   }
@@ -29,10 +30,10 @@ function ConnectionAlert({
     <Alert
       type="error"
       showIcon
-      title="Failed to reconnect to the server."
+      title={t("live.failed")}
       action={
         <Button size="small" onClick={onReconnect}>
-          Reconnect
+          {t("live.reconnect")}
         </Button>
       }
     />
@@ -63,7 +64,7 @@ export function LiveStatsPage() {
         <Flex justify="space-between" align="center" wrap gap={12}>
           <div>
             <Typography.Title level={4} style={{ margin: 0 }}>
-              Live Stats
+              {t("live.title")}
             </Typography.Title>
             {state.currentQuiz && <Typography.Text type="secondary">{state.currentQuiz}</Typography.Text>}
           </div>
@@ -71,9 +72,9 @@ export function LiveStatsPage() {
             value={filter}
             onChange={setFilter}
             options={[
-              filterOption("all", "All", counts.all),
-              filterOption("inProgress", "In Progress", counts.inProgress),
-              filterOption("completed", "Completed", counts.completed),
+              filterOption("all", t("live.all"), counts.all),
+              filterOption("inProgress", t("live.in_progress"), counts.inProgress),
+              filterOption("completed", t("live.completed"), counts.completed),
             ]}
           />
         </Flex>
@@ -85,7 +86,7 @@ export function LiveStatsPage() {
             <Empty
               style={{ padding: 40 }}
               description={
-                counts.all === 0 ? "Waiting for users to join the quiz..." : "No users in this category yet."
+                counts.all === 0 ? t("live.waiting") : t("live.no_users")
               }
             />
           ) : (

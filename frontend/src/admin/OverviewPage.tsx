@@ -29,9 +29,10 @@ import {
   UnorderedListOutlined,
 } from "@ant-design/icons";
 import { apiSend } from "../shared/api";
+import { t, tn } from "../shared/i18n";
 import { formatPoints } from "../shared/points";
 import { STATE_STYLES, formatTime } from "../live-stats/stats";
-import { Legend, LiveStatsTable } from "../live-stats/LiveStatsTable";
+import { Legend, LiveStatsTable, stateLabel } from "../live-stats/LiveStatsTable";
 import {
   STATUS_LABELS,
   averagePercent,
@@ -49,14 +50,6 @@ import { fieldNameToLabel, type AdminUser, type CurrentQuiz, type QuizInfo } fro
 
 type View = "table" | "matrix";
 
-const CELL_LABELS: Record<string, string> = {
-  think: "відповідає",
-  ok: "правильно",
-  fail: "неправильно",
-  skip: "пропущено",
-  empty: "ще не відкрито",
-};
-
 // Progress dots use solid colors, the matrix cells the pale STATE_STYLES backgrounds
 const DOT_COLORS: Record<string, string> = {
   think: "#1677ff",
@@ -65,14 +58,6 @@ const DOT_COLORS: Record<string, string> = {
   skip: "#faad14",
   empty: "#d9d9d9",
 };
-
-const LEGEND_UK: [keyof typeof STATE_STYLES, string][] = [
-  ["think", "Відповідає"],
-  ["ok", "Правильно"],
-  ["fail", "Неправильно"],
-  ["skip", "Пропущено"],
-  ["empty", "Ще не відкрито"],
-];
 
 // Ticks every second so the timers of running tests move.
 function useNow(): number {
@@ -103,18 +88,17 @@ function CurrentQuizCard({
   const switchTo = (filename: string) => {
     const restart = filename === current;
     modal.confirm({
-      title: restart ? "Перезапустити поточний тест?" : `Переключитися на "${filename}"?`,
-      content:
-        users.length > 0
-          ? `Усі користувачі (${users.length}) та їхні відповіді будуть скинуті. Результати залишаться в CSV.`
-          : "Буде створено новий CSV файл для результатів.",
-      okText: restart ? "Перезапустити" : "Переключитися",
+      title: restart ? t("overview.restart_title") : t("overview.switch_title", { name: filename }),
+      content: users.length > 0 ? t("overview.reset_users", { count: users.length }) : t("overview.new_csv"),
+      okText: restart ? t("overview.restart") : t("overview.switch"),
       onOk: async () => {
         const result = await apiSend<{ csv_file: string }>("POST", "/api/admin/switch-quiz", { quiz_filename: filename });
         if (result.ok) {
-          message.success(`${restart ? "Перезапущено" : "Переключено на"} "${filename}". CSV: ${result.data.csv_file}`);
+          message.success(
+            t(restart ? "overview.restarted" : "overview.switched", { name: filename, csv: result.data.csv_file }),
+          );
         } else {
-          message.error(result.data.error || "Не вдалося переключити тест");
+          message.error(result.data.error || t("overview.switch_failed"));
         }
       },
     });
@@ -122,15 +106,15 @@ function CurrentQuizCard({
 
   const forceAnswers = () =>
     modal.confirm({
-      title: "Відкрити відповіді для всіх користувачів?",
-      content: "Цю дію неможливо скасувати (до перезапуску тесту).",
-      okText: "Відкрити",
+      title: t("overview.force_title"),
+      content: t("overview.force_content"),
+      okText: t("overview.force_ok"),
       onOk: async () => {
         const result = await apiSend<{ completed_count: number; total_count: number }>(
           "POST",
           "/api/admin/force-show-answers",
         );
-        if (!result.ok) message.error(result.data.error || "Помилка відкриття відповідей");
+        if (!result.ok) message.error(result.data.error || t("overview.force_failed"));
       },
     });
 
@@ -138,9 +122,9 @@ function CurrentQuizCard({
     <Card data-testid="current-quiz-card">
       <Flex justify="space-between" align="flex-start" wrap gap={12}>
         <div style={{ minWidth: 0, flex: "1 1 280px" }}>
-          <Typography.Text type="secondary">Поточний тест</Typography.Text>
+          <Typography.Text type="secondary">{t("overview.current_quiz")}</Typography.Text>
           <Typography.Title level={4} style={{ margin: "2px 0 4px" }} data-testid="current-quiz-title">
-            {quiz ? quiz.title || quiz.filename : "Тест не вибрано"}
+            {quiz ? quiz.title || quiz.filename : t("overview.no_quiz")}
           </Typography.Title>
           {current && (
             <Typography.Text code data-testid="current-quiz-file">
@@ -152,7 +136,7 @@ function CurrentQuizCard({
           <Select
             showSearch
             value={current}
-            placeholder="Обрати тест"
+            placeholder={t("overview.choose_quiz")}
             style={{ width: 280, maxWidth: "100%" }}
             optionFilterProp="search"
             popupMatchSelectWidth={false}
@@ -170,33 +154,33 @@ function CurrentQuizCard({
             data-testid="quiz-select"
           />
           <Button icon={<EditOutlined />} disabled={!current} onClick={() => current && onEdit(current)}>
-            Редагувати
+            {t("common.edit")}
           </Button>
           <Button icon={<ReloadOutlined />} disabled={!current} onClick={() => current && switchTo(current)} data-testid="restart-btn">
-            Перезапустити
+            {t("overview.restart")}
           </Button>
           <Button icon={<ExportOutlined />} href="/live-stats/" target="_blank">
-            На проєктор
+            {t("overview.projector")}
           </Button>
         </Space>
       </Flex>
 
       {quiz && (
         <Space wrap size={[6, 6]} style={{ marginTop: 12 }}>
-          <Tag>{quiz.total_questions} питань</Tag>
-          <Tag>{formatPoints(quiz.total_points)} балів</Tag>
+          <Tag>{tn("plural.questions", quiz.total_questions)}</Tag>
+          <Tag>{tn("plural.points", quiz.total_points, { n: formatPoints(quiz.total_points) })}</Tag>
           {quiz.time_limit > 0 && <Tag color="orange">⏱ {formatDuration(quiz.time_limit)}</Tag>}
-          {quiz.randomize_questions && <Tag color="purple">🔀 Перемішування</Tag>}
-          {quiz.allow_skip_questions && <Tag color="cyan">⏭ Можна пропускати</Tag>}
-          {quiz.requires_approval && <Tag color="gold">✋ Потрібне підтвердження</Tag>}
+          {quiz.randomize_questions && <Tag color="purple">{t("overview.shuffle")}</Tag>}
+          {quiz.allow_skip_questions && <Tag color="cyan">{t("overview.can_skip")}</Tag>}
+          {quiz.requires_approval && <Tag color="gold">{t("overview.needs_approval")}</Tag>}
           {quiz.show_answers_on_completion &&
             (quiz.force_all_completed ? (
               <Tag color="green" data-testid="answers-opened">
-                Відповіді відкрито
+                {t("overview.answers_opened")}
               </Tag>
             ) : (
               <Button size="small" icon={<UnlockOutlined />} onClick={forceAnswers} data-testid="force-answers-btn">
-                Відкрити відповіді для всіх
+                {t("overview.open_answers")}
               </Button>
             ))}
         </Space>
@@ -204,19 +188,19 @@ function CurrentQuizCard({
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }} data-testid="overview-stats">
         <Col xs={12} sm={8} md={4}>
-          <Statistic title="Зареєстровано" value={counts.all} />
+          <Statistic title={t("overview.registered")} value={counts.all} />
         </Col>
         <Col xs={12} sm={8} md={5}>
-          <Statistic title="Чекають" value={counts.pending} styles={{ content: counts.pending ? { color: "#d48806" } : undefined }} />
+          <Statistic title={t("overview.waiting")} value={counts.pending} styles={{ content: counts.pending ? { color: "#d48806" } : undefined }} />
         </Col>
         <Col xs={12} sm={8} md={5}>
-          <Statistic title="Проходять" value={counts.in_progress} styles={{ content: { color: "#1677ff" } }} />
+          <Statistic title={t("overview.in_progress")} value={counts.in_progress} styles={{ content: { color: "#1677ff" } }} />
         </Col>
         <Col xs={12} sm={12} md={5}>
-          <Statistic title="Завершили" value={counts.finished} styles={{ content: { color: "#389e0d" } }} />
+          <Statistic title={t("overview.finished")} value={counts.finished} styles={{ content: { color: "#389e0d" } }} />
         </Col>
         <Col xs={24} sm={12} md={5}>
-          <Statistic title="Середній бал" value={average === null ? "—" : `${average}%`} />
+          <Statistic title={t("overview.average")} value={average === null ? "—" : `${average}%`} />
         </Col>
       </Row>
     </Card>
@@ -229,7 +213,7 @@ function ProgressDots({ user, quiz }: { user: AdminUser; quiz: CurrentQuiz | nul
     <Flex align="center" gap={8} wrap>
       <span className="progress-dots">
         {progressCells(user).map((cell, index) => (
-          <Tooltip key={cell.id} title={`${index + 1}: ${CELL_LABELS[cell.state]}`}>
+          <Tooltip key={cell.id} title={`${index + 1}: ${stateLabel(cell.state)}`}>
             <span
               className="progress-dot"
               data-state={cell.state}
@@ -264,26 +248,26 @@ function UserDetails({ user, quiz }: { user: AdminUser; quiz: CurrentQuiz | null
         pagination={false}
         dataSource={progressCells(user).map((cell, index) => ({ ...cell, position: index + 1 }))}
         columns={[
-          { key: "position", title: "№", dataIndex: "position", width: 50 },
+          { key: "position", title: t("common.number"), dataIndex: "position", width: 50 },
           {
             key: "question",
-            title: "Питання",
+            title: t("overview.col_question"),
             render: (_, cell) => {
               const question = questions.get(cell.id);
-              return question?.question || question?.image?.split("/").pop() || `Питання ${cell.id}`;
+              return question?.question || question?.image?.split("/").pop() || t("overview.question_n", { n: cell.id });
             },
           },
           {
             key: "state",
-            title: "Результат",
+            title: t("overview.col_result"),
             width: 150,
             render: (_, cell) => (
-              <Tag style={{ ...STATE_STYLES[cell.state], border: "none" }}>{CELL_LABELS[cell.state]}</Tag>
+              <Tag style={{ ...STATE_STYLES[cell.state], border: "none" }}>{stateLabel(cell.state)}</Tag>
             ),
           },
           {
             key: "time",
-            title: "Час",
+            title: t("overview.col_time"),
             width: 90,
             responsive: ["sm"],
             render: (_, cell) => formatTime(user.live_stats[String(cell.id)]?.time_taken) || "",
@@ -310,14 +294,14 @@ function UsersTable({
   const columns: ColumnsType<AdminUser> = [
     {
       key: "index",
-      title: "№",
+      title: t("common.number"),
       width: 48,
       responsive: ["sm"],
       render: (_, __, index) => index + 1,
     },
     {
       key: "username",
-      title: "Користувач",
+      title: t("overview.col_user"),
       render: (_, user) => (
         <Typography.Text strong className="username-text">
           {user.username}
@@ -332,33 +316,33 @@ function UsersTable({
     })),
     {
       key: "status",
-      title: "Статус",
+      title: t("overview.col_status"),
       render: (_, user) => (
         <Tag color={STATUS_LABELS[user.status].color} data-testid="user-status" data-status={user.status}>
-          {STATUS_LABELS[user.status].text}
+          {t(STATUS_LABELS[user.status].key)}
         </Tag>
       ),
     },
     {
       key: "progress",
-      title: "Прогрес",
+      title: t("overview.col_progress"),
       render: (_, user) => (user.status === "pending" ? "—" : <ProgressDots user={user} quiz={quiz} />),
     },
     {
       key: "points",
-      title: "Бали",
+      title: t("overview.col_points"),
       render: (_, user) =>
         user.status === "pending" ? "—" : `${formatPoints(user.earned_points)}/${formatPoints(quiz?.total_points || 0)}`,
     },
     {
       key: "mark",
-      title: "Оцінка",
+      title: t("overview.col_mark"),
       responsive: ["sm"],
       render: (_, user) => (user.mark === null ? "—" : <Typography.Text strong>{user.mark}</Typography.Text>),
     },
     {
       key: "time",
-      title: "Час",
+      title: t("overview.col_time"),
       responsive: ["sm"],
       render: (_, user) => {
         const { elapsed, remaining } = liveTimes(user, now);
@@ -368,7 +352,7 @@ function UsersTable({
             <span>{formatDuration(elapsed)}</span>
             {remaining !== null && (
               <Typography.Text type={remaining <= 60 ? "danger" : "secondary"} style={{ fontSize: 12 }}>
-                залишилось {formatDuration(remaining)}
+                {t("overview.time_left", { time: formatDuration(remaining) })}
               </Typography.Text>
             )}
           </Flex>
@@ -391,7 +375,7 @@ function UsersTable({
             }}
             data-testid="approve-btn"
           >
-            Підтвердити
+            {t("overview.approve")}
           </Button>
         ),
     },
@@ -441,9 +425,9 @@ export function OverviewPage({
   const approve = async (userId: string) => {
     try {
       const result = await apiSend("PUT", "/api/admin/approve-user", { user_id: userId });
-      if (!result.ok) message.error(result.data.error || "Помилка підтвердження");
+      if (!result.ok) message.error(result.data.error || t("overview.approve_failed"));
     } catch (error) {
-      message.error(`Помилка з'єднання: ${(error as Error).message}`);
+      message.error(t("common.connection_error", { error: (error as Error).message }));
     }
   };
 
@@ -473,15 +457,15 @@ export function OverviewPage({
               value={filter}
               onChange={setFilter}
               options={[
-                filterOption("all", "Усі", counts.all),
-                ...(quiz?.requires_approval || counts.pending > 0 ? [filterOption("pending", "Чекають", counts.pending)] : []),
-                filterOption("in_progress", "Проходять", counts.in_progress),
-                filterOption("finished", "Завершили", counts.finished),
+                filterOption("all", t("overview.all"), counts.all),
+                ...(quiz?.requires_approval || counts.pending > 0 ? [filterOption("pending", t("overview.waiting"), counts.pending)] : []),
+                filterOption("in_progress", t("overview.in_progress"), counts.in_progress),
+                filterOption("finished", t("overview.finished"), counts.finished),
               ]}
             />
             <Input.Search
               allowClear
-              placeholder="Пошук користувача"
+              placeholder={t("overview.search")}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               style={{ width: 220 }}
@@ -490,15 +474,15 @@ export function OverviewPage({
           <Space wrap>
             {pendingIds.length > 0 && (
               <Button type="primary" icon={<CheckOutlined />} onClick={() => pendingIds.forEach(approve)} data-testid="approve-all-btn">
-                Підтвердити всіх ({pendingIds.length})
+                {t("overview.approve_all", { count: pendingIds.length })}
               </Button>
             )}
             <Segmented<View>
               value={view}
               onChange={setView}
               options={[
-                { value: "table", icon: <UnorderedListOutlined />, label: "Таблиця" },
-                { value: "matrix", icon: <TableOutlined />, label: "Матриця" },
+                { value: "table", icon: <UnorderedListOutlined />, label: t("overview.table") },
+                { value: "matrix", icon: <TableOutlined />, label: t("overview.matrix") },
               ]}
             />
           </Space>
@@ -507,7 +491,7 @@ export function OverviewPage({
         {visible.length === 0 ? (
           <Empty
             style={{ padding: 32 }}
-            description={users.length === 0 ? "Користувачі ще не зареєструвалися" : "Немає користувачів у цій категорії"}
+            description={users.length === 0 ? t("overview.no_users") : t("overview.no_users_in_filter")}
           />
         ) : view === "table" ? (
           <UsersTable users={visible} quiz={quiz} now={now} onApprove={approve} />
@@ -516,9 +500,9 @@ export function OverviewPage({
             <LiveStatsTable
               state={toLiveState(visible, quiz)}
               visible={visible.filter((user) => user.status !== "pending").map((user) => user.user_id)}
-              userTitle="Користувач"
+              userTitle={t("overview.col_user")}
             />
-            <Legend items={LEGEND_UK} />
+            <Legend />
           </Flex>
         )}
       </Card>

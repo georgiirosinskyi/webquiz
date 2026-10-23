@@ -2,7 +2,7 @@ import { useState } from "react";
 import { App, Button, Card, Flex, Input, Typography } from "antd";
 import { SendOutlined } from "@ant-design/icons";
 import { apiSend } from "../shared/api";
-import { plural } from "../shared/format";
+import { t, tn } from "../shared/i18n";
 import { parseTransferKey, TRANSFER_STATUS_TEXT, type TransferState } from "./types";
 
 const TARGET_STORAGE_KEY = "webquiz-transfer-target";
@@ -33,11 +33,11 @@ export function TransferPanel({
   const send = async () => {
     const to = target.trim();
     if (selected.size === 0) {
-      message.error("Select files with the checkboxes first");
+      message.error(t("send.select_first"));
       return;
     }
     if (!to) {
-      message.error("Enter the name of the other server");
+      message.error(t("send.enter_target"));
       return;
     }
     setSending(true);
@@ -48,8 +48,8 @@ export function TransferPanel({
       });
       if (result.ok) {
         const media = result.data.offer.files.filter((f) => f.type === "images" || f.type === "attachments").length;
-        const note = media > 0 ? ` (plus ${plural(media, "image/attachment file")} used by the quizzes)` : "";
-        message.success(`Request sent to ${to}${note}. Waiting for an answer there.`);
+        const note = media > 0 ? t("send.media_note", { count: media }) : "";
+        message.success(t("send.sent", { name: to, note }));
         try {
           localStorage.setItem(TARGET_STORAGE_KEY, to);
         } catch {
@@ -57,41 +57,40 @@ export function TransferPanel({
         }
         onSent();
       } else {
-        message.error(result.data.error || "Failed to send the request");
+        message.error(result.data.error || t("send.failed"));
       }
     } catch (error) {
-      message.error(`Connection error: ${(error as Error).message}`);
+      message.error(t("common.connection_error", { error: (error as Error).message }));
     } finally {
       setSending(false);
     }
   };
 
   return (
-    <Card size="small" title="📤 Send files to another server" data-testid="transfer-panel">
+    <Card size="small" title={t("send.title")} data-testid="transfer-panel">
       <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-        Select files with the checkboxes. Images and attachments used by a quiz are sent with it. This server is{" "}
-        <strong>{state.name}</strong>.
+        {t("send.hint")} <strong>{state.name}</strong>.
       </Typography.Paragraph>
       <Flex wrap gap={8} align="center">
-        <Typography.Text>{plural(selected.size, "file")} selected</Typography.Text>
+        <Typography.Text>{t("send.selected", { files: tn("plural.files", selected.size) })}</Typography.Text>
         <Input
           value={target}
           onChange={(event) => setTarget(event.target.value)}
           onPressEnter={send}
-          placeholder="Name of the other server"
+          placeholder={t("send.target_placeholder")}
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
           style={{ flex: 1, minWidth: 180, maxWidth: 300 }}
         />
         <Button type="primary" icon={<SendOutlined />} loading={sending} onClick={send}>
-          Send
+          {t("send.button")}
         </Button>
       </Flex>
       {state.outgoing.slice(0, 5).map((offer) => (
         <div key={offer.id} style={{ marginTop: 6 }}>
-          → <strong>{offer.to}</strong>: {plural(offer.files.length, "file")},{" "}
-          {TRANSFER_STATUS_TEXT[offer.status] || offer.status}
+          → <strong>{offer.to}</strong>: {tn("plural.files", offer.files.length)},{" "}
+          {TRANSFER_STATUS_TEXT[offer.status] ? t(TRANSFER_STATUS_TEXT[offer.status]) : offer.status}
         </div>
       ))}
     </Card>

@@ -9,8 +9,9 @@ import {
   SettingOutlined,
   UnorderedListOutlined,
 } from "@ant-design/icons";
-import { AdminAuth, UKRAINIAN } from "../shared/AdminAuth";
+import { AdminAuth } from "../shared/AdminAuth";
 import { apiGet } from "../shared/api";
+import { t, type MessageKey } from "../shared/i18n";
 import { getPageData, getServerData } from "../shared/serverData";
 import { ConfigEditor } from "../files/ConfigEditor";
 import { FileManager } from "../files/FilesPage";
@@ -42,18 +43,18 @@ const page = getPageData<AdminPageData>({
   configData: null,
 });
 
-const TRANSFER_RESULT_TEXT: Record<string, string> = {
-  accepted: "прийняв файли",
-  rejected: "відхилив файли",
-  failed: "не зміг отримати файли",
+const TRANSFER_RESULT_TEXT: Record<string, MessageKey> = {
+  accepted: "admin.transfer_accepted",
+  rejected: "admin.transfer_rejected",
+  failed: "admin.transfer_failed",
 };
 
-const SECTION_TITLES: Record<Section, string> = {
-  overview: "Огляд",
-  quizzes: "Тести",
-  files: "Файли",
-  settings: "Налаштування",
-  access: "Доступ",
+const SECTION_TITLES: Record<Section, MessageKey> = {
+  overview: "menu.overview",
+  quizzes: "menu.quizzes",
+  files: "menu.files",
+  settings: "menu.settings",
+  access: "menu.access",
 };
 
 function SectionHeader({ title, extra }: { title: string; extra?: ReactNode }) {
@@ -79,16 +80,16 @@ function AdminShell() {
   const [config, setConfig] = useState({ content: page.configContent || "", data: page.configData });
 
   useEffect(() => {
-    document.title = `${SECTION_TITLES[section]} · WebQuiz`;
+    document.title = `${t(SECTION_TITLES[section])} · WebQuiz`;
   }, [section]);
 
   const loadQuizzes = useCallback(async () => {
     try {
       const result = await apiGet<QuizList>("/api/admin/list-quizzes");
       if (result.ok) setList(result.data);
-      else message.error(result.data.error || "Не вдалося завантажити список тестів");
+      else message.error(result.data.error || t("admin.load_quizzes_failed"));
     } catch (error) {
-      message.error(`Помилка завантаження тестів: ${(error as Error).message}`);
+      message.error(t("common.error", { error: (error as Error).message }));
     }
   }, [message]);
 
@@ -99,7 +100,7 @@ function AdminShell() {
   const openEditor = async (filename: string) => {
     const result = await apiGet<{ parsed: Record<string, unknown> }>(`/api/admin/quiz/${encodeURIComponent(filename)}`);
     if (result.ok) setEditor({ mode: "edit", filename, parsed: result.data.parsed || null });
-    else message.error(result.data.error || "Не вдалося завантажити тест");
+    else message.error(result.data.error || t("admin.load_quiz_failed"));
   };
 
   const reloadTransfers = async () => {
@@ -130,7 +131,7 @@ function AdminShell() {
         break;
       case "transfer_request":
         setTransfers((current) => ({ ...current, [data.request.id]: data.request }));
-        message.success(`Новий запит на файли від ${data.request.from}`);
+        message.success(t("admin.new_transfer", { name: data.request.from }));
         break;
       case "transfer_request_removed":
         setTransfers((current) => {
@@ -140,7 +141,10 @@ function AdminShell() {
         });
         break;
       case "transfer_result": {
-        const text = `Сервер ${data.offer.to} ${TRANSFER_RESULT_TEXT[data.offer.status] || data.offer.status}`;
+        const key = TRANSFER_RESULT_TEXT[data.offer.status];
+        const text = key
+          ? t(key, { name: data.offer.to })
+          : t("admin.transfer_other", { name: data.offer.to, status: data.offer.status });
         if (data.offer.status === "accepted") message.success(text);
         else message.error(text);
         break;
@@ -149,12 +153,12 @@ function AdminShell() {
         setTunnel((current) => mergeTunnel(current, data.tunnel));
         break;
       case "new_registration":
-        message.info(`Новий користувач чекає підтвердження: ${data.username}`);
+        message.info(t("admin.new_registration", { name: data.username }));
         break;
       case "answers_forced":
         setQuiz((current) => (current ? { ...current, force_all_completed: data.forced } : current));
         setList((current) => ({ ...current, force_all_completed: data.forced }));
-        if (data.message) message.success(data.message);
+        if (data.forced) message.success(t("admin.answers_opened"));
         break;
     }
   });
@@ -176,17 +180,17 @@ function AdminShell() {
   );
 
   const menuItems: MenuProps["items"] = [
-    { key: "overview", icon: <DashboardOutlined />, label: label("Огляд", pendingCount) },
-    { key: "quizzes", icon: <UnorderedListOutlined />, label: label("Тести") },
-    { key: "files", icon: <FolderOpenOutlined />, label: label("Файли", transferCount) },
-    ...(page.configPath ? [{ key: "settings", icon: <SettingOutlined />, label: label("Налаштування") }] : []),
-    { key: "access", icon: <GlobalOutlined />, label: label("Доступ", 0, !!tunnel?.connected) },
+    { key: "overview", icon: <DashboardOutlined />, label: label(t("menu.overview"), pendingCount) },
+    { key: "quizzes", icon: <UnorderedListOutlined />, label: label(t("menu.quizzes")) },
+    { key: "files", icon: <FolderOpenOutlined />, label: label(t("menu.files"), transferCount) },
+    ...(page.configPath ? [{ key: "settings", icon: <SettingOutlined />, label: label(t("menu.settings")) }] : []),
+    { key: "access", icon: <GlobalOutlined />, label: label(t("menu.access"), 0, !!tunnel?.connected) },
     {
       key: "live-stats",
       icon: <BarChartOutlined />,
       label: (
         <a href="/live-stats/" target="_blank" rel="noreferrer">
-          Live Stats ↗
+          {t("menu.live_stats")}
         </a>
       ),
     },
@@ -215,7 +219,7 @@ function AdminShell() {
     case "quizzes":
       content = (
         <Flex vertical gap={16}>
-          <SectionHeader title="Тести" />
+          <SectionHeader title={t("menu.quizzes")} />
           <QuizzesCard list={list} reload={loadQuizzes} onEdit={setEditor} />
           {page.downloadableQuizzes.length > 0 && (
             <DownloadableQuizzes quizzes={page.downloadableQuizzes} onDownloaded={loadQuizzes} />
@@ -226,7 +230,7 @@ function AdminShell() {
     case "files":
       content = (
         <Flex vertical gap={16}>
-          <SectionHeader title="Файли" />
+          <SectionHeader title={t("menu.files")} />
           {transferRequests}
           <Card>
             <FileManager />
@@ -237,7 +241,7 @@ function AdminShell() {
     case "settings":
       content = (
         <Flex vertical gap={16}>
-          <SectionHeader title="Налаштування" />
+          <SectionHeader title={t("menu.settings")} />
           <Card>
             {page.configPath ? (
               <ConfigEditor
@@ -247,7 +251,7 @@ function AdminShell() {
                 onSaved={(content, data) => setConfig({ content, data })}
               />
             ) : (
-              <Typography.Text type="secondary">Сервер запущено без файлу конфігурації.</Typography.Text>
+              <Typography.Text type="secondary">{t("admin.no_config")}</Typography.Text>
             )}
           </Card>
         </Flex>
@@ -256,7 +260,7 @@ function AdminShell() {
     case "access":
       content = (
         <Flex vertical gap={16}>
-          <SectionHeader title="Доступ" />
+          <SectionHeader title={t("menu.access")} />
           <AccessCard urls={page.networkUrls} tunnel={tunnel} publicKey={page.tunnelPublicKey} />
         </Flex>
       );
@@ -290,7 +294,7 @@ function AdminShell() {
 
 export function AdminApp() {
   return (
-    <AdminAuth title="🔧 Панель Адміністратора WebQuiz" isTrustedIp={page.isTrustedIp} texts={UKRAINIAN}>
+    <AdminAuth title={t("auth.title")} isTrustedIp={page.isTrustedIp}>
       <AdminShell />
     </AdminAuth>
   );

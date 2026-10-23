@@ -13,7 +13,8 @@ declare global {
 }
 
 export function getServerData(): ServerData {
-  const data = window.__WEBQUIZ__ || {};
+  // No window in unit tests
+  const data = (typeof window !== "undefined" && window.__WEBQUIZ__) || {};
   return {
     language: data.language === "en" ? "en" : "uk",
     version: data.version || "dev",

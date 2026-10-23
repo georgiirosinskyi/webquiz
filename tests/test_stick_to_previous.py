@@ -215,7 +215,7 @@ def test_validation_first_question_cannot_be_sticky(temp_dir):
         assert response.status_code == 200
         data = response.json()
         assert not data["valid"]
-        assert any("Question 1" in error and "stick_to_the_previous" in error for error in data["errors"])
+        assert any("Питання 1" in error and "stick_to_the_previous" in error for error in data["errors"])
 
 
 def test_validation_stick_to_previous_must_be_boolean(temp_dir):
@@ -243,7 +243,7 @@ def test_validation_stick_to_previous_must_be_boolean(temp_dir):
         assert response.status_code == 200
         data = response.json()
         assert not data["valid"]
-        assert any("boolean" in error for error in data["errors"])
+        assert any("true або false" in error for error in data["errors"])
 
 
 def test_validation_stick_to_previous_integer_is_invalid(temp_dir):
@@ -271,7 +271,7 @@ def test_validation_stick_to_previous_integer_is_invalid(temp_dir):
         assert response.status_code == 200
         data = response.json()
         assert not data["valid"]
-        assert any("boolean" in error for error in data["errors"])
+        assert any("true або false" in error for error in data["errors"])
 
 
 def test_all_questions_sticky_except_first(temp_dir):

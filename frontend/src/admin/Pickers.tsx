@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { App, Card, Empty, List, Modal, Spin, Typography } from "antd";
 import { apiGet } from "../shared/api";
+import { t } from "../shared/i18n";
 import { formatFileSize } from "../shared/format";
 
 interface ImageInfo {
@@ -25,12 +26,12 @@ function useList<T>(open: boolean, url: string, key: string) {
       .then((result) => {
         if (result.ok) setItems(result.data[key] || []);
         else {
-          message.error(result.data.error || "Не вдалося завантажити список");
+          message.error(result.data.error || t("picker.load_failed"));
           setItems([]);
         }
       })
       .catch((error) => {
-        message.error(`Помилка завантаження: ${error.message}`);
+        message.error(t("picker.load_error", { error: error.message }));
         setItems([]);
       });
   }, [open, url, key, message]);
@@ -55,16 +56,16 @@ export function ImagePicker({
   });
 
   return (
-    <Modal open={open} title="📷 Вибрати Зображення" onCancel={onClose} footer={null} width={900} destroyOnHidden>
+    <Modal open={open} title={t("picker.images_title")} onCancel={onClose} footer={null} width={900} destroyOnHidden>
       {images === null ? (
         <Spin style={{ display: "block", padding: 40 }} />
       ) : images.length === 0 ? (
         <Empty
           description={
             <>
-              Зображення не знайдені в директорії quizzes/imgs
+              {t("picker.no_images")}
               <br />
-              <Typography.Text type="secondary">Додайте файли зображень до quizzes/imgs, щоб побачити їх тут</Typography.Text>
+              <Typography.Text type="secondary">{t("picker.no_images_hint")}</Typography.Text>
             </>
           }
         />
@@ -110,13 +111,13 @@ export function FilePicker({
 }) {
   const files = useList<AttachInfo>(open, "/api/admin/list-files", "files");
   return (
-    <Modal open={open} title="📎 Вибрати Файл" onCancel={onClose} footer={null} width={600} destroyOnHidden>
+    <Modal open={open} title={t("picker.files_title")} onCancel={onClose} footer={null} width={600} destroyOnHidden>
       {files === null ? (
         <Spin style={{ display: "block", padding: 40 }} />
       ) : (
         <List
           dataSource={files}
-          locale={{ emptyText: <Empty description="Файли не знайдені в директорії quizzes/attach" /> }}
+          locale={{ emptyText: <Empty description={t("picker.no_files")} /> }}
           renderItem={(file) => (
             <List.Item
               className="picker-row"

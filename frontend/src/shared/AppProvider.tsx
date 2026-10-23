@@ -14,6 +14,7 @@ const theme = {
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const { language } = getServerData();
+  document.documentElement.lang = language;
   return (
     <ConfigProvider theme={theme} locale={language === "en" ? enUS : ukUA}>
       <App>{children}</App>

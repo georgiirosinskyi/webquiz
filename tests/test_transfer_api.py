@@ -45,7 +45,7 @@ def test_send_without_tunnel():
             json={"to": "room-b", "files": FILES},
         )
         assert response.status_code == 409
-        assert "not connected" in response.json()["error"]
+        assert "не підключено" in response.json()["error"]
 
 
 def test_send_invalid_json():

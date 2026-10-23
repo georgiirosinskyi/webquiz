@@ -11,7 +11,8 @@ import {
   PlusOutlined,
   RightOutlined,
 } from "@ant-design/icons";
-import { roundPoints } from "../shared/points";
+import { t, tn } from "../shared/i18n";
+import { formatPoints, roundPoints } from "../shared/points";
 import { changeQuestionType, type QuestionForm, type QuestionType } from "./quizForm";
 
 // A plain number input: antd InputNumber formats 1 as "1.00" and rounds 0.255 on blur,
@@ -108,7 +109,7 @@ export function QuestionCard({
     <Flex align="center" gap={8} onClick={onToggle} style={{ cursor: "pointer", minWidth: 0 }}>
       <span
         className="drag-handle"
-        title="Перетягніть для зміни порядку"
+        title={t("question.drag")}
         draggable
         onClick={(event) => event.stopPropagation()}
         onDragStart={dragHandlers.onDragStart}
@@ -119,11 +120,11 @@ export function QuestionCard({
       {collapsed ? <RightOutlined /> : <DownOutlined />}
       <span className="question-number">{number}.</span>
       <span className="question-indicators">
-        {question.stick_to_the_previous && <span title="Прив'язано до попереднього">🔗</span>}
-        {question.image && <span title="Має зображення">🖼️</span>}
-        {question.file && <span title="Має файл">📎</span>}
+        {question.stick_to_the_previous && <span title={t("question.sticky")}>🔗</span>}
+        {question.image && <span title={t("question.has_image")}>🖼️</span>}
+        {question.file && <span title={t("question.has_file")}>📎</span>}
         {points !== 1 && (
-          <span className="points-indicator" title={`${points} балів`}>
+          <span className="points-indicator" title={tn("plural.points", points, { n: formatPoints(points) })}>
             🏆{points}
           </span>
         )}
@@ -145,67 +146,67 @@ export function QuestionCard({
       title={header}
       extra={
         <Space size={2}>
-          {index > 0 && <Button size="small" type="text" icon={<ArrowUpOutlined />} title="Перемістити вгору" onClick={() => onMove(-1)} />}
+          {index > 0 && <Button size="small" type="text" icon={<ArrowUpOutlined />} title={t("question.move_up")} onClick={() => onMove(-1)} />}
           {index < total - 1 && (
-            <Button size="small" type="text" icon={<ArrowDownOutlined />} title="Перемістити вниз" onClick={() => onMove(1)} />
+            <Button size="small" type="text" icon={<ArrowDownOutlined />} title={t("question.move_down")} onClick={() => onMove(1)} />
           )}
-          <Button size="small" type="text" danger icon={<DeleteOutlined />} title="Видалити" onClick={onRemove} />
+          <Button size="small" type="text" danger icon={<DeleteOutlined />} title={t("common.delete")} onClick={onRemove} />
         </Space>
       }
       styles={{ body: collapsed ? { display: "none" } : undefined }}
     >
       <Form layout="vertical" component="div">
-        <Form.Item label="Текст питання (необов'язково, якщо є зображення)">
+        <Form.Item label={t("question.text")}>
           <Input
             className="question-text"
             value={question.question}
-            placeholder="Введіть текст питання"
+            placeholder={t("question.text_placeholder")}
             onChange={(event) => set({ question: event.target.value })}
           />
         </Form.Item>
 
-        <Form.Item label="Зображення питання (необов'язково, якщо є текст)">
+        <Form.Item label={t("question.image")}>
           <Space.Compact style={{ width: "100%" }}>
             <Input
               className="question-image"
               value={question.image}
-              placeholder="напр., /imgs/diagram.png"
+              placeholder={t("question.image_placeholder")}
               onChange={(event) => set({ image: event.target.value })}
             />
-            <Button icon={<PictureOutlined />} title="Вибрати зображення" onClick={() => onPickImage("question")} />
+            <Button icon={<PictureOutlined />} title={t("question.choose_image")} onClick={() => onPickImage("question")} />
           </Space.Compact>
           {isImagePath(question.image) && (
             <Image src={question.image} height={120} style={{ marginTop: 8, objectFit: "contain" }} />
           )}
         </Form.Item>
 
-        <Form.Item label="Файл для завантаження (необов'язково)">
+        <Form.Item label={t("question.file")}>
           <Space.Compact style={{ width: "100%" }}>
             <Input
               className="question-file"
               value={question.file}
-              placeholder="напр., data.xlsx"
+              placeholder={t("question.file_placeholder")}
               onChange={(event) => set({ file: event.target.value })}
             />
-            <Button icon={<PaperClipOutlined />} title="Вибрати файл" onClick={onPickFile} />
+            <Button icon={<PaperClipOutlined />} title={t("question.choose_file")} onClick={onPickFile} />
           </Space.Compact>
         </Form.Item>
 
-        <Form.Item label="Тип питання">
+        <Form.Item label={t("question.type")}>
           <Segmented<QuestionType>
             value={question.type}
             onChange={(type) => onChange(changeQuestionType(question, type))}
             options={[
-              { value: "single", label: "📝 Одна правильна" },
-              { value: "multiple", label: "☑️ Кілька правильних" },
-              { value: "text", label: "✍️ Текстова відповідь" },
+              { value: "single", label: t("question.type_single") },
+              { value: "multiple", label: t("question.type_multiple") },
+              { value: "text", label: t("question.type_text") },
             ]}
           />
         </Form.Item>
 
         {question.type !== "text" ? (
           <>
-            <Form.Item label="Варіанти відповідей (позначте правильні)">
+            <Form.Item label={t("question.options")}>
               <Flex vertical gap={8}>
                 {question.options.map((option, optionIndex) => (
                   <Flex key={optionIndex} gap={8} align="center" className="option-item">
@@ -217,16 +218,16 @@ export function QuestionCard({
                     <Input
                       className="option-text"
                       value={option}
-                      placeholder={`Варіант ${optionIndex + 1}`}
+                      placeholder={t("question.option_n", { n: optionIndex + 1 })}
                       onChange={(event) => setOption(optionIndex, event.target.value)}
                     />
                     {isImagePath(option) && <Image src={option} height={36} style={{ objectFit: "contain" }} />}
                     <Button
                       icon={<PictureOutlined />}
-                      title="Вибрати зображення"
+                      title={t("question.choose_image")}
                       onClick={() => onPickImage(optionIndex)}
                     />
-                    <Tooltip title={question.options.length <= 2 ? "Питання має мати принаймні 2 варіанти" : undefined}>
+                    <Tooltip title={question.options.length <= 2 ? t("question.min_options") : undefined}>
                       <Button
                         icon={<DeleteOutlined />}
                         disabled={question.options.length <= 2}
@@ -237,17 +238,17 @@ export function QuestionCard({
                 ))}
                 <div>
                   <Button icon={<PlusOutlined />} onClick={() => set({ options: [...question.options, ""] })}>
-                    Додати варіант
+                    {t("question.add_option")}
                   </Button>
                 </div>
               </Flex>
             </Form.Item>
             {question.type === "multiple" && (
-              <Form.Item label="Мінімум правильних відповідей">
+              <Form.Item label={t("question.min_correct")}>
                 <InputNumber
                   min={1}
                   precision={0}
-                  placeholder="Усі правильні"
+                  placeholder={t("question.all_correct")}
                   value={question.min_correct}
                   onChange={(value) => set({ min_correct: value })}
                   style={{ width: 160 }}
@@ -257,32 +258,32 @@ export function QuestionCard({
           </>
         ) : (
           <>
-            <Form.Item label="Початкове значення (показується користувачу)">
+            <Form.Item label={t("question.default_value")}>
               <Input.TextArea
                 className="code-editor"
                 autoSize={{ minRows: 2 }}
                 value={question.default_value}
-                placeholder="Введіть початкове значення для відображення..."
+                placeholder={t("question.default_value_placeholder")}
                 onChange={(event) => set({ default_value: event.target.value })}
               />
             </Form.Item>
-            <Form.Item label="Правильна відповідь (показується при помилці)">
+            <Form.Item label={t("question.correct_value")}>
               <Input.TextArea
                 className="code-editor"
                 autoSize={{ minRows: 2 }}
                 value={question.correct_value}
-                placeholder="Введіть правильну відповідь..."
+                placeholder={t("question.correct_value_placeholder")}
                 onChange={(event) => set({ correct_value: event.target.value })}
               />
             </Form.Item>
-            <Form.Item label="Перевірка (Python код)" extra="Порожньо: точний збіг з правильною відповіддю">
+            <Form.Item label={t("question.checker")} extra={t("question.checker_hint")}>
               <Flex vertical gap={8}>
                 <Select
-                  placeholder="-- Оберіть шаблон --"
+                  placeholder={t("question.choose_template")}
                   value={null}
                   options={checkerTemplates.map((template) => ({ value: template.code, label: template.name }))}
                   onChange={(code: string) => set({ checker: code })}
-                  notFoundContent="Шаблони не налаштовані"
+                  notFoundContent={t("question.no_templates")}
                 />
                 <Input.TextArea
                   className="code-editor checker-input"
@@ -297,7 +298,7 @@ export function QuestionCard({
         )}
 
         <Flex wrap gap={24} align="center">
-          <Form.Item label="Бали за питання" style={{ marginBottom: 0 }}>
+          <Form.Item label={t("question.points")} style={{ marginBottom: 0 }}>
             <PointsInput value={question.points} onChange={(points) => set({ points })} />
           </Form.Item>
           <Checkbox
@@ -305,7 +306,7 @@ export function QuestionCard({
             disabled={index === 0}
             onChange={(event) => set({ stick_to_the_previous: event.target.checked })}
           >
-            Прив'язати до попереднього питання (при рандомізації)
+            {t("question.stick")}
           </Checkbox>
         </Flex>
 

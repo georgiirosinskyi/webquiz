@@ -23,11 +23,12 @@ def click_tab(browser, label):
 
 @skip_if_selenium_disabled
 def test_login_and_edit_quiz(browser):
-    with custom_webquiz_server() as (proc, port):
+    # The English admin pages
+    with custom_webquiz_server(config={"language": "en"}) as (proc, port):
         base_url = f"http://localhost:{port}"
         login(browser, base_url)
 
-        click_tab(browser, "Quiz Files")
+        click_tab(browser, "Quizzes")
         row = WebDriverWait(browser, 10).until(
             lambda d: d.find_element(By.XPATH, "//tr[.//*[text()='test_quiz.yaml']]")
         )
@@ -41,7 +42,7 @@ def test_login_and_edit_quiz(browser):
         WebDriverWait(browser, 10, ignored_exceptions=[ElementClickInterceptedException]).until(
             lambda d: validate.click() or True
         )
-        WebDriverWait(browser, 10).until(lambda d: "Found 1 questions" in d.page_source)
+        WebDriverWait(browser, 10).until(lambda d: "Valid YAML! Questions: 1." in d.page_source)
 
 
 @skip_if_selenium_disabled
@@ -62,7 +63,7 @@ def test_config_form_saves_registration_fields(browser):
         browser.find_element(By.ID, "cfg-reg-approve").click()
         checkboxes = browser.find_elements(By.CSS_SELECTOR, '[data-testid="cfg-reg-fields-list"] input[type="checkbox"]')
         checkboxes[1].click()
-        browser.find_element(By.XPATH, "//button[contains(., 'Save Configuration')]").click()
+        browser.find_element(By.XPATH, "//button[contains(., 'Зберегти налаштування')]").click()
         WebDriverWait(browser, 15).until(lambda d: d.find_elements(By.CSS_SELECTOR, ".ant-alert-success"))
 
         cookies = get_admin_session(port)
@@ -80,13 +81,13 @@ def test_settings_form_sets_quiz_background(browser):
         login(browser, base_url, "/admin/settings", '[data-testid="cfg-background"]')
 
         # Image mode shows the image field; the preview follows the form
-        browser.find_element(By.XPATH, "//div[@data-testid='cfg-background']//label[contains(., 'Image')]").click()
+        browser.find_element(By.XPATH, "//div[@data-testid='cfg-background']//label[contains(., 'Зображення')]").click()
         image = WebDriverWait(browser, 10).until(lambda d: d.find_element(By.ID, "cfg-background-image"))
         image.send_keys("/imgs/bg.jpg")
         preview = browser.find_element(By.CSS_SELECTOR, '[data-testid="cfg-background-preview"]')
         WebDriverWait(browser, 10).until(lambda d: "imgs/bg.jpg" in preview.get_attribute("style"))
 
-        browser.find_element(By.XPATH, "//button[contains(., 'Save Configuration')]").click()
+        browser.find_element(By.XPATH, "//button[contains(., 'Зберегти налаштування')]").click()
         WebDriverWait(browser, 15).until(lambda d: d.find_elements(By.CSS_SELECTOR, ".ant-alert-success"))
 
         html = requests.get(f"{base_url}/admin/settings", cookies=get_admin_session(port)).text

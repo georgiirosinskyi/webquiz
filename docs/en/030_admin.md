@@ -28,7 +28,7 @@ The **current quiz** card at the top shows the quiz title and file, its settings
 
 - The drop-down list switches to another quiz and **Restart** starts the current quiz again. Both ask for confirmation, because they clear all participants.
 - **Edit** opens the current quiz in the editor.
-- **On projector** opens Live Stats in a new tab.
+- **For the projector** opens Live Stats in a new tab.
 - **Open answers for all** is shown for quizzes with `show_answers_on_completion: true` (see **Answer Management** below).
 
 The table below lists every participant and changes as they answer:
@@ -98,7 +98,7 @@ Click a row to see every question of the participant with its result and time. F
   This section appears only if the `tunnel` section is configured in `webquiz.yaml` (see [Configuration](040_config.md) for details).
   It allows you to expose your local quiz server to the internet via SSH reverse tunnel.
   - **Server** — displays the tunnel server hostname
-  - **Public Key** — your SSH public key that needs to be registered on the tunnel server. Use the **Copy** button to copy it to the clipboard.
+  - **Public key** — your SSH public key that needs to be registered on the tunnel server. Use the **Copy** button to copy it to the clipboard.
   - **Connect/Disconnect** — click to establish or terminate the tunnel connection
 
   When connected, a public URL appears in the "URL for Access from Other Devices" section with a green background, allowing participants outside your local network to join the quiz.
@@ -128,17 +128,17 @@ At the top of the page, there's a **search field** to filter files by name, and 
 
 #### Main Tabs
 
-- **CSV Files** — list of quiz result files.
+- **CSV files** — list of quiz result files.
   Each item shows the file name, size, and last modification date.
   Three buttons are available for each file:
   - **Text** — view the raw CSV content in the browser
   - **Table** — view the data in a formatted table (see below)
   - **Download** — save the file locally
 
-- **Log Files** — server launch logs.
+- **Logs** — server launch logs.
   Useful for finding technical errors or checking how the server performed in previous sessions.
 
-- **Quiz Files** — list of quiz YAML files from the `quizzes` folder.
+- **Quizzes** — list of quiz YAML files from the `quizzes` folder.
   You can view and edit quiz files directly. When editing, a **Validate** button checks the YAML syntax before saving.
 
 #### Sending Files to Another Server
@@ -260,7 +260,7 @@ Before saving, the editor checks every question: it needs text or an image, fill
 
 ![Live Statistics](../imgs/livestats.png)
 
-The Live Statistics page provides real-time monitoring of quiz progress for all participants. Open it with **Live Stats ↗** in the admin menu or **On projector** on the Overview.
+The Live Statistics page provides real-time monitoring of quiz progress for all participants. Open it with **Live Stats ↗** in the admin menu or **For the projector** on the Overview.
 
 The page title shows the name of the current quiz.
 

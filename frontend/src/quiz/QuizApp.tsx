@@ -18,6 +18,7 @@ import {
   pointsWord,
   relativePath,
   remainingSeconds,
+  showNavigation,
   skipButtonMode,
   skipNeedsRequest,
   timerLevel,
@@ -873,6 +874,7 @@ export function QuizApp({ page }: { page: QuizPageData }) {
 
               <Flex wrap gap={8} id="nav">
                 {phase === "test" &&
+                  showNavigation(allowSkip, !!page.questionNavigation) &&
                   questions.map((q, index) => {
                     const isCurrent = index === current;
                     return (

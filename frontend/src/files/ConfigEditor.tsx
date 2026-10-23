@@ -4,6 +4,7 @@ import type { Color } from "antd/es/color-picker";
 import { DeleteOutlined, PictureOutlined, PlusOutlined, SaveOutlined } from "@ant-design/icons";
 import { ImagePicker } from "../admin/Pickers";
 import { apiSend } from "../shared/api";
+import { t } from "../shared/i18n";
 import { DEFAULT_BACKGROUND_COLOR } from "../shared/background";
 import { configToForm, formToConfig, type ConfigData, type ConfigFormValues } from "./types";
 
@@ -67,7 +68,7 @@ export function ConfigEditor({
     if (next === view) return;
     if (view === "form" ? formDirty : yamlDirty) {
       modal.confirm({
-        title: "You have unsaved changes. Switch anyway?",
+        title: t("settings.unsaved"),
         onOk: () => setView(next),
       });
     } else {
@@ -96,12 +97,12 @@ export function ConfigEditor({
       } else {
         setFeedback({
           type: "error",
-          text: result.data.error || "Failed to save configuration",
+          text: result.data.error || t("settings.save_failed"),
           details: result.data.errors,
         });
       }
     } catch (error) {
-      setFeedback({ type: "error", text: `Error: ${(error as Error).message}` });
+      setFeedback({ type: "error", text: t("common.error", { error: (error as Error).message }) });
     } finally {
       setSaving(false);
     }
@@ -110,14 +111,14 @@ export function ConfigEditor({
   return (
     <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
       <Typography.Text>
-        <strong>Configuration File:</strong> <Typography.Text type="secondary">{configPath}</Typography.Text>
+        <strong>{t("settings.config_file")}</strong> <Typography.Text type="secondary">{configPath}</Typography.Text>
       </Typography.Text>
 
       <Segmented<View>
         value={view}
         onChange={switchView}
         options={[
-          { value: "form", label: "Form" },
+          { value: "form", label: t("settings.form") },
           { value: "yaml", label: "YAML" },
         ]}
       />
@@ -129,17 +130,17 @@ export function ConfigEditor({
           initialValues={configToForm(initialData)}
           onValuesChange={() => setFormDirty(true)}
         >
-          <Card size="small" title="General" style={{ marginBottom: 16 }}>
+          <Card size="small" title={t("settings.general")} style={{ marginBottom: 16 }}>
             <Form.Item
               name="language"
-              label="Quiz interface language"
-              extra="Controls all user-facing text (registration form, buttons, errors, results). Hot-reloadable."
+              label={t("settings.language")}
+              extra={t("settings.language_hint")}
             >
               <Select
                 id="cfg-language"
                 style={{ width: "100%", maxWidth: 320 }}
                 options={[
-                  { value: "uk", label: "Ukrainian (Українська)" },
+                  { value: "uk", label: "Українська" },
                   { value: "en", label: "English" },
                 ]}
               />
@@ -147,47 +148,48 @@ export function ConfigEditor({
             <Form.Item
               name="extra_answers_with_users_csv"
               valuePropName="checked"
-              extra={
-                <>
-                  A third CSV file <code>&lt;quiz&gt;_NNNN.answers_with_users.csv</code> with each answer plus{" "}
-                  <code>user_id</code>, <code>username</code> and registration fields. Takes effect on next quiz switch
-                  / quiz restart.
-                </>
-              }
+              extra={t("settings.extra_csv_hint")}
+            >
+              <Checkbox id="cfg-extra-answers-with-users-csv">{t("settings.extra_csv")}</Checkbox>
+            </Form.Item>
+            <Form.Item
+              name="question_navigation"
+              valuePropName="checked"
+              extra={t("settings.navigation_hint")}
               style={{ marginBottom: 0 }}
             >
-              <Checkbox id="cfg-extra-answers-with-users-csv">Generate extra answers-with-users CSV</Checkbox>
+              <Checkbox id="cfg-question-navigation">{t("settings.navigation")}</Checkbox>
             </Form.Item>
           </Card>
 
-          <Card size="small" title="Quiz page background" style={{ marginBottom: 16 }} data-testid="cfg-background">
+          <Card size="small" title={t("settings.background")} style={{ marginBottom: 16 }} data-testid="cfg-background">
             <Flex gap={24} wrap align="flex-start">
               <div style={{ flex: "1 1 320px", minWidth: 0 }}>
-                <Form.Item name="background_mode" label="Background">
+                <Form.Item name="background_mode" label={t("settings.background_mode")}>
                   <Segmented
                     id="cfg-background-mode"
                     options={[
-                      { value: "color", label: "Color" },
-                      { value: "image", label: "Image" },
+                      { value: "color", label: t("settings.background_color_mode") },
+                      { value: "image", label: t("settings.background_image_mode") },
                     ]}
                   />
                 </Form.Item>
                 <Form.Item
                   name="background_color"
-                  label={backgroundMode === "image" ? "Color under the image" : "Color"}
+                  label={backgroundMode === "image" ? t("settings.color_under_image") : t("settings.color")}
                   getValueFromEvent={(color: Color) => color.toHexString()}
                 >
                   <ColorPicker
                     showText
                     disabledAlpha
-                    presets={[{ label: "Suggested", colors: BACKGROUND_PRESETS }]}
+                    presets={[{ label: t("settings.suggested"), colors: BACKGROUND_PRESETS }]}
                     data-testid="cfg-background-color"
                   />
                 </Form.Item>
                 {backgroundMode === "image" && (
                   <Form.Item
-                    label="Image"
-                    extra="An image from quizzes/imgs/ (put the file there first), or a full https:// URL. It covers the whole page."
+                    label={t("settings.image")}
+                    extra={t("settings.image_hint")}
                     style={{ marginBottom: 0 }}
                   >
                     <Space.Compact style={{ width: "100%", maxWidth: 480 }}>
@@ -195,7 +197,7 @@ export function ConfigEditor({
                         <Input id="cfg-background-image" placeholder="/imgs/background.jpg" allowClear />
                       </Form.Item>
                       <Button icon={<PictureOutlined />} onClick={() => setPickingImage(true)}>
-                        Choose
+                        {t("settings.choose")}
                       </Button>
                     </Space.Compact>
                   </Form.Item>
@@ -205,16 +207,16 @@ export function ConfigEditor({
             </Flex>
           </Card>
 
-          <Card size="small" title="Registration">
+          <Card size="small" title={t("settings.registration")}>
             <Form.Item name="approve" valuePropName="checked">
-              <Checkbox id="cfg-reg-approve">Require admin approval</Checkbox>
+              <Checkbox id="cfg-reg-approve">{t("settings.approve")}</Checkbox>
             </Form.Item>
-            <Form.Item name="username_label" label="Username label">
-              <Input id="cfg-reg-username-label" placeholder="Ім'я користувача" style={{ maxWidth: 400 }} />
+            <Form.Item name="username_label" label={t("settings.username_label")}>
+              <Input id="cfg-reg-username-label" placeholder={t("settings.username_label_placeholder")} style={{ maxWidth: 400 }} />
             </Form.Item>
             <Form.Item
-              label="Additional registration fields"
-              extra="Uncheck the box to disable a field without deleting its name. Disabled fields are kept in the config and can be re-enabled anytime."
+              label={t("settings.fields")}
+              extra={t("settings.fields_hint")}
               style={{ marginBottom: 0 }}
             >
               <Form.List name="fields">
@@ -223,7 +225,7 @@ export function ConfigEditor({
                     {fields.map((field) => (
                       <Flex key={field.key} gap={8} align="center">
                         <Form.Item name={[field.name, "enabled"]} valuePropName="checked" noStyle>
-                          <Checkbox title="Enable/disable this field" />
+                          <Checkbox title={t("settings.field_toggle")} />
                         </Form.Item>
                         <Form.Item
                           noStyle
@@ -234,7 +236,7 @@ export function ConfigEditor({
                           {() => (
                             <Form.Item name={[field.name, "name"]} noStyle>
                               <Input
-                                placeholder="Field name"
+                                placeholder={t("settings.field_name")}
                                 style={{
                                   maxWidth: 400,
                                   textDecoration:
@@ -246,12 +248,12 @@ export function ConfigEditor({
                             </Form.Item>
                           )}
                         </Form.Item>
-                        <Button danger icon={<DeleteOutlined />} onClick={() => remove(field.name)} title="Remove" />
+                        <Button danger icon={<DeleteOutlined />} onClick={() => remove(field.name)} title={t("settings.field_remove")} />
                       </Flex>
                     ))}
                     <div>
                       <Button icon={<PlusOutlined />} onClick={() => add({ name: "", enabled: true })}>
-                        Add Field
+                        {t("settings.add_field")}
                       </Button>
                     </div>
                   </Flex>
@@ -288,7 +290,7 @@ export function ConfigEditor({
 
       <Flex justify="center">
         <Button type="primary" size="large" icon={<SaveOutlined />} loading={saving} onClick={save}>
-          Save Configuration
+          {t("settings.save")}
         </Button>
       </Flex>
 

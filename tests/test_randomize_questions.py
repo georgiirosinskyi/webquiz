@@ -224,7 +224,7 @@ def test_yaml_validation_rejects_non_boolean_randomize_questions(temp_dir):
         assert response.status_code == 200
         data = response.json()
         assert not data["valid"]
-        assert any("randomize_questions" in error and "boolean" in error for error in data["errors"])
+        assert any("randomize_questions" in error and "true або false" in error for error in data["errors"])
 
 
 def test_randomization_false_behaves_like_disabled(temp_dir):

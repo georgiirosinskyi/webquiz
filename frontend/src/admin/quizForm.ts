@@ -1,3 +1,4 @@
+import { t } from "../shared/i18n";
 import { roundPoints } from "../shared/points";
 
 // Quiz YAML (as parsed JSON) <-> values of the quiz editor form.
@@ -169,9 +170,9 @@ export function formToQuiz(form: QuizForm): Json {
 export function pointsError(value: unknown, questionNumber: number): string | null {
   if (value === null || value === undefined || value === "") return null;
   const points = Number(value);
-  if (isNaN(points)) return `Питання ${questionNumber}: бали мають бути числом`;
-  if (points <= 0) return `Питання ${questionNumber}: бали мають бути більше 0`;
-  if (roundPoints(points) !== points) return `Питання ${questionNumber}: бали можуть мати не більше 2 знаків після коми`;
+  if (isNaN(points)) return t("validation.points_number", { n: questionNumber });
+  if (points <= 0) return t("validation.points_positive", { n: questionNumber });
+  if (roundPoints(points) !== points) return t("validation.points_decimals", { n: questionNumber });
   return null;
 }
 
@@ -179,15 +180,15 @@ export function pointsError(value: unknown, questionNumber: number): string | nu
 export function questionErrors(form: QuestionForm, questionNumber: number): string[] {
   const errors: string[] = [];
   if (!form.question.trim() && !form.image.trim()) {
-    errors.push(`Питання ${questionNumber}: потрібен текст або зображення`);
+    errors.push(t("validation.text_or_image", { n: questionNumber }));
   }
   if (form.type !== "text") {
-    if (form.options.length < 2) errors.push(`Питання ${questionNumber}: потрібно принаймні 2 варіанти`);
+    if (form.options.length < 2) errors.push(t("validation.two_options", { n: questionNumber }));
     if (form.options.some((option) => !option.trim())) {
-      errors.push(`Питання ${questionNumber}: заповніть усі варіанти відповідей`);
+      errors.push(t("validation.fill_options", { n: questionNumber }));
     }
     if (form.type === "multiple" && form.correct.length === 0) {
-      errors.push(`Питання ${questionNumber}: позначте принаймні одну правильну відповідь`);
+      errors.push(t("validation.one_correct", { n: questionNumber }));
     }
   }
   const points = pointsError(form.points, questionNumber);
@@ -197,8 +198,8 @@ export function questionErrors(form: QuestionForm, questionNumber: number): stri
 
 export function quizErrors(form: QuizForm): string[] {
   const errors: string[] = [];
-  if (!form.filename.trim()) errors.push("Будь ласка, введіть ім'я файлу");
-  if (form.questions.length === 0) errors.push("Будь ласка, додайте принаймні одне питання");
+  if (!form.filename.trim()) errors.push(t("validation.filename"));
+  if (form.questions.length === 0) errors.push(t("validation.one_question"));
   form.questions.forEach((question, index) => errors.push(...questionErrors(question, index + 1)));
   return errors;
 }

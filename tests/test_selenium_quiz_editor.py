@@ -160,10 +160,10 @@ def test_save_and_continue_keeps_editor_open(temp_dir, browser):
         save_continue = browser.find_element(By.CSS_SELECTOR, '[data-testid="save-continue"]')
         click_js(browser, save_continue)
         WebDriverWait(browser, 5).until(lambda d: "Збережено" in save_continue.text)
-        WebDriverWait(browser, 5).until(lambda d: "Продовжити" in save_continue.text)
+        WebDriverWait(browser, 5).until(lambda d: "продовжити" in save_continue.text)
 
         # The editor stays open and now edits the saved file
-        assert "Редагувати" in browser.find_element(By.CSS_SELECTOR, ".ant-modal-title").text
+        assert "Редагування тесту" in browser.find_element(By.CSS_SELECTOR, ".ant-modal-title").text
         assert browser.find_element(By.ID, "quiz-filename").is_enabled()
 
         saved = yaml.safe_load(quiz_file(port, "test_save_continue.yaml"))

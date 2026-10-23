@@ -43,7 +43,7 @@ registration:
         assert data["success"] is True
         # This test explicitly sets paths to different values than the test server
         # so restart is correctly required for those paths
-        assert "restart required" in data["message"].lower() or "saved and applied" in data["message"]
+        assert "потрібен перезапуск" in data["message"].lower() or "збережено й застосовано" in data["message"]
         assert "config_path" in data
 
 
@@ -92,7 +92,7 @@ def test_reject_invalid_yaml_syntax():
 
         assert response.status_code == 400
         data = response.json()
-        assert "Invalid YAML syntax" in data["error"]
+        assert "Неправильний синтаксис YAML" in data["error"]
 
 
 def test_reject_invalid_port_out_of_range():
@@ -111,7 +111,7 @@ def test_reject_invalid_port_out_of_range():
 
         assert response.status_code == 400
         data = response.json()
-        assert "validation failed" in data["error"].lower()
+        assert "не пройшла перевірку" in data["error"]
         assert "port" in str(data["errors"]).lower()
 
 
@@ -131,9 +131,9 @@ def test_reject_invalid_port_type():
 
         assert response.status_code == 400
         data = response.json()
-        assert "validation failed" in data["error"].lower()
+        assert "не пройшла перевірку" in data["error"]
         assert "port" in str(data["errors"]).lower()
-        assert "integer" in str(data["errors"]).lower()
+        assert "цілим числом" in str(data["errors"])
 
 
 def test_reject_server_section_as_list():
@@ -152,9 +152,9 @@ def test_reject_server_section_as_list():
 
         assert response.status_code == 400
         data = response.json()
-        assert "validation failed" in data["error"].lower()
+        assert "не пройшла перевірку" in data["error"]
         assert "server" in str(data["errors"]).lower()
-        assert "dictionary" in str(data["errors"]).lower()
+        assert "словником" in str(data["errors"])
 
 
 def test_reject_invalid_trusted_ips_not_list():
@@ -172,9 +172,9 @@ def test_reject_invalid_trusted_ips_not_list():
 
         assert response.status_code == 400
         data = response.json()
-        assert "validation failed" in data["error"].lower()
+        assert "не пройшла перевірку" in data["error"]
         assert "trusted_ips" in str(data["errors"]).lower()
-        assert "list" in str(data["errors"]).lower()
+        assert "списком" in str(data["errors"])
 
 
 def test_reject_invalid_quizzes_missing_fields():
@@ -194,7 +194,7 @@ def test_reject_invalid_quizzes_missing_fields():
 
         assert response.status_code == 400
         data = response.json()
-        assert "validation failed" in data["error"].lower()
+        assert "не пройшла перевірку" in data["error"]
         assert "folder" in str(data["errors"]).lower()
 
 
@@ -266,7 +266,7 @@ def test_reject_negative_port():
 
         assert response.status_code == 400
         data = response.json()
-        assert "validation failed" in data["error"].lower()
+        assert "не пройшла перевірку" in data["error"]
         assert "port" in str(data["errors"]).lower()
 
 
@@ -494,7 +494,7 @@ def test_save_config_json_validation_error():
 
         assert response.status_code == 400
         data = response.json()
-        assert "validation failed" in data["error"].lower()
+        assert "не пройшла перевірку" in data["error"]
 
 
 def test_save_config_json_empty_data():
@@ -534,7 +534,7 @@ def test_save_config_json_data_must_be_dict():
 
         assert response.status_code == 400
         data = response.json()
-        assert "dictionary" in data["error"].lower()
+        assert "словником" in data["error"]
 
 
 def test_save_config_json_preserves_comments_and_blank_lines():

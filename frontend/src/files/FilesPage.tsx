@@ -3,6 +3,7 @@ import { App, Button, Empty, Flex, Input, Space, Table, Tabs, Typography } from 
 import type { ColumnsType } from "antd/es/table";
 import { ReloadOutlined } from "@ant-design/icons";
 import { apiGet, downloadFile } from "../shared/api";
+import { t, type MessageKey } from "../shared/i18n";
 import { formatDate, formatFileSize } from "../shared/format";
 import { FileViewerModal, type ViewRequest } from "./FileViewerModal";
 import { QuizEditorModal } from "./QuizEditorModal";
@@ -17,10 +18,10 @@ import {
   type TransferState,
 } from "./types";
 
-const TABS: { key: FileType; label: string; empty: string }[] = [
-  { key: "csv", label: "📊 CSV Files", empty: "No CSV files found" },
-  { key: "logs", label: "📋 Log Files", empty: "No log files found" },
-  { key: "quizzes", label: "📝 Quiz Files", empty: "No quiz files found" },
+const TABS: { key: FileType; label: MessageKey; empty: MessageKey }[] = [
+  { key: "csv", label: "files.tab_csv", empty: "files.empty_csv" },
+  { key: "logs", label: "files.tab_logs", empty: "files.empty_logs" },
+  { key: "quizzes", label: "files.tab_quizzes", empty: "files.empty_quizzes" },
 ];
 
 const TRANSFER_POLL_MS = 5000;
@@ -42,7 +43,7 @@ export function FileManager() {
     try {
       const result = await apiGet<FileLists>("/api/files/list");
       if (!result.ok) {
-        message.error(result.data.error || "Failed to load files");
+        message.error(result.data.error || t("files.load_failed"));
         return;
       }
       setFiles(result.data);
@@ -56,7 +57,7 @@ export function FileManager() {
         return new Set([...current].filter((key) => existing.has(key)));
       });
     } catch (error) {
-      message.error(`Error loading files: ${(error as Error).message}`);
+      message.error(t("files.load_error", { error: (error as Error).message }));
     } finally {
       setLoading(false);
     }
@@ -69,7 +70,8 @@ export function FileManager() {
       // Tell the admin when the other server answers
       for (const offer of result.data.outgoing) {
         if (offerStatuses.current[offer.id] === "waiting" && offer.status !== "waiting") {
-          const text = `${offer.to}: ${TRANSFER_STATUS_TEXT[offer.status] || offer.status}`;
+          const status = TRANSFER_STATUS_TEXT[offer.status];
+          const text = `${offer.to}: ${status ? t(status) : offer.status}`;
           if (offer.status === "accepted") message.success(text);
           else message.error(text);
         }
@@ -90,14 +92,14 @@ export function FileManager() {
 
   const download = async (type: FileType, name: string) => {
     const error = await downloadFile(`/api/files/${type}/download/${encodeURIComponent(name)}`, name);
-    if (error) message.error(`Download failed: ${error}`);
-    else message.success(`Downloaded ${name}`);
+    if (error) message.error(t("files.download_failed", { error }));
+    else message.success(t("files.downloaded", { name }));
   };
 
   const columns = (type: FileType): ColumnsType<FileInfo> => [
     {
       key: "name",
-      title: "Name",
+      title: t("files.col_name"),
       dataIndex: "name",
       render: (name: string) => (
         <Typography.Text strong style={{ wordBreak: "break-word" }}>
@@ -108,7 +110,7 @@ export function FileManager() {
     },
     {
       key: "size",
-      title: "Size",
+      title: t("files.col_size"),
       dataIndex: "size",
       width: 110,
       responsive: ["sm"],
@@ -117,7 +119,7 @@ export function FileManager() {
     },
     {
       key: "modified",
-      title: "Modified",
+      title: t("files.col_modified"),
       dataIndex: "modified",
       width: 190,
       responsive: ["md"],
@@ -133,26 +135,26 @@ export function FileManager() {
         <Space wrap size={4} style={{ justifyContent: "flex-end" }}>
           {type === "quizzes" && (
             <Button size="small" onClick={() => setEditing(file.name)}>
-              ✏️ Edit
+              {t("files.edit")}
             </Button>
           )}
           {type === "csv" && (
             <>
               <Button size="small" onClick={() => setViewing({ type, name: file.name, mode: "text" })}>
-                📄 Text
+                {t("files.text")}
               </Button>
               <Button size="small" onClick={() => setViewing({ type, name: file.name, mode: "table" })}>
-                📊 Table
+                {t("files.table")}
               </Button>
             </>
           )}
           {type === "logs" && (
             <Button size="small" onClick={() => setViewing({ type, name: file.name, mode: "text" })}>
-              👁️ View
+              {t("files.view")}
             </Button>
           )}
           <Button size="small" onClick={() => download(type, file.name)}>
-            💾 Download
+            {t("files.download")}
           </Button>
         </Space>
       ),
@@ -168,7 +170,7 @@ export function FileManager() {
     return result;
   }, [files, search]);
 
-  const fileTable = (type: FileType, empty: string) => (
+  const fileTable = (type: FileType, empty: MessageKey) => (
     <Table<FileInfo>
       data-testid={`${type}-files`}
       rowKey="name"
@@ -177,7 +179,7 @@ export function FileManager() {
       dataSource={filtered[type]}
       columns={columns(type)}
       pagination={filtered[type].length > 50 ? { pageSize: 50 } : false}
-      locale={{ emptyText: <Empty description={empty} /> }}
+      locale={{ emptyText: <Empty description={t(empty)} /> }}
       rowSelection={
         transfer.available
           ? {
@@ -186,7 +188,7 @@ export function FileManager() {
                 .map((key) => key.slice(type.length + 1)),
               getCheckboxProps: (file) => ({
                 disabled: !canTransfer(type, file.name),
-                title: "Select to send to another server",
+                title: t("send.checkbox_title"),
               }),
               onChange: (keys) =>
                 setSelected((current) => {
@@ -206,7 +208,7 @@ export function FileManager() {
         <Input.Search
           id="search-input"
           allowClear
-          placeholder="Search files..."
+          placeholder={t("files.search")}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           style={{ maxWidth: 400, flex: 1, minWidth: 200 }}
@@ -215,10 +217,10 @@ export function FileManager() {
           icon={<ReloadOutlined />}
           onClick={async () => {
             await loadFiles();
-            message.success("Files refreshed");
+            message.success(t("files.refreshed"));
           }}
         >
-          Refresh
+          {t("common.refresh")}
         </Button>
       </Flex>
 
@@ -239,7 +241,7 @@ export function FileManager() {
           setTab(key);
           setSearch("");
         }}
-        items={TABS.map(({ key, label, empty }) => ({ key, label, children: fileTable(key, empty) }))}
+        items={TABS.map(({ key, label, empty }) => ({ key, label: t(label), children: fileTable(key, empty) }))}
       />
 
       <FileViewerModal request={viewing} onClose={() => setViewing(null)} />

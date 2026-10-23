@@ -206,7 +206,7 @@ class TestQuizValidation:
 
         errors = []
         assert self.server._validate_quiz_data(quiz_data, errors) == False
-        assert any("correct_answer array cannot be empty" in error for error in errors)
+        assert any("список correct_answer не може бути порожнім" in error for error in errors)
 
     def test_min_correct_validation(self):
         """Test validation of min_correct field"""
@@ -230,7 +230,7 @@ class TestQuizValidation:
         quiz_data["questions"][0]["min_correct"] = 5
         errors = []
         assert self.server._validate_quiz_data(quiz_data, errors) == False
-        assert any("min_correct cannot exceed number of correct answers" in error for error in errors)
+        assert any("min_correct не може перевищувати кількість правильних відповідей" in error for error in errors)
 
     def test_min_correct_single_answer_error(self):
         """Test that min_correct is rejected for single answer questions"""
@@ -247,7 +247,7 @@ class TestQuizValidation:
 
         errors = []
         assert self.server._validate_quiz_data(quiz_data, errors) == False
-        assert any("min_correct is only valid for multiple answer questions" in error for error in errors)
+        assert any("min_correct можна задати лише для питань із кількома правильними відповідями" in error for error in errors)
 
 
 if __name__ == "__main__":

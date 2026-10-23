@@ -1,4 +1,5 @@
 import { DEFAULT_BACKGROUND_COLOR } from "../shared/background";
+import type { MessageKey } from "../shared/i18n";
 
 export type FileType = "csv" | "logs" | "quizzes";
 
@@ -13,6 +14,7 @@ export type FileLists = Record<FileType, FileInfo[]>;
 export interface ConfigData {
   language: string;
   extra_answers_with_users_csv: boolean;
+  question_navigation?: boolean;
   registration: {
     approve?: boolean;
     username_label?: string;
@@ -61,12 +63,12 @@ export function parseTransferKey(key: string): { type: FileType; name: string } 
   return { type: key.slice(0, slash) as FileType, name: key.slice(slash + 1) };
 }
 
-export const TRANSFER_STATUS_TEXT: Record<OutgoingOffer["status"], string> = {
-  waiting: "⏳ waiting for an answer",
-  accepted: "✅ accepted",
-  rejected: "❌ rejected",
-  failed: "⚠️ the other server could not download the files",
-  expired: "⌛ expired (no answer in 30 minutes)",
+export const TRANSFER_STATUS_TEXT: Record<OutgoingOffer["status"], MessageKey> = {
+  waiting: "send.status_waiting",
+  accepted: "send.status_accepted",
+  rejected: "send.status_rejected",
+  failed: "send.status_failed",
+  expired: "send.status_expired",
 };
 
 // Config form values <-> {data: {...}} body of PUT /api/admin/config.
@@ -74,6 +76,7 @@ export const TRANSFER_STATUS_TEXT: Record<OutgoingOffer["status"], string> = {
 export interface ConfigFormValues {
   language: string;
   extra_answers_with_users_csv: boolean;
+  question_navigation: boolean;
   approve: boolean;
   username_label: string;
   fields: { name: string; enabled: boolean }[];
@@ -89,6 +92,7 @@ export function configToForm(config: ConfigData | null): ConfigFormValues {
   return {
     language: config?.language === "en" ? "en" : "uk",
     extra_answers_with_users_csv: !!config?.extra_answers_with_users_csv,
+    question_navigation: !!config?.question_navigation,
     approve: !!registration.approve,
     username_label: registration.username_label || "",
     fields: [
@@ -108,6 +112,7 @@ export function formToConfig(values: ConfigFormValues) {
   return {
     language: values.language,
     extra_answers_with_users_csv: values.extra_answers_with_users_csv,
+    question_navigation: values.question_navigation,
     registration: {
       approve: values.approve,
       username_label: values.username_label || "",

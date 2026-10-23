@@ -143,7 +143,7 @@ def test_validation_rejects_non_list_disabled_fields():
         )
         assert response.status_code == 400
         data = response.json()
-        assert "validation failed" in data["error"].lower()
+        assert "не пройшла перевірку" in data["error"]
         assert any("disabled_fields" in err for err in data.get("errors", []))
 
 
@@ -159,7 +159,7 @@ def test_validation_rejects_non_string_disabled_fields():
         )
         assert response.status_code == 400
         data = response.json()
-        assert "validation failed" in data["error"].lower()
+        assert "не пройшла перевірку" in data["error"]
 
 
 def test_disabled_field_omitted_from_registration_html():

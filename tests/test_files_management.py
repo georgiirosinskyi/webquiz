@@ -71,7 +71,7 @@ def test_files_api_without_master_key_disabled():
         assert response.status_code == 403
         data = response.json()
         assert "error" in data
-        assert "disabled" in data["error"].lower()
+        assert "вимкнено" in data["error"]
 
 
 def test_files_page_renders_with_auth():
@@ -330,7 +330,7 @@ def test_view_file_not_found():
         assert response.status_code == 404
         data = response.json()
         assert "error" in data
-        assert "not found" in data["error"].lower()
+        assert "не знайдено" in data["error"]
 
 
 def test_view_empty_file():
