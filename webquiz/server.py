@@ -3981,8 +3981,10 @@ class TestingServer:
             JSON response with list of image files and their paths
         """
         imgs_dir = os.path.join(self.quizzes_dir, "imgs")
+        # The real folder, shown when there are no images so the admin knows where to put them
+        directory = os.path.abspath(imgs_dir)
         if not os.path.exists(imgs_dir):
-            return web.json_response({"images": []})
+            return web.json_response({"images": [], "directory": directory})
 
         image_files = []
         for root, dirs, files in os.walk(imgs_dir):
@@ -4000,7 +4002,7 @@ class TestingServer:
 
         image_files.sort(key=lambda x: (x["folder"], x["filename"].lower()))
 
-        return web.json_response({"images": image_files})
+        return web.json_response({"images": image_files, "directory": directory})
 
     @admin_auth_required
     async def admin_list_files(self, request):
@@ -4010,8 +4012,9 @@ class TestingServer:
             JSON response with list of files (filename, path, size)
         """
         files_dir = os.path.join(self.quizzes_dir, "attach")
+        directory = os.path.abspath(files_dir)
         if not os.path.exists(files_dir):
-            return web.json_response({"files": []})
+            return web.json_response({"files": [], "directory": directory})
 
         file_list = []
         for filename in os.listdir(files_dir):
@@ -4029,7 +4032,7 @@ class TestingServer:
         # Sort alphabetically by filename (case-insensitive)
         file_list.sort(key=lambda x: x["filename"].lower())
 
-        return web.json_response({"files": file_list})
+        return web.json_response({"files": file_list, "directory": directory})
 
     @admin_auth_required
     async def admin_list_checker_templates(self, request):

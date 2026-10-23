@@ -231,7 +231,7 @@ For each question, you can configure:
 
 - **Question Text** — the question to ask (required if no image is provided)
 
-- **Question Image** — path to an image file (e.g., `/imgs/diagram.png`). Click the folder icon to browse available images. Images are stored in the `quizzes/imgs/` folder.
+- **Question Image** — path to an image file (e.g., `/imgs/diagram.png`). Click the folder icon to browse available images. Images are stored in the `quizzes/imgs/` folder; when there are none, the picker shows the full path of that folder on this computer.
 
 - **File for Download** — attach a file that participants can download when answering the question (e.g., `data.xlsx`). Click the paperclip icon to browse available files. Files are stored in the `quizzes/attach/` folder.
 

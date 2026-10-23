@@ -234,9 +234,9 @@ export const en: Record<MessageKey, string> = {
   "picker.load_error": "Loading error: {error}",
   "picker.images_title": "📷 Choose an image",
   "picker.no_images": "No images found in the quizzes/imgs folder",
-  "picker.no_images_hint": "Add image files to quizzes/imgs to see them here",
+  "picker.no_images_hint": "Add image files to the folder {folder} to see them here",
   "picker.files_title": "📎 Choose a file",
-  "picker.no_files": "No files found in the quizzes/attach folder",
+  "picker.no_files": "No files found in the folder {folder}",
 
   // Incoming file transfers
   "transfer.type_quizzes": "quiz",

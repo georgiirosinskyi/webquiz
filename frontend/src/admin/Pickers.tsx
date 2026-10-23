@@ -16,16 +16,20 @@ interface AttachInfo {
   size: number;
 }
 
-function useList<T>(open: boolean, url: string, key: string) {
+// The items and the real folder they come from (shown when it is empty)
+function useList<T>(open: boolean, url: string, key: string): [T[] | null, string] {
   const { message } = App.useApp();
   const [items, setItems] = useState<T[] | null>(null);
+  const [directory, setDirectory] = useState("");
   useEffect(() => {
     if (!open) return;
     setItems(null);
-    apiGet<Record<string, T[]>>(url)
+    apiGet<Record<string, unknown>>(url)
       .then((result) => {
-        if (result.ok) setItems(result.data[key] || []);
-        else {
+        if (result.ok) {
+          setItems((result.data[key] as T[]) || []);
+          setDirectory((result.data.directory as string) || "");
+        } else {
           message.error(result.data.error || t("picker.load_failed"));
           setItems([]);
         }
@@ -35,7 +39,7 @@ function useList<T>(open: boolean, url: string, key: string) {
         setItems([]);
       });
   }, [open, url, key, message]);
-  return items;
+  return [items, directory];
 }
 
 // Images from quizzes/imgs, grouped by folder.
@@ -48,7 +52,7 @@ export function ImagePicker({
   onSelect: (path: string) => void;
   onClose: () => void;
 }) {
-  const images = useList<ImageInfo>(open, "/api/admin/list-images", "images");
+  const [images, directory] = useList<ImageInfo>(open, "/api/admin/list-images", "images");
   const groups = new Map<string, ImageInfo[]>();
   (images || []).forEach((image) => {
     const folder = image.folder || "imgs";
@@ -65,7 +69,7 @@ export function ImagePicker({
             <>
               {t("picker.no_images")}
               <br />
-              <Typography.Text type="secondary">{t("picker.no_images_hint")}</Typography.Text>
+              <Typography.Text type="secondary">{t("picker.no_images_hint", { folder: directory || "quizzes/imgs" })}</Typography.Text>
             </>
           }
         />
@@ -109,7 +113,7 @@ export function FilePicker({
   onSelect: (filename: string) => void;
   onClose: () => void;
 }) {
-  const files = useList<AttachInfo>(open, "/api/admin/list-files", "files");
+  const [files, directory] = useList<AttachInfo>(open, "/api/admin/list-files", "files");
   return (
     <Modal open={open} title={t("picker.files_title")} onCancel={onClose} footer={null} width={600} destroyOnHidden>
       {files === null ? (
@@ -117,7 +121,7 @@ export function FilePicker({
       ) : (
         <List
           dataSource={files}
-          locale={{ emptyText: <Empty description={t("picker.no_files")} /> }}
+          locale={{ emptyText: <Empty description={t("picker.no_files", { folder: directory || "quizzes/attach" })} /> }}
           renderItem={(file) => (
             <List.Item
               className="picker-row"

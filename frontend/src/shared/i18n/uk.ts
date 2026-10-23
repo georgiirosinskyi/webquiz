@@ -232,9 +232,9 @@ export const uk = {
   "picker.load_error": "Помилка завантаження: {error}",
   "picker.images_title": "📷 Вибір зображення",
   "picker.no_images": "Зображення не знайдені в теці quizzes/imgs",
-  "picker.no_images_hint": "Додайте файли зображень до quizzes/imgs, щоб побачити їх тут",
+  "picker.no_images_hint": "Додайте файли зображень у теку {folder}, щоб побачити їх тут",
   "picker.files_title": "📎 Вибір файлу",
-  "picker.no_files": "Файли не знайдені в теці quizzes/attach",
+  "picker.no_files": "Файли не знайдені в теці {folder}",
 
   // Incoming file transfers
   "transfer.type_quizzes": "тест",
