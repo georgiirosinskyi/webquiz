@@ -23,7 +23,7 @@ Every section has its own address (`/admin/quizzes`, `/admin/archive`, `/admin/s
 
 ![WebQuiz Admin Panel](../imgs/admin_advanced.png)
 
-The **current quiz** card at the top shows the quiz title and file, its settings (questions, total points, time limit, shuffling, skipping, approval) and counters: registered, waiting, in progress, finished and the average score of finished participants.
+The **current quiz** card at the top shows the quiz title (the file name only when the quiz has no title; the file is selected in the drop-down list), its settings (questions, total points, time limit, shuffling, skipping, approval) and counters: registered, waiting, in progress, finished and the average score of finished participants.
 
 - The drop-down list switches to another quiz and **Restart** starts the current quiz again. Both ask for confirmation, because they clear all participants.
 - **Edit** opens the current quiz in the editor.

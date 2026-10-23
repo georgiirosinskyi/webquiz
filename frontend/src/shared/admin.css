@@ -235,12 +235,11 @@ body {
 }
 
 .progress-summary {
-  width: 160px;
+  width: 100%;
+  min-width: 160px;
 }
 
-.progress-summary-counts,
-.progress-summary-counts .ant-typography {
-  font-size: 12px;
+.progress-summary-counts {
   white-space: nowrap;
 }
 
@@ -283,3 +282,21 @@ body {
   background: #fff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
+
+/* Overview: quiz settings tags as tall as the small "Open answers" button next to them */
+.quiz-param.ant-tag {
+  height: 24px;
+  line-height: 22px;
+  font-size: 14px;
+  padding-inline: 8px;
+  margin-inline-end: 0;
+}
+
+/* Same height as .progress-summary: the 8px bar, the 2px gap and a line of text */
+.progress-placeholder {
+  min-width: 160px;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+

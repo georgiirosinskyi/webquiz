@@ -119,11 +119,6 @@ function CurrentQuizCard({
           <Typography.Title level={4} style={{ margin: "2px 0 4px" }} data-testid="current-quiz-title">
             {quiz ? quiz.title || quiz.filename : t("overview.no_quiz")}
           </Typography.Title>
-          {current && (
-            <Typography.Text code data-testid="current-quiz-file">
-              {current}
-            </Typography.Text>
-          )}
         </div>
         <Space wrap>
           <Select
@@ -159,16 +154,18 @@ function CurrentQuizCard({
       </Flex>
 
       {quiz && (
-        <Space wrap size={[6, 6]} style={{ marginTop: 12 }}>
-          <Tag>{tn("plural.questions", quiz.total_questions)}</Tag>
-          <Tag>{tn("plural.points", quiz.total_points, { n: formatPoints(quiz.total_points) })}</Tag>
-          {quiz.time_limit > 0 && <Tag color="orange">⏱ {formatDuration(quiz.time_limit)}</Tag>}
-          {quiz.randomize_questions && <Tag color="purple">{t("overview.shuffle")}</Tag>}
-          {quiz.allow_skip_questions && <Tag color="cyan">{t("overview.can_skip")}</Tag>}
-          {quiz.requires_approval && <Tag color="gold">{t("overview.needs_approval")}</Tag>}
+        <Flex justify="space-between" align="center" wrap gap={6} style={{ marginTop: 12 }}>
+          <Space wrap size={[6, 6]}>
+            <Tag className="quiz-param">{tn("plural.questions", quiz.total_questions)}</Tag>
+            <Tag className="quiz-param">{tn("plural.points", quiz.total_points, { n: formatPoints(quiz.total_points) })}</Tag>
+            {quiz.time_limit > 0 && <Tag className="quiz-param" color="orange">⏱ {formatDuration(quiz.time_limit)}</Tag>}
+            {quiz.randomize_questions && <Tag className="quiz-param" color="purple">{t("overview.shuffle")}</Tag>}
+            {quiz.allow_skip_questions && <Tag className="quiz-param" color="cyan">{t("overview.can_skip")}</Tag>}
+            {quiz.requires_approval && <Tag className="quiz-param" color="gold">{t("overview.needs_approval")}</Tag>}
+          </Space>
           {quiz.show_answers_on_completion &&
             (quiz.force_all_completed ? (
-              <Tag color="green" data-testid="answers-opened">
+              <Tag className="quiz-param" color="green" data-testid="answers-opened">
                 {t("overview.answers_opened")}
               </Tag>
             ) : (
@@ -176,7 +173,7 @@ function CurrentQuizCard({
                 {t("overview.open_answers")}
               </Button>
             ))}
-        </Space>
+        </Flex>
       )}
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }} data-testid="overview-stats">
@@ -368,7 +365,9 @@ function UsersTable({
       title: t("overview.col_progress"),
       sorter: USER_SORTERS.progress,
       sortDirections: ["descend", "ascend"],
-      render: (_, user) => (user.status === "pending" ? "—" : <ProgressSummary user={user} quiz={quiz} />),
+      render: (_, user) =>
+        // The dash takes the height of the bar with the counts, so approving a user does not change the row height
+        user.status === "pending" ? <div className="progress-placeholder">—</div> : <ProgressSummary user={user} quiz={quiz} />,
     },
     {
       key: "points",
@@ -393,16 +392,15 @@ function UsersTable({
       sorter: USER_SORTERS.time,
       render: (_, user) => {
         const { elapsed, remaining } = liveTimes(user, now);
-        if (elapsed === null) return "—";
         return (
           <Flex vertical>
-            <span>{formatDuration(elapsed)}</span>
+            <span>{elapsed === null ? "—" : formatDuration(elapsed)}</span>
             {remaining !== null ? (
               <Typography.Text type={remaining <= 60 ? "danger" : "secondary"} style={{ fontSize: 12 }}>
                 {t("overview.time_left", { time: formatDuration(remaining) })}
               </Typography.Text>
             ) : (
-              // Keeps the row height when the test ends and "time left" goes away
+              // Keeps the row height before approval and after the test ends, when there is no "time left"
               quiz && quiz.time_limit > 0 && <span style={{ fontSize: 12 }}>{" "}</span>
             )}
           </Flex>
