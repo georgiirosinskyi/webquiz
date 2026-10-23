@@ -227,7 +227,8 @@ export function QuizEditor({
           />
         </Form.Item>
 
-        <Flex wrap gap="small 24px" style={{ marginBottom: 16 }}>
+        {/* One setting per line */}
+        <Flex vertical align="flex-start" gap={8} style={{ marginBottom: 16 }}>
           <Checkbox
             id="show-right-answer"
             checked={settings.show_right_answer}
