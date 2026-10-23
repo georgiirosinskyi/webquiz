@@ -21,6 +21,7 @@ describe("config form", () => {
       language: "en",
       extra_answers_with_users_csv: true,
       registration: { approve: true, username_label: "Name", fields: ["Grade"], disabled_fields: ["School"] },
+      appearance: { background_color: "#ffffff", background_image: "/imgs/bg.jpg" },
     });
     expect(form).toEqual({
       language: "en",
@@ -31,6 +32,9 @@ describe("config form", () => {
         { name: "Grade", enabled: true },
         { name: "School", enabled: false },
       ],
+      background_mode: "image",
+      background_color: "#ffffff",
+      background_image: "/imgs/bg.jpg",
     });
   });
 
@@ -45,6 +49,9 @@ describe("config form", () => {
         { name: "", enabled: true },
         { name: "School", enabled: false },
       ],
+      background_mode: "color",
+      background_color: "#336699",
+      background_image: "/imgs/old.jpg",
     });
     expect(data.registration).toEqual({
       approve: false,
@@ -54,7 +61,26 @@ describe("config form", () => {
     });
   });
 
-  it("defaults a missing config to Ukrainian with no fields", () => {
-    expect(configToForm(null)).toMatchObject({ language: "uk", approve: false, fields: [] });
+  it("defaults a missing config to Ukrainian with no fields and the dark color", () => {
+    expect(configToForm(null)).toMatchObject({
+      language: "uk",
+      approve: false,
+      fields: [],
+      background_mode: "color",
+      background_color: "#1f2937",
+      background_image: "",
+    });
+  });
+
+  it("clears the image in color mode and keeps it in image mode", () => {
+    const base = configToForm(null);
+    expect(formToConfig({ ...base, background_color: "#336699", background_image: "/imgs/a.jpg" }).appearance).toEqual({
+      background_color: "#336699",
+      background_image: "",
+    });
+    expect(formToConfig({ ...base, background_mode: "image", background_image: " /imgs/a.jpg " }).appearance).toEqual({
+      background_color: "#1f2937",
+      background_image: "/imgs/a.jpg",
+    });
   });
 });

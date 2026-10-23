@@ -155,6 +155,23 @@ This section defines how users register before taking quizzes.
 
 ---
 
+### Section `appearance` (optional)
+
+```
+appearance:
+  background_color: "#1f2937"
+  background_image: "/imgs/background.jpg"
+```
+
+The background of the user quiz page.
+
+- **background_color** — a hex color (`#rgb` or `#rrggbb`). Default: dark `#1f2937`.
+- **background_image** — an image that covers the whole page instead of the color: a file from `quizzes/imgs/` (written as `/imgs/name.jpg`) or a full `https://` URL. Empty (default) — color only. The color stays under the image while it loads.
+
+In the admin **Settings** section (Form view) the **Quiz page background** block switches between **Color** (a color picker with suggested colors) and **Image** (choose a file from `quizzes/imgs/` with **Choose** or type a path or URL) and shows a preview. Hot-reloadable: the quiz page gets the new background right after saving.
+
+---
+
 ### Section `quizzes` (optional)
 
 ```

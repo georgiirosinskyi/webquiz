@@ -273,7 +273,9 @@ def test_quiz_page_has_fork_elements(temp_dir):
             assert f'id:"{element_id}"' in js, element_id
         assert "progress-bar" not in js, "The progress bar was removed in this fork"
         assert get_page_data(html)["page"]["translations"]["skip_question"] == "Пропустити питання"
-        assert "img/background.png" in js
+        # The background is a color from the config now, not a picture
+        assert "img/background.png" not in js
+        assert get_page_data(html)["page"]["background"]["color"].startswith("#")
 
     with custom_webquiz_server(config={"language": "en"}, quizzes={"quiz.yaml": quiz()}) as (proc, port):
         html = requests.get(f"http://localhost:{port}/").text
@@ -292,9 +294,9 @@ def test_pages_have_only_light_theme(temp_dir):
             assert "data-theme" not in html, path
 
 
-def test_background_images_served(temp_dir):
+def test_corner_images_served(temp_dir):
     with custom_webquiz_server(quizzes={"quiz.yaml": quiz()}) as (proc, port):
-        for name in ("background.png", "top-left.png", "top-right.png"):
+        for name in ("top-left.png", "top-right.png"):
             response = requests.get(f"http://localhost:{port}/img/{name}")
             assert response.status_code == 200, name
             assert response.content[:4] == b"\x89PNG"

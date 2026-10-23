@@ -508,6 +508,10 @@ registration:
   disabled_fields:         # Fields preserved in config but hidden from the form
     - Teacher              # Toggle on/off in the admin Settings section
 
+appearance:                # Background of the user quiz page (admin Settings: color or image)
+  background_color: "#1f2937"   # Hex color, default dark
+  background_image: ""          # e.g. /imgs/background.jpg (file in quizzes/imgs/) or https:// URL; empty = color only
+
 quiz:
   show_right_answer: false          # Show correct answer after submission
   show_answers_on_completion: true  # Reveal answers only after all students complete

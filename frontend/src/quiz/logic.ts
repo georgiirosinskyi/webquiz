@@ -1,4 +1,5 @@
 // Pure logic of the quiz page, kept out of the components so it can be unit tested.
+import type { Background } from "../shared/background";
 
 export type QuestionStatus = "unseen" | "answered" | "skipped";
 
@@ -33,6 +34,8 @@ export interface QuizPageData {
   usernameLabel: string;
   registrationFields: { label: string; name: string }[];
   translations: Record<string, string>;
+  // config `appearance`: page background color and optional image
+  background?: Background;
 }
 
 // The parts of a verify-user response that restore the page after a reload

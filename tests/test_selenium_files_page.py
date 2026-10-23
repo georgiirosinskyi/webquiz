@@ -71,3 +71,41 @@ def test_config_form_saves_registration_fields(browser):
         assert registration["approve"] is True
         assert registration["fields"] == ["Grade", "School"]
         assert registration["disabled_fields"] == []
+
+
+@skip_if_selenium_disabled
+def test_settings_form_sets_quiz_background(browser):
+    with custom_webquiz_server() as (proc, port):
+        base_url = f"http://localhost:{port}"
+        login(browser, base_url, "/admin/settings", '[data-testid="cfg-background"]')
+
+        # Image mode shows the image field; the preview follows the form
+        browser.find_element(By.XPATH, "//div[@data-testid='cfg-background']//label[contains(., 'Image')]").click()
+        image = WebDriverWait(browser, 10).until(lambda d: d.find_element(By.ID, "cfg-background-image"))
+        image.send_keys("/imgs/bg.jpg")
+        preview = browser.find_element(By.CSS_SELECTOR, '[data-testid="cfg-background-preview"]')
+        WebDriverWait(browser, 10).until(lambda d: "imgs/bg.jpg" in preview.get_attribute("style"))
+
+        browser.find_element(By.XPATH, "//button[contains(., 'Save Configuration')]").click()
+        WebDriverWait(browser, 15).until(lambda d: d.find_elements(By.CSS_SELECTOR, ".ant-alert-success"))
+
+        html = requests.get(f"{base_url}/admin/settings", cookies=get_admin_session(port)).text
+        appearance = yaml.safe_load(get_page_data(html)["page"]["configContent"])["appearance"]
+        assert appearance == {"background_color": "#1f2937", "background_image": "/imgs/bg.jpg"}
+
+        # The quiz page uses it
+        browser.get(f"{base_url}/")
+        WebDriverWait(browser, 10).until(lambda d: d.find_element(By.ID, "username"))
+        body_image = browser.execute_script("return document.body.style.backgroundImage")
+        assert "imgs/bg.jpg" in body_image
+
+
+@skip_if_selenium_disabled
+def test_quiz_page_has_dark_background_by_default(browser):
+    with custom_webquiz_server() as (proc, port):
+        browser.get(f"http://localhost:{port}/")
+        WebDriverWait(browser, 10).until(lambda d: d.find_element(By.ID, "username"))
+        color = browser.execute_script("return getComputedStyle(document.body).backgroundColor")
+        assert color == "rgb(31, 41, 55)"
+        assert browser.execute_script("return document.body.style.backgroundImage") == ""
+        assert "dark-background" in browser.find_element(By.TAG_NAME, "body").get_attribute("class")

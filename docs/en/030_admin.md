@@ -183,7 +183,7 @@ This view makes it easy to analyze quiz results without downloading the file.
 
 The **Settings** section provides two ways to edit the server configuration:
 
-**Form view** (default) — a structured form for editing registration settings:
+**Form view** (default) — a structured form for the language, the quiz page background (color or image, with a preview; see [Configuration](040_config.md)) and registration settings:
 - **Require admin approval** — checkbox to enable/disable approval workflow
 - **Username label** — customize the label for the username field
 - **Additional registration fields** — add/remove extra fields (e.g., Grade, School)

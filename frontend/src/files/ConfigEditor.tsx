@@ -1,11 +1,42 @@
 import { useState } from "react";
-import { Alert, App, Button, Card, Checkbox, Flex, Form, Input, Segmented, Select, Space, Typography } from "antd";
-import { DeleteOutlined, PlusOutlined, SaveOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Card, Checkbox, ColorPicker, Flex, Form, Input, Segmented, Select, Space, Typography } from "antd";
+import type { Color } from "antd/es/color-picker";
+import { DeleteOutlined, PictureOutlined, PlusOutlined, SaveOutlined } from "@ant-design/icons";
+import { ImagePicker } from "../admin/Pickers";
 import { apiSend } from "../shared/api";
+import { DEFAULT_BACKGROUND_COLOR } from "../shared/background";
 import { configToForm, formToConfig, type ConfigData, type ConfigFormValues } from "./types";
 
 type View = "form" | "yaml";
 type Feedback = { type: "success" | "error"; text: string; details?: string[] } | null;
+
+// Colors offered next to the picker: the dark default and a few calm ones
+const BACKGROUND_PRESETS = [
+  DEFAULT_BACKGROUND_COLOR,
+  "#141414",
+  "#0f2a44",
+  "#1b3a2f",
+  "#3b1f3a",
+  "#f5f5f5",
+  "#e6f4ff",
+];
+
+// How the quiz page background looks; the admin page serves /imgs/ too, so the path works as is
+function BackgroundPreview({ mode, color, image }: { mode: string; color: string; image: string }) {
+  const url = mode === "image" ? image.trim() : "";
+  return (
+    <div
+      className="background-preview"
+      data-testid="cfg-background-preview"
+      style={{
+        backgroundColor: color || DEFAULT_BACKGROUND_COLOR,
+        backgroundImage: url ? `url(${JSON.stringify(url)})` : undefined,
+      }}
+    >
+      <div className="background-preview-card" />
+    </div>
+  );
+}
 
 // Config tab: structured form (JSON partial update) or the raw YAML.
 export function ConfigEditor({
@@ -27,6 +58,10 @@ export function ConfigEditor({
   const [yamlDirty, setYamlDirty] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [saving, setSaving] = useState(false);
+  const [pickingImage, setPickingImage] = useState(false);
+  const backgroundMode = Form.useWatch("background_mode", form) || "color";
+  const backgroundColor = Form.useWatch("background_color", form) || DEFAULT_BACKGROUND_COLOR;
+  const backgroundImage = Form.useWatch("background_image", form) || "";
 
   const switchView = (next: View) => {
     if (next === view) return;
@@ -125,6 +160,51 @@ export function ConfigEditor({
             </Form.Item>
           </Card>
 
+          <Card size="small" title="Quiz page background" style={{ marginBottom: 16 }} data-testid="cfg-background">
+            <Flex gap={24} wrap align="flex-start">
+              <div style={{ flex: "1 1 320px", minWidth: 0 }}>
+                <Form.Item name="background_mode" label="Background">
+                  <Segmented
+                    id="cfg-background-mode"
+                    options={[
+                      { value: "color", label: "Color" },
+                      { value: "image", label: "Image" },
+                    ]}
+                  />
+                </Form.Item>
+                <Form.Item
+                  name="background_color"
+                  label={backgroundMode === "image" ? "Color under the image" : "Color"}
+                  getValueFromEvent={(color: Color) => color.toHexString()}
+                >
+                  <ColorPicker
+                    showText
+                    disabledAlpha
+                    presets={[{ label: "Suggested", colors: BACKGROUND_PRESETS }]}
+                    data-testid="cfg-background-color"
+                  />
+                </Form.Item>
+                {backgroundMode === "image" && (
+                  <Form.Item
+                    label="Image"
+                    extra="An image from quizzes/imgs/ (put the file there first), or a full https:// URL. It covers the whole page."
+                    style={{ marginBottom: 0 }}
+                  >
+                    <Space.Compact style={{ width: "100%", maxWidth: 480 }}>
+                      <Form.Item name="background_image" noStyle>
+                        <Input id="cfg-background-image" placeholder="/imgs/background.jpg" allowClear />
+                      </Form.Item>
+                      <Button icon={<PictureOutlined />} onClick={() => setPickingImage(true)}>
+                        Choose
+                      </Button>
+                    </Space.Compact>
+                  </Form.Item>
+                )}
+              </div>
+              <BackgroundPreview mode={backgroundMode} color={backgroundColor} image={backgroundImage} />
+            </Flex>
+          </Card>
+
           <Card size="small" title="Registration">
             <Form.Item name="approve" valuePropName="checked">
               <Checkbox id="cfg-reg-approve">Require admin approval</Checkbox>
@@ -195,6 +275,16 @@ export function ConfigEditor({
           spellCheck={false}
         />
       )}
+
+      <ImagePicker
+        open={pickingImage}
+        onClose={() => setPickingImage(false)}
+        onSelect={(path) => {
+          form.setFieldValue("background_image", path);
+          setFormDirty(true);
+          setPickingImage(false);
+        }}
+      />
 
       <Flex justify="center">
         <Button type="primary" size="large" icon={<SaveOutlined />} loading={saving} onClick={save}>

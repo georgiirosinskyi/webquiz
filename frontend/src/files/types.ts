@@ -1,3 +1,5 @@
+import { DEFAULT_BACKGROUND_COLOR } from "../shared/background";
+
 export type FileType = "csv" | "logs" | "quizzes";
 
 export interface FileInfo {
@@ -16,6 +18,10 @@ export interface ConfigData {
     username_label?: string;
     fields?: string[];
     disabled_fields?: string[];
+  };
+  appearance?: {
+    background_color?: string;
+    background_image?: string;
   };
 }
 
@@ -71,10 +77,15 @@ export interface ConfigFormValues {
   approve: boolean;
   username_label: string;
   fields: { name: string; enabled: boolean }[];
+  // Quiz page background: a color, or an image (shown over the color)
+  background_mode: "color" | "image";
+  background_color: string;
+  background_image: string;
 }
 
 export function configToForm(config: ConfigData | null): ConfigFormValues {
   const registration = config?.registration || {};
+  const appearance = config?.appearance || {};
   return {
     language: config?.language === "en" ? "en" : "uk",
     extra_answers_with_users_csv: !!config?.extra_answers_with_users_csv,
@@ -84,6 +95,9 @@ export function configToForm(config: ConfigData | null): ConfigFormValues {
       ...(registration.fields || []).map((name) => ({ name, enabled: true })),
       ...(registration.disabled_fields || []).map((name) => ({ name, enabled: false })),
     ],
+    background_mode: appearance.background_image ? "image" : "color",
+    background_color: appearance.background_color || DEFAULT_BACKGROUND_COLOR,
+    background_image: appearance.background_image || "",
   };
 }
 
@@ -99,6 +113,11 @@ export function formToConfig(values: ConfigFormValues) {
       username_label: values.username_label || "",
       fields: fields.filter((field) => field.enabled).map((field) => field.name),
       disabled_fields: fields.filter((field) => !field.enabled).map((field) => field.name),
+    },
+    appearance: {
+      background_color: values.background_color || DEFAULT_BACKGROUND_COLOR,
+      // Color mode clears the image; the color stays under an image while it loads
+      background_image: values.background_mode === "image" ? (values.background_image || "").trim() : "",
     },
   };
 }

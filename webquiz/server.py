@@ -15,6 +15,7 @@ import shutil
 import random
 import secrets
 import math
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Any, Optional
@@ -25,7 +26,7 @@ from io import StringIO
 import ipaddress
 from importlib import resources
 
-from .config import WebQuizConfig, load_config_from_yaml
+from .config import DEFAULT_BACKGROUND_COLOR, WebQuizConfig, load_config_from_yaml
 from .translations import get_translations
 from .tunnel import TunnelManager
 from .transfer import TransferManager, TransferError
@@ -76,6 +77,28 @@ def copy_resource(filename: str, dst_dir: Path):
 UI_DIR = Path(str(resources.files("webquiz") / "ui"))
 UI_DATA_MARKER = "<!--WEBQUIZ_DATA-->"
 UI_PAGES = ["live-stats.html", "admin.html", "quiz.html"]
+
+
+HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+def config_form_data(parsed) -> dict:
+    """Parts of a parsed config file the settings form edits (language, CSV, registration, appearance)."""
+    if not isinstance(parsed, dict):
+        parsed = {}
+    registration = parsed.get("registration")
+    appearance = parsed.get("appearance")
+    if not isinstance(appearance, dict):
+        appearance = {}
+    return {
+        "language": parsed.get("language", "uk"),
+        "extra_answers_with_users_csv": bool(parsed.get("extra_answers_with_users_csv", False)),
+        "registration": registration if isinstance(registration, dict) else {},
+        "appearance": {
+            "background_color": appearance.get("background_color") or DEFAULT_BACKGROUND_COLOR,
+            "background_image": appearance.get("background_image") or "",
+        },
+    }
 
 
 def inject_page_data(template: str, data: dict) -> str:
@@ -904,6 +927,9 @@ class TestingServer:
         # Update registration config
         self.config.registration = new_config.registration
 
+        # Update the quiz page background (the quiz restart after a config save regenerates the page)
+        self.config.appearance = new_config.appearance
+
         # Update admin.trusted_ips only (keep master_key unchanged)
         self.config.admin.trusted_ips = new_config.admin.trusted_ips
 
@@ -1056,7 +1082,6 @@ class TestingServer:
         await self.create_default_index_html()
 
         img_path = Path(f"{self.static_dir}/img")
-        copy_resource("img/background.png", img_path)
         copy_resource("img/top-left.png", img_path)
         copy_resource("img/top-right.png", img_path)
 
@@ -1367,6 +1392,10 @@ class TestingServer:
             "usernameLabel": username_label,
             "registrationFields": registration_fields,
             "translations": self.translations,
+            "background": {
+                "color": self.config.appearance.background_color,
+                "image": self.config.appearance.background_image,
+            },
         }
 
         template = self.templates.get("ui/quiz.html")
@@ -3856,6 +3885,21 @@ class TestingServer:
                     if not isinstance(registration["username_label"], str):
                         errors.append("'registration.username_label' must be a string")
 
+        # Validate appearance section (optional)
+        if "appearance" in data:
+            appearance = data["appearance"]
+            if appearance is None:
+                pass
+            elif not isinstance(appearance, dict):
+                errors.append("'appearance' section must be a dictionary")
+            else:
+                color = appearance.get("background_color")
+                if color is not None and (not isinstance(color, str) or not HEX_COLOR_RE.match(color)):
+                    errors.append("'appearance.background_color' must be a hex color like '#1f2937'")
+                image = appearance.get("background_image")
+                if image is not None and not isinstance(image, str):
+                    errors.append("'appearance.background_image' must be a string")
+
         # Validate quizzes section (optional)
         if "quizzes" in data:
             quizzes = data["quizzes"]
@@ -4224,24 +4268,11 @@ class TestingServer:
 
         # Read back saved content and parse for response
         saved_content = ""
-        saved_data = {
-            "language": self.config.language,
-            "extra_answers_with_users_csv": self.config.extra_answers_with_users_csv,
-            "registration": {},
-        }
+        saved_data = config_form_data({"language": self.config.language})
         try:
             async with aiofiles.open(config_path, "r", encoding="utf-8") as f:
                 saved_content = await f.read()
-            parsed = yaml.safe_load(saved_content) if saved_content.strip() else {}
-            if parsed and isinstance(parsed, dict):
-                registration = parsed.get("registration", {})
-                if not isinstance(registration, dict):
-                    registration = {}
-                saved_data = {
-                    "language": parsed.get("language", "uk"),
-                    "extra_answers_with_users_csv": bool(parsed.get("extra_answers_with_users_csv", False)),
-                    "registration": registration,
-                }
+            saved_data = config_form_data(yaml.safe_load(saved_content) if saved_content.strip() else {})
         except Exception:
             pass
 
@@ -4356,21 +4387,12 @@ class TestingServer:
         config_data = None
         if config_path:
             config_content = ""
-            config_data = {"language": "uk", "extra_answers_with_users_csv": False, "registration": {}}
+            config_data = config_form_data({})
         if config_path and os.path.exists(config_path):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     config_content = f.read()
-                parsed = yaml.safe_load(config_content) if config_content.strip() else {}
-                if parsed and isinstance(parsed, dict):
-                    registration = parsed.get("registration", {})
-                    if not isinstance(registration, dict):
-                        registration = {}
-                    config_data = {
-                        "language": parsed.get("language", "uk"),
-                        "extra_answers_with_users_csv": bool(parsed.get("extra_answers_with_users_csv", False)),
-                        "registration": registration,
-                    }
+                config_data = config_form_data(yaml.safe_load(config_content) if config_content.strip() else {})
             except Exception as e:
                 logger.warning(f"Could not read config file: {e}")
 

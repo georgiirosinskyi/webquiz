@@ -93,6 +93,17 @@ class RegistrationConfig:
             self.disabled_fields = []
 
 
+DEFAULT_BACKGROUND_COLOR = "#1f2937"
+
+
+@dataclass
+class AppearanceConfig:
+    """Look of the user quiz page"""
+
+    background_color: str = DEFAULT_BACKGROUND_COLOR  # CSS hex color: #rgb or #rrggbb
+    background_image: str = ""  # Image path (e.g. /imgs/background.jpg) or URL; empty = color only
+
+
 @dataclass
 class DownloadableQuiz:
     """Downloadable quiz configuration"""
@@ -169,6 +180,7 @@ class WebQuizConfig:
     paths: PathsConfig = field(default_factory=PathsConfig)
     admin: AdminConfig = field(default_factory=AdminConfig)
     registration: RegistrationConfig = field(default_factory=RegistrationConfig)
+    appearance: AppearanceConfig = field(default_factory=AppearanceConfig)
     quizzes: QuizzesConfig = field(default_factory=QuizzesConfig)
     tunnel: TunnelConfig = field(default_factory=TunnelConfig)
     checker_templates: CheckerTemplatesConfig = field(default_factory=CheckerTemplatesConfig)
@@ -196,6 +208,10 @@ def load_config_from_yaml(config_path: str) -> WebQuizConfig:
         paths_config = PathsConfig(**(config_data.get("paths", {})))
         admin_config = AdminConfig(**(config_data.get("admin", {})))
         registration_config = RegistrationConfig(**(config_data.get("registration", {})))
+        appearance_config = AppearanceConfig(**(config_data.get("appearance") or {}))
+        if not appearance_config.background_color:
+            appearance_config.background_color = DEFAULT_BACKGROUND_COLOR
+        appearance_config.background_image = appearance_config.background_image or ""
 
         # Parse downloadable quizzes configuration
         quizzes_data = config_data.get("quizzes", [])
@@ -244,6 +260,7 @@ def load_config_from_yaml(config_path: str) -> WebQuizConfig:
             paths=paths_config,
             admin=admin_config,
             registration=registration_config,
+            appearance=appearance_config,
             quizzes=quizzes_config,
             tunnel=tunnel_config,
             checker_templates=checker_templates_config,

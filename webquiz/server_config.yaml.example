@@ -27,6 +27,11 @@ admin:
 #     - Grade
 #     - School
 
+# Optional: Background of the user quiz page (also editable in the admin Settings section)
+# appearance:
+#   background_color: "#1f2937"         # Hex color (default: dark #1f2937)
+#   background_image: "/imgs/bg.jpg"    # Image from quizzes/imgs/ or an https:// URL; empty = color only
+
 # Optional: Downloadable quizzes configuration
 # Uncomment and configure to enable quiz downloads in admin panel
 # quizzes:
