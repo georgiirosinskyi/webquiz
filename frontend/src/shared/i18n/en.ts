@@ -339,6 +339,7 @@ export const en: Record<MessageKey, string> = {
   "files.view": "View",
   "files.download": "Download",
   "files.view_error": "Error: {error}",
+  "files.resize": "Drag to resize",
   "files.view_load_error": "Failed to load the file: {error}",
 
   // YAML editor of a quiz file

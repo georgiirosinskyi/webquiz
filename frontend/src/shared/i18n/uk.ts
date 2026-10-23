@@ -337,6 +337,7 @@ export const uk = {
   "files.view": "Переглянути",
   "files.download": "Завантажити",
   "files.view_error": "Помилка: {error}",
+  "files.resize": "Потягніть, щоб змінити розмір",
   "files.view_load_error": "Не вдалося завантажити файл: {error}",
 
   // YAML editor of a quiz file

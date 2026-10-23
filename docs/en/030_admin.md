@@ -118,6 +118,8 @@ The archive table shows for every record: the start **Date**, the **Quiz** (titl
 
 Click a record to see its files. They are shown as cards, three in a row (one on a phone), with readable names: **Results** (first), **Detailed answers**, **Answers with user data**, **Server log** (last); below the name are the file name and size. **View** opens a CSV file as a table (centered headers; the name, registration fields, questions and answers left-aligned, the rest centered) and the log as text. CSV files download with the **CSV** or **XLSX** button (an Excel workbook with a bold header, cell borders and centered cells except the name, registration fields and the question and answer texts), the log with **Download**.
 
+The table view window is as wide as the table, up to 90% of the screen. Drag it by its title, and drag its bottom right corner to resize it.
+
 Records without users (for example after saving the settings, which restarts the quiz) are hidden; the **Show records without users** switch shows them too.
 
 Old files from the `data/` and `logs/` folders of earlier versions are not moved and not shown in the archive; they stay on disk as they were.
