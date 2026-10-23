@@ -1,5 +1,4 @@
 import type { MessageKey } from "../shared/i18n";
-import type { LiveState } from "../live-stats/stats";
 import type { AdminUser, CellState, CurrentQuiz, UserStatus } from "./types";
 
 export type OverviewFilter = "all" | "pending" | "in_progress" | "finished";
@@ -86,18 +85,30 @@ export function registrationFieldNames(users: AdminUser[]): string[] {
   return names;
 }
 
-// The overview users as live stats state, for the questions x users matrix (pending users are not in it).
-export function toLiveState(users: AdminUser[], quiz: CurrentQuiz | null): LiveState {
-  const started = users.filter((user) => user.status !== "pending");
-  return {
-    users: Object.fromEntries(started.map((user) => [user.user_id, user.username])),
-    liveStats: Object.fromEntries(started.map((user) => [user.user_id, user.live_stats])),
-    completed: Object.fromEntries(started.map((user) => [user.user_id, isFinished(user)])),
-    completionTimes: {},
-    questions: (quiz?.questions || []).map((question) => ({ ...question, image: question.image || undefined })),
-    totalPoints: quiz?.total_points || 0,
-    currentQuiz: quiz?.filename || null,
-  };
+export interface AnswerRow {
+  id: number;
+  position: number;
+  state: CellState | "empty";
+  question: string;
+  answer: string[] | null;
+  correct: string[];
+  time_taken: number | null;
+}
+
+// One row per question in the user's order: what they answered (null if nothing) and the right answer.
+export function answerRows(user: AdminUser, quiz: CurrentQuiz | null): AnswerRow[] {
+  const questions = new Map((quiz?.questions || []).map((question) => [question.id, question]));
+  return progressCells(user).map((cell, index) => {
+    const question = questions.get(cell.id);
+    return {
+      ...cell,
+      position: index + 1,
+      question: question?.question || question?.image?.split("/").pop() || "",
+      answer: user.answers?.[String(cell.id)] || null,
+      correct: question?.correct_answer || [],
+      time_taken: user.live_stats[String(cell.id)]?.time_taken ?? null,
+    };
+  });
 }
 
 // Applies one user record from the admin WebSocket to the list.

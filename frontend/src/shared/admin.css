@@ -1,3 +1,13 @@
+/* Room for the scrollbar is always kept, so the page does not jump when a user's answers open */
+html {
+  overflow-y: scroll;
+}
+
+/* antd narrows the body by the scrollbar width while a modal is open; the gutter already keeps that room */
+html body {
+  width: auto !important;
+}
+
 body {
   margin: 0;
 }
@@ -145,7 +155,61 @@ body {
   }
 }
 
+/* Quizzes */
+.quiz-title-cell {
+  min-width: 160px;
+  max-width: 360px;
+}
+
+/* Keeps the tree indent for the second line */
+.quiz-name-cell {
+  display: inline-flex;
+  flex-direction: column;
+  vertical-align: top;
+}
+
+/* On phones the title column is hidden and the title goes under the file name */
+.quiz-title-inline {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .quiz-title-inline {
+    display: block;
+    font-size: 12px;
+    max-width: 180px;
+    white-space: normal;
+  }
+}
+
 /* Overview */
+.answer-question {
+  min-width: 200px;
+  max-width: 420px;
+}
+
+.answer-cell {
+  min-width: 120px;
+  max-width: 280px;
+}
+
+@media (max-width: 768px) {
+  .answer-question {
+    min-width: 140px;
+  }
+}
+
+.answer-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.answer-image {
+  max-height: 48px;
+  max-width: 120px;
+  border-radius: 4px;
+}
+
 .row-pending > td {
   background: #fffbe6 !important;
 }

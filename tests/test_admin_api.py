@@ -106,6 +106,47 @@ def test_admin_list_quizzes_without_title():
         assert no_title_quiz["title"] is None
 
 
+def test_admin_list_quizzes_settings_and_subfolders():
+    """Each quiz comes with its question count, points, time limit and settings; subfolder quizzes are listed by path."""
+    quizzes = {
+        "plain.yaml": {"questions": [{"question": "Q", "options": ["1", "2"], "correct_answer": 0}]},
+        "grade5/math.yml": {
+            "title": "Math",
+            "time_limit": 600,
+            "randomize_questions": True,
+            "allow_skip_questions": True,
+            "show_right_answer": False,
+            "show_answers_on_completion": True,
+            "show_final_list": False,
+            "questions": [
+                {"question": "A", "options": ["1", "2"], "correct_answer": 0, "points": 1.5},
+                {"question": "B", "checker": "", "correct_value": "x"},
+            ],
+        },
+    }
+    with custom_webquiz_server(quizzes=quizzes) as (proc, port):
+        cookies = requests.post(f"http://localhost:{port}/api/admin/auth", json={"master_key": "test123"}).cookies
+        data = requests.get(f"http://localhost:{port}/api/admin/list-quizzes", cookies=cookies).json()
+        by_name = {q["filename"]: q for q in data["quizzes"]}
+
+        assert by_name["grade5/math.yml"] == {
+            "filename": "grade5/math.yml",
+            "title": "Math",
+            "total_questions": 2,
+            "total_points": 2.5,
+            "time_limit": 600,
+            "randomize_questions": True,
+            "allow_skip_questions": True,
+            "show_right_answer": False,
+            "show_answers_on_completion": True,
+            "show_final_list": False,
+        }
+        plain = by_name["plain.yaml"]
+        assert (plain["total_questions"], plain["total_points"], plain["time_limit"]) == (1, 1, 0)
+        assert plain["show_right_answer"] is True
+        assert plain["randomize_questions"] is False
+
+
 def test_admin_list_quizzes_without_auth():
     """Test listing quizzes without authentication."""
     with custom_webquiz_server() as (proc, port):

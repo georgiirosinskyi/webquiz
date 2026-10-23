@@ -96,9 +96,36 @@ def test_answers_update_user_record(temp_dir):
             assert record["correct"] == 1
             assert record["earned_points"] == 2
             assert record["points_percentage"] == 67
+            # Given answers as option texts, next to the correct ones from the quiz info
+            assert record["answers"] == {"1": ["A"], "2": ["A"]}
             assert record["mark"] == 3
             assert record["remaining_seconds"] is None
             assert record["elapsed_seconds"] is not None
+        finally:
+            ws.close()
+
+
+def test_answer_texts_for_all_question_types(temp_dir):
+    quizzes = {
+        "quiz.yaml": {
+            "questions": [
+                {"question": "Pick", "options": ["/imgs/a.png", "B", "C"], "correct_answer": [0, 2]},
+                {"question": "Type", "checker": "", "correct_value": "42"},
+            ]
+        }
+    }
+    with custom_webquiz_server(quizzes=quizzes) as (proc, port):
+        ws, initial = connect(port)
+        try:
+            assert [q["correct_answer"] for q in initial["quiz"]["questions"]] == [["/imgs/a.png", "C"], ["42"]]
+            user_id = requests.post(f"http://localhost:{port}/api/register", json={"username": "Ira"}).json()["user_id"]
+            for question_id, answer in [(1, [2, 1]), (2, "41")]:
+                requests.post(
+                    f"http://localhost:{port}/api/submit-answer",
+                    json={"user_id": user_id, "question_id": question_id, "selected_answer": answer},
+                )
+            record = last_user_update(ws, user_id, "completed")
+            assert record["answers"] == {"1": ["B", "C"], "2": ["41"]}
         finally:
             ws.close()
 
@@ -118,6 +145,7 @@ def test_timeout_finish_is_time_up(temp_dir):
             record = last_user_update(ws, user_id, "time_up")
             # Placeholders for unanswered questions do not count as given answers
             assert record["answered"] == 0
+            assert record["answers"] == {}
             assert record["earned_points"] == 0
             assert record["mark"] == 2
         finally:

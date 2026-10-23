@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { App, Button, Card, Input, Modal, Space, Table, Tag, Tooltip, Typography } from "antd";
 import {
   CopyOutlined,
   DeleteOutlined,
   EditOutlined,
+  FolderOpenOutlined,
+  FolderOutlined,
   MergeCellsOutlined,
   PlayCircleOutlined,
   PlusOutlined,
@@ -11,10 +13,26 @@ import {
 } from "@ant-design/icons";
 import { apiGet, apiSend } from "../shared/api";
 import { t } from "../shared/i18n";
+import { formatPoints } from "../shared/points";
+import { formatDuration } from "./overview";
+import { buildQuizTree, isFolderKey, type QuizTreeNode } from "./quizTree";
 import type { QuizInfo, QuizList } from "./types";
 import type { EditorTarget } from "./QuizEditor";
 
 type NamePrompt = { title: string; value: string; onOk: (name: string) => Promise<void> } | null;
+
+// Settings that differ from the defaults, as tags
+function SettingTags({ quiz }: { quiz: QuizInfo }) {
+  return (
+    <Space size={[4, 4]} wrap>
+      {quiz.randomize_questions && <Tag color="purple">{t("overview.shuffle")}</Tag>}
+      {quiz.allow_skip_questions && <Tag color="cyan">{t("overview.can_skip")}</Tag>}
+      {quiz.show_right_answer === false && <Tag>{t("quizzes.no_right_answer")}</Tag>}
+      {quiz.show_answers_on_completion && <Tag color="blue">{t("quizzes.answers_after_all")}</Tag>}
+      {quiz.show_final_list === false && <Tag>{t("quizzes.no_final_list")}</Tag>}
+    </Space>
+  );
+}
 
 export function QuizzesCard({
   list,
@@ -32,6 +50,11 @@ export function QuizzesCard({
   const [promptValue, setPromptValue] = useState("");
   const current = list.current_quiz;
   const single = selected.length === 1 ? selected[0] : null;
+  const tree = useMemo(() => buildQuizTree(list.quizzes), [list.quizzes]);
+  // Folders are closed until the admin opens them
+  const [expanded, setExpanded] = useState<string[]>([]);
+  const toggleFolder = (key: string) =>
+    setExpanded((keys) => (keys.includes(key) ? keys.filter((item) => item !== key) : [...keys, key]));
 
   const askName = (title: string, value: string, onOk: (name: string) => Promise<void>) => {
     setPromptValue(value);
@@ -206,43 +229,102 @@ export function QuizzesCard({
         </Button>
       </Space>
 
-      <Table<QuizInfo>
+      <Table<QuizTreeNode>
         data-testid="quiz-list"
-        rowKey="filename"
+        rowKey="key"
         size="small"
         pagination={false}
-        scroll={{ y: 360 }}
-        dataSource={list.quizzes}
+        scroll={{ x: "max-content", y: 480 }}
+        dataSource={tree}
         locale={{ emptyText: t("quizzes.empty") }}
-        rowSelection={{ selectedRowKeys: selected, onChange: (keys) => setSelected(keys as string[]) }}
-        onRow={(quiz) => ({
-          // A click selects only this quiz; Ctrl/Cmd+click adds it to the selection
+        expandable={{
+          expandedRowKeys: expanded,
+          onExpand: (_, node) => toggleFolder(node.key),
+          indentSize: 20,
+        }}
+        rowSelection={{
+          selectedRowKeys: selected,
+          onChange: (keys) => setSelected((keys as string[]).filter((key) => !isFolderKey(key))),
+          renderCell: (_, node, __, checkbox) => (node.quiz ? checkbox : null),
+          hideSelectAll: true,
+        }}
+        onRow={(node) => ({
+          // A click selects only this quiz; Ctrl/Cmd+click adds it to the selection; a click on a folder opens or closes it
           onClick: (event) => {
-            if ((event.target as HTMLElement).closest(".ant-table-selection-column")) return;
+            if ((event.target as HTMLElement).closest(".ant-table-selection-column, .ant-table-row-expand-icon")) return;
+            if (!node.quiz) {
+              toggleFolder(node.key);
+              return;
+            }
+            const filename = node.quiz.filename;
             setSelected((currentSelection) =>
               event.ctrlKey || event.metaKey
-                ? currentSelection.includes(quiz.filename)
-                  ? currentSelection.filter((name) => name !== quiz.filename)
-                  : [...currentSelection, quiz.filename]
-                : [quiz.filename],
+                ? currentSelection.includes(filename)
+                  ? currentSelection.filter((name) => name !== filename)
+                  : [...currentSelection, filename]
+                : [filename],
             );
           },
-          onDoubleClick: () => openEditor(quiz.filename),
+          onDoubleClick: () => node.quiz && openEditor(node.quiz.filename),
           style: { cursor: "pointer" },
         })}
         columns={[
           {
             key: "filename",
             title: t("quizzes.col_file"),
-            dataIndex: "filename",
-            render: (filename: string) => (
-              <Space size={4} wrap>
-                <Typography.Text strong={filename === current}>{filename}</Typography.Text>
-                {filename === current && <Tag color="green">{t("quizzes.current_tag")}</Tag>}
-              </Space>
-            ),
+            render: (_, node) =>
+              node.quiz ? (
+                <span className="quiz-name-cell">
+                  <Space size={4}>
+                    <Typography.Text strong={node.key === current}>{node.name}</Typography.Text>
+                    {node.key === current && <Tag color="green">{t("quizzes.current_tag")}</Tag>}
+                  </Space>
+                  {node.quiz.title && (
+                    <Typography.Text type="secondary" className="quiz-title-inline">
+                      {node.quiz.title}
+                    </Typography.Text>
+                  )}
+                </span>
+              ) : (
+                <Space size={6} className="quiz-folder">
+                  {expanded.includes(node.key) ? <FolderOpenOutlined /> : <FolderOutlined />}
+                  <Typography.Text strong>{node.name}</Typography.Text>
+                  <Typography.Text type="secondary">({node.count})</Typography.Text>
+                </Space>
+              ),
           },
-          { key: "title", title: t("quizzes.col_title"), dataIndex: "title", render: (title: string | null) => title || "", responsive: ["sm"] },
+          {
+            key: "title",
+            title: t("quizzes.col_title"),
+            className: "quiz-title-cell",
+            responsive: ["md"],
+            render: (_, node) => node.quiz?.title || "",
+          },
+          {
+            key: "questions",
+            title: t("quizzes.col_questions"),
+            align: "center",
+            render: (_, node) => (node.quiz ? (node.quiz.total_questions ?? "—") : ""),
+          },
+          {
+            key: "points",
+            title: t("quizzes.col_points"),
+            align: "center",
+            responsive: ["sm"],
+            render: (_, node) =>
+              node.quiz ? (node.quiz.total_points === undefined || node.quiz.total_points === null ? "—" : formatPoints(node.quiz.total_points)) : "",
+          },
+          {
+            key: "time",
+            title: t("quizzes.col_time"),
+            align: "center",
+            render: (_, node) => (node.quiz ? (node.quiz.time_limit ? `⏱ ${formatDuration(node.quiz.time_limit)}` : "—") : ""),
+          },
+          {
+            key: "settings",
+            title: t("quizzes.col_settings"),
+            render: (_, node) => node.quiz && <SettingTags quiz={node.quiz} />,
+          },
         ]}
       />
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>

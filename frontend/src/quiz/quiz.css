@@ -35,14 +35,27 @@ body {
 
 .quiz-title.ant-typography {
   margin: 0;
+  text-align: center;
   overflow-wrap: anywhere;
 }
 
+/* The name sits on its own line above the title, on the right, so a long name
+   never squeezes a long title */
 .user-info {
+  display: inline-flex;
+  align-items: baseline;
+  align-self: flex-end;
+  max-width: 100%;
+  box-sizing: border-box;
   font-size: 15px;
   padding: 4px 12px;
   margin-inline-end: 0;
-  flex: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.user-info #username-display {
+  min-width: 0;
 }
 
 #loading {
@@ -425,6 +438,15 @@ body {
 
   .current-question > .ant-card-body {
     padding: 14px;
+  }
+
+  .quiz-header {
+    margin-bottom: 14px;
+  }
+
+  .quiz-title.ant-typography {
+    font-size: 20px;
+    line-height: 1.3;
   }
 
   /* Question number and timer stay visible while the question scrolls */

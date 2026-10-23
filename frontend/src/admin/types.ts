@@ -20,6 +20,15 @@ export interface DownloadableQuiz {
 export interface QuizInfo {
   filename: string;
   title: string | null;
+  // Settings from the file (see _quiz_list_entry in server.py), missing when it cannot be read
+  total_questions?: number;
+  total_points?: number | null;
+  time_limit?: number;
+  randomize_questions?: boolean;
+  allow_skip_questions?: boolean;
+  show_right_answer?: boolean;
+  show_answers_on_completion?: boolean;
+  show_final_list?: boolean;
 }
 
 export interface QuizList {
@@ -60,6 +69,8 @@ export interface AdminUser {
   remaining_seconds: number | null;
   question_order: number[];
   live_stats: Record<string, { state: CellState; time_taken: number | null }>;
+  // Given answers by question id: the typed text or the chosen option texts
+  answers?: Record<string, string[]>;
   // Client side: when the record arrived, so the timers can run on between updates
   received_at?: number;
 }
@@ -69,6 +80,7 @@ export interface QuizQuestionInfo {
   question: string;
   image?: string | null;
   points: number;
+  correct_answer: string[];
 }
 
 // The running quiz (see _admin_quiz_info in server.py)

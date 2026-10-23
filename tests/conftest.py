@@ -120,6 +120,7 @@ def custom_webquiz_server(config=None, quizzes=None):
 
     for quiz_filename, quiz_data in final_quizzes.items():
         quiz_file_path = os.path.join(quizzes_dir, quiz_filename)
+        os.makedirs(os.path.dirname(quiz_file_path), exist_ok=True)
         with open(quiz_file_path, "w") as f:
             yaml.dump(quiz_data, f)
 

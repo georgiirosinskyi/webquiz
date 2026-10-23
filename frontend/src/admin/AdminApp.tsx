@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { App, Badge, Card, Flex, Layout, Menu, Typography } from "antd";
 import type { MenuProps } from "antd";
 import {
-  BarChartOutlined,
   DashboardOutlined,
   FolderOpenOutlined,
   GlobalOutlined,
@@ -185,15 +184,6 @@ function AdminShell() {
     { key: "files", icon: <FolderOpenOutlined />, label: label(t("menu.files"), transferCount) },
     ...(page.configPath ? [{ key: "settings", icon: <SettingOutlined />, label: label(t("menu.settings")) }] : []),
     { key: "access", icon: <GlobalOutlined />, label: label(t("menu.access"), 0, !!tunnel?.connected) },
-    {
-      key: "live-stats",
-      icon: <BarChartOutlined />,
-      label: (
-        <a href="/live-stats/" target="_blank" rel="noreferrer">
-          {t("menu.live_stats")}
-        </a>
-      ),
-    },
   ];
 
   const transferRequests = (
@@ -279,7 +269,7 @@ function AdminShell() {
           mode="horizontal"
           selectedKeys={[section]}
           items={menuItems}
-          onClick={({ key }) => key !== "live-stats" && navigate(key as Section)}
+          onClick={({ key }) => navigate(key as Section)}
           data-testid="admin-menu"
         />
       </Layout.Header>

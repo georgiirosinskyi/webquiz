@@ -14,7 +14,6 @@ All admin pages are one application with a menu at the top:
 - **Files** — CSV results, logs, quiz files and sending files to another server. The badge shows incoming file transfer requests.
 - **Settings** — the server configuration (`webquiz.yaml`). Shown only when the server was started with a config file.
 - **Access** — URLs for other devices and the SSH tunnel. A green dot shows that the tunnel is connected.
-- **Live Stats ↗** — opens the live statistics page in a new tab (for a projector).
 
 Every section has its own address (`/admin/quizzes`, `/admin/files`, `/admin/settings`, `/admin/access`), so you can bookmark it; the old `/files/` address opens the Files section. The browser Back button moves between sections. The version and the documentation link are at the bottom of every section.
 
@@ -39,7 +38,7 @@ The table below lists every participant and changes as they answer:
 - Registration fields (for example, Class) get their own columns.
 
 When approval is enabled (`registration.approve: true`, see [Configuration](040_config.md)), participants waiting for approval come first, with a yellow background and an **Approve** button; **Approve all** approves everybody at once. The quiz timer starts only after approval.
-Click a row to see every question of the participant with its result and time. Filter the list with **All / Waiting / In progress / Finished** and the search field (it searches names and registration fields). **Matrix** switches the table to a questions × participants grid, like on the Live Stats page.
+Click a row to see every question of the participant: the answer they gave (green — correct, red — incorrect, "—" — no answer), the correct answer, the result and the time. Filter the list with **All / Waiting / In progress / Finished** and the search field (it searches names and registration fields).
 
 - **Answer Management**
   This section appears only for quizzes with `show_answers_on_completion: true` enabled (see "Quiz File Format" section for details about this option).
@@ -63,7 +62,8 @@ Click a row to see every question of the participant with its result and time. F
 ### Quizzes
 
 - **Available Quiz Files**
-  The **Quiz** card displays a table of all quizzes available in the `quizzes` folder with their filename and title (if set).
+  The **Quizzes** card shows a tree of all quizzes in the `quizzes` folder: quizzes from subfolders are grouped into folders (folders start closed; click a folder or its `+`/`−` to open or close it, the number in brackets is how many quizzes it holds).
+  Each quiz shows its file, title, number of questions, total points, time limit and the settings that differ from the defaults: 🔀 Shuffle, ⏭ Can skip, 🙈 Right answers hidden (`show_right_answer: false`), 👁 Answers after everyone (`show_answers_on_completion: true`), 📋 No final list (`show_final_list: false`). On a phone the title is shown under the file name.
   The current active quiz is marked with a green **current** tag; its name is also shown above the table.
 
   Click a row to select a quiz, tick the checkboxes (or **Ctrl+click** / **Cmd+click** on macOS) to select several, and double-click a row to open it in the editor.
@@ -260,7 +260,7 @@ Before saving, the editor checks every question: it needs text or an image, fill
 
 ![Live Statistics](../imgs/livestats.png)
 
-The Live Statistics page provides real-time monitoring of quiz progress for all participants. Open it with **Live Stats ↗** in the admin menu or **For the projector** on the Overview.
+The Live Statistics page provides real-time monitoring of quiz progress for all participants. Open it with **For the projector** on the Overview.
 
 The page title shows the name of the current quiz.
 
@@ -298,7 +298,7 @@ This view allows you to monitor quiz progress in real-time and identify particip
 
 ### Quick Access
 
-The menu at the top of the admin app leads to every section and to **Live Stats ↗**. The participant page is at the root address of the server (`/`).
+The menu at the top of the admin app leads to every section. The participant page is at the root address of the server (`/`).
 
 ---
 

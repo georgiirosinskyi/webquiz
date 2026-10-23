@@ -64,7 +64,7 @@ If you see a warning, allow the application to run or add it to your antivirus's
 The admin panel opens on the **Overview**:
 - The current quiz with a list to switch to another one, and **Edit** / **Restart** buttons
 - A live table of participants: status, progress, points, grade and time
-- A menu at the top: **Quizzes** (manage quiz files), **Files**, **Settings**, **Access** (the local network URL for other devices) and **Live Stats ↗**
+- A menu at the top: **Quizzes** (manage quiz files), **Files**, **Settings** and **Access** (the local network URL for other devices)
 - The current WebQuiz version and a link to the documentation at the bottom
 
 ---

@@ -741,8 +741,8 @@ webquiz --master-key secret123
 ```
 
 Admin app (one page with a menu at the top):
-- `/admin/` - **Overview**: the current quiz (switch, restart, edit, open answers) and a live table of all participants with status, progress per question, points, grade, time left and approval buttons; a **Matrix** view shows questions x participants
-- `/admin/quizzes` - Quiz files: switch, edit, duplicate, unite, delete, download quiz sets
+- `/admin/` - **Overview**: the current quiz (switch, restart, edit, open answers) and a live table of all participants with status, progress per question, points, grade, time left and approval buttons; a click on a row shows each answer the participant gave next to the correct one
+- `/admin/quizzes` - Quiz files as a tree by folders, with question count, points, time limit and settings of each quiz: switch, edit, duplicate, unite, delete, download quiz sets
 - `/admin/files` (also `/files/`) - CSV results, logs, quiz files, sending files to another server
 - `/admin/settings` - Configuration (form or YAML)
 - `/admin/access` - URLs for other devices and the SSH tunnel

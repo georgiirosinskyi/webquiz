@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  answerRows,
   averagePercent,
   countUsers,
   filterOverviewUsers,
@@ -8,7 +9,6 @@ import {
   progressCells,
   registrationFieldNames,
   sortUsers,
-  toLiveState,
   upsertUser,
 } from "./overview";
 import type { AdminUser, CurrentQuiz } from "./types";
@@ -114,13 +114,23 @@ describe("registrationFieldNames", () => {
   });
 });
 
-describe("toLiveState", () => {
-  it("leaves pending users out of the matrix", () => {
-    const quiz = { filename: "q.yaml", total_points: 3, questions: [] } as unknown as CurrentQuiz;
-    const state = toLiveState(users, quiz);
-    expect(Object.keys(state.users).sort()).toEqual(["a", "c", "d"]);
-    expect(state.completed).toEqual({ a: true, c: false, d: true });
-    expect(state.totalPoints).toBe(3);
+describe("answerRows", () => {
+  it("pairs the user's answers with the right ones in the user's order", () => {
+    const quiz = {
+      questions: [
+        { id: 1, question: "2+2?", points: 1, correct_answer: ["4"] },
+        { id: 2, question: "", image: "/imgs/map.png", points: 1, correct_answer: ["a", "c"] },
+      ],
+    } as unknown as CurrentQuiz;
+    const answered = user({
+      question_order: [2, 1],
+      live_stats: { "2": { state: "fail", time_taken: 7 } },
+      answers: { "2": ["a"] },
+    });
+    expect(answerRows(answered, quiz)).toEqual([
+      { id: 2, position: 1, state: "fail", question: "map.png", answer: ["a"], correct: ["a", "c"], time_taken: 7 },
+      { id: 1, position: 2, state: "empty", question: "2+2?", answer: null, correct: ["4"], time_taken: null },
+    ]);
   });
 });
 

@@ -24,17 +24,17 @@ import {
   EditOutlined,
   ExportOutlined,
   ReloadOutlined,
-  TableOutlined,
   UnlockOutlined,
-  UnorderedListOutlined,
 } from "@ant-design/icons";
 import { apiSend } from "../shared/api";
 import { t, tn } from "../shared/i18n";
 import { formatPoints } from "../shared/points";
 import { STATE_STYLES, formatTime } from "../live-stats/stats";
-import { Legend, LiveStatsTable, stateLabel } from "../live-stats/LiveStatsTable";
+import { stateLabel } from "../live-stats/LiveStatsTable";
+import { isImagePath } from "../quiz/logic";
 import {
   STATUS_LABELS,
+  answerRows,
   averagePercent,
   countUsers,
   filterOverviewUsers,
@@ -43,14 +43,11 @@ import {
   progressCells,
   registrationFieldNames,
   sortUsers,
-  toLiveState,
   type OverviewFilter,
 } from "./overview";
 import { fieldNameToLabel, type AdminUser, type CurrentQuiz, type QuizInfo } from "./types";
 
-type View = "table" | "matrix";
-
-// Progress dots use solid colors, the matrix cells the pale STATE_STYLES backgrounds
+// Progress dots use solid colors, the result tags the pale STATE_STYLES backgrounds
 const DOT_COLORS: Record<string, string> = {
   think: "#1677ff",
   ok: "#52c41a",
@@ -229,8 +226,24 @@ function ProgressDots({ user, quiz }: { user: AdminUser; quiz: CurrentQuiz | nul
   );
 }
 
+// Option texts one per line; image options as small pictures
+function AnswerParts({ parts, type }: { parts: string[]; type?: "success" | "danger" }) {
+  return (
+    <Flex vertical gap={2}>
+      {parts.map((part, index) =>
+        isImagePath(part) ? (
+          <img key={index} src={part} alt="" className="answer-image" />
+        ) : (
+          <Typography.Text key={index} type={type} className="answer-text">
+            {part}
+          </Typography.Text>
+        ),
+      )}
+    </Flex>
+  );
+}
+
 function UserDetails({ user, quiz }: { user: AdminUser; quiz: CurrentQuiz | null }) {
-  const questions = new Map((quiz?.questions || []).map((question) => [question.id, question]));
   return (
     <Flex vertical gap={8}>
       {Object.keys(user.registration_fields || {}).length > 0 && (
@@ -246,31 +259,51 @@ function UserDetails({ user, quiz }: { user: AdminUser; quiz: CurrentQuiz | null
         size="small"
         rowKey="id"
         pagination={false}
-        dataSource={progressCells(user).map((cell, index) => ({ ...cell, position: index + 1 }))}
+        scroll={{ x: "max-content" }}
+        dataSource={answerRows(user, quiz)}
         columns={[
           { key: "position", title: t("common.number"), dataIndex: "position", width: 50 },
           {
             key: "question",
             title: t("overview.col_question"),
-            render: (_, cell) => {
-              const question = questions.get(cell.id);
-              return question?.question || question?.image?.split("/").pop() || t("overview.question_n", { n: cell.id });
-            },
+            className: "answer-question",
+            render: (_, row) => row.question || t("overview.question_n", { n: row.id }),
+          },
+          {
+            key: "answer",
+            title: t("overview.col_answer"),
+            className: "answer-cell",
+            render: (_, row) =>
+              row.answer ? (
+                <AnswerParts
+                  parts={row.answer}
+                  type={row.state === "ok" ? "success" : row.state === "fail" ? "danger" : undefined}
+                />
+              ) : (
+                <Typography.Text type="secondary">—</Typography.Text>
+              ),
+          },
+          {
+            key: "correct",
+            title: t("overview.col_correct"),
+            className: "answer-cell",
+            render: (_, row) => <AnswerParts parts={row.correct} />,
           },
           {
             key: "state",
             title: t("overview.col_result"),
-            width: 150,
-            render: (_, cell) => (
-              <Tag style={{ ...STATE_STYLES[cell.state], border: "none" }}>{stateLabel(cell.state)}</Tag>
+            width: 130,
+            responsive: ["sm"],
+            render: (_, row) => (
+              <Tag style={{ ...STATE_STYLES[row.state], border: "none" }}>{stateLabel(row.state)}</Tag>
             ),
           },
           {
             key: "time",
             title: t("overview.col_time"),
-            width: 90,
+            width: 80,
             responsive: ["sm"],
-            render: (_, cell) => formatTime(user.live_stats[String(cell.id)]?.time_taken) || "",
+            render: (_, row) => formatTime(row.time_taken) || "",
           },
         ]}
       />
@@ -415,7 +448,6 @@ export function OverviewPage({
   const now = useNow();
   const [filter, setFilter] = useState<OverviewFilter>("all");
   const [search, setSearch] = useState("");
-  const [view, setView] = useState<View>("table");
 
   const sorted = useMemo(() => sortUsers(users), [users]);
   const visible = useMemo(() => filterOverviewUsers(sorted, filter, search), [sorted, filter, search]);
@@ -477,14 +509,6 @@ export function OverviewPage({
                 {t("overview.approve_all", { count: pendingIds.length })}
               </Button>
             )}
-            <Segmented<View>
-              value={view}
-              onChange={setView}
-              options={[
-                { value: "table", icon: <UnorderedListOutlined />, label: t("overview.table") },
-                { value: "matrix", icon: <TableOutlined />, label: t("overview.matrix") },
-              ]}
-            />
           </Space>
         </Flex>
 
@@ -493,17 +517,8 @@ export function OverviewPage({
             style={{ padding: 32 }}
             description={users.length === 0 ? t("overview.no_users") : t("overview.no_users_in_filter")}
           />
-        ) : view === "table" ? (
-          <UsersTable users={visible} quiz={quiz} now={now} onApprove={approve} />
         ) : (
-          <Flex vertical gap={12}>
-            <LiveStatsTable
-              state={toLiveState(visible, quiz)}
-              visible={visible.filter((user) => user.status !== "pending").map((user) => user.user_id)}
-              userTitle={t("overview.col_user")}
-            />
-            <Legend />
-          </Flex>
+          <UsersTable users={visible} quiz={quiz} now={now} onApprove={approve} />
         )}
       </Card>
     </Flex>

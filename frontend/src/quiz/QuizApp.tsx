@@ -662,15 +662,15 @@ export function QuizApp({ page }: { page: QuizPageData }) {
       </div>
       <main className="quiz-page">
         <Card className="container">
-          <Flex justify="space-between" align="center" gap={12} className="quiz-header">
-            <Typography.Title level={3} className="quiz-title">
-              {page.title}
-            </Typography.Title>
+          <Flex vertical gap={8} className="quiz-header">
             {username && (
               <Tag id="user-info" icon={<UserOutlined />} className="user-info">
                 <span id="username-display">{username}</span>
               </Tag>
             )}
+            <Typography.Title level={3} className="quiz-title">
+              {page.title}
+            </Typography.Title>
           </Flex>
 
           <div id="loading" className={`section${phase === "loading" ? "" : " hidden"}`}>

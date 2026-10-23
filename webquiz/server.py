@@ -1016,43 +1016,56 @@ class TestingServer:
         path = self._resolve_quiz_path(filename)
         return bool(self.current_quiz_file and path) and os.path.realpath(self.current_quiz_file) == path
 
+    @staticmethod
+    def _quiz_list_entry(quizzes_path: Path, quiz_path: Path) -> dict:
+        """One quiz of the admin list: name, title and the settings shown next to it (None when unreadable)."""
+        info = {"filename": quiz_path.relative_to(quizzes_path).as_posix(), "title": None}
+        try:
+            with open(quiz_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+        except Exception:
+            return info
+        if not isinstance(data, dict):
+            return info
+        questions = data.get("questions")
+        questions = [q for q in questions if isinstance(q, dict)] if isinstance(questions, list) else []
+        try:
+            total_points = sum_points(q.get("points", 1) for q in questions)
+        except (TypeError, ValueError):
+            total_points = None
+        time_limit = data.get("time_limit", 0)
+        info.update(
+            {
+                "title": data.get("title"),
+                "total_questions": len(questions),
+                "total_points": total_points,
+                "time_limit": time_limit if isinstance(time_limit, (int, float)) and not isinstance(time_limit, bool) else 0,
+                "randomize_questions": bool(data.get("randomize_questions", False)),
+                "allow_skip_questions": bool(data.get("allow_skip_questions", False)),
+                "show_right_answer": bool(data.get("show_right_answer", True)),
+                "show_answers_on_completion": bool(data.get("show_answers_on_completion", False)),
+                "show_final_list": bool(data.get("show_final_list", True)),
+            }
+        )
+        return info
+
     async def list_available_quizzes(self):
-        """List all available quiz files in quizzes directory with titles.
+        """List all available quiz files in quizzes directory (subfolders included) with titles and settings.
 
         Returns:
-            Sorted list of dicts with 'filename' and 'title' keys
+            List of dicts (see _quiz_list_entry) sorted by filename
         """
-        quiz_files = []
+        quiz_files = {}
         quizzes_path = Path(self.quizzes_dir)
         if quizzes_path.exists():
-            for quiz_path in quizzes_path.rglob("*.yaml"):
-                if "imgs" in quiz_path.parts or "attach" in quiz_path.parts:
-                    continue
-                filename = quiz_path.relative_to(quizzes_path).as_posix()
-                quiz_info = {"filename": filename, "title": None}
-                try:
-                    with open(quiz_path, "r", encoding="utf-8") as f:
-                        data = yaml.safe_load(f)
-                        if data and isinstance(data, dict) and "title" in data:
-                            quiz_info["title"] = data["title"]
-                except Exception:
-                    pass
-                quiz_files.append(quiz_info)
-            for quiz_path in quizzes_path.rglob("*.yml"):
-                if "imgs" in quiz_path.parts or "attach" in quiz_path.parts:
-                    continue
-                filename = quiz_path.relative_to(quizzes_path).as_posix()
-                if not any(q["filename"] == filename for q in quiz_files):
-                    quiz_info = {"filename": filename, "title": None}
-                    try:
-                        with open(quiz_path, "r", encoding="utf-8") as f:
-                            data = yaml.safe_load(f)
-                            if data and isinstance(data, dict) and "title" in data:
-                                quiz_info["title"] = data["title"]
-                    except Exception:
-                        pass
-                    quiz_files.append(quiz_info)
-        return sorted(quiz_files, key=lambda x: x["filename"])
+            for pattern in ("*.yaml", "*.yml"):
+                for quiz_path in quizzes_path.rglob(pattern):
+                    if "imgs" in quiz_path.parts or "attach" in quiz_path.parts:
+                        continue
+                    filename = quiz_path.relative_to(quizzes_path).as_posix()
+                    if filename not in quiz_files:
+                        quiz_files[filename] = self._quiz_list_entry(quizzes_path, quiz_path)
+        return sorted(quiz_files.values(), key=lambda x: x["filename"])
 
     async def switch_quiz(self, quiz_filename: str):
         """Switch to a different quiz file and reset server state.
@@ -1741,10 +1754,21 @@ class TestingServer:
                     "question": q.get("question", ""),
                     "image": q.get("image"),
                     "points": normalize_points(q.get("points", 1)),
+                    "correct_answer": self._answer_parts(
+                        q.get("correct_value", "") if "checker" in q else q.get("correct_answer"), q
+                    ),
                 }
                 for q in self.questions
             ],
         }
+
+    def _answer_parts(self, answer, question) -> list:
+        """Answer as a list of texts for the admin page: the typed text or the chosen options (image paths stay paths)."""
+        if "checker" in question or isinstance(answer, str):
+            return [str(answer)]
+        options = question.get("options") or []
+        indices = sorted(answer) if isinstance(answer, list) else [answer]
+        return [options[i] if isinstance(i, int) and 0 <= i < len(options) else str(i) for i in indices]
 
     def _admin_user_record(self, user_id: str) -> dict:
         """Everything the admin overview shows about one user: status, progress, points, grade, timing."""
@@ -1766,6 +1790,13 @@ class TestingServer:
         finish = user_data.get("quiz_finish_time")
         elapsed = int(((finish or datetime.now()) - start).total_seconds()) if start else None
 
+        questions = {q["id"]: q for q in self.questions}
+        given_answers = {
+            str(question_id): self._answer_parts(result["selected_answer"], questions[question_id])
+            for question_id, result in self.answer_results.get(user_id, {}).items()
+            if question_id in questions
+        }
+
         return {
             "user_id": user_id,
             "username": user_data["username"],
@@ -1782,6 +1813,7 @@ class TestingServer:
             "remaining_seconds": self._remaining_seconds(user_data) if status == "in_progress" else None,
             "question_order": user_data.get("question_order") or [q["id"] for q in self.questions],
             "live_stats": self.live_stats.get(user_id, {}),
+            "answers": given_answers,
         }
 
     async def notify_admin_user_updated(self, user_id: str):
