@@ -51,7 +51,6 @@ export const uk = {
   "overview.no_quiz": "Тест не вибрано",
   "overview.choose_quiz": "Обрати тест",
   "overview.restart": "Перезапустити",
-  "overview.projector": "На проєктор",
   "overview.restart_title": "Перезапустити поточний тест?",
   "overview.switch_title": "Переключитися на \"{name}\"?",
   "overview.reset_users": "Усі користувачі ({count}) та їхні відповіді будуть скинуті. Результати залишаться в CSV.",
@@ -98,7 +97,7 @@ export const uk = {
   "status.completed": "Завершив",
   "status.time_up": "Час вийшов",
 
-  // Question states (overview and live stats)
+  // Question states (overview)
   "state.think": "Відповідає",
   "state.ok": "Правильно",
   "state.fail": "Неправильно",
@@ -388,22 +387,6 @@ export const uk = {
   "settings.field_name": "Назва поля",
   "settings.field_remove": "Видалити",
   "settings.add_field": "Додати поле",
-
-  // Live stats
-  "live.title": "Статистика в реальному часі",
-  "live.all": "Усі",
-  "live.in_progress": "Проходять",
-  "live.completed": "Завершили",
-  "live.reconnecting": "Немає з'єднання із сервером. Повторна спроба через {seconds} с... ({attempt}/{max})",
-  "live.failed": "Не вдалося відновити з'єднання із сервером.",
-  "live.reconnect": "Підключитися",
-  "live.waiting": "Чекаємо, поки користувачі почнуть тест...",
-  "live.no_users": "У цій категорії поки немає користувачів.",
-  "live.user": "Користувач",
-  "live.user_completed": "Завершив",
-  "live.user_in_progress": "Проходить",
-  "live.question_short": "П{n}",
-  "live.question_hint": "{label} — правильно: {correct}/{attempts}",
 };
 
 export type MessageKey = keyof typeof uk;

@@ -21,15 +21,13 @@ import type { ColumnsType } from "antd/es/table";
 import {
   CheckOutlined,
   EditOutlined,
-  ExportOutlined,
   ReloadOutlined,
   UnlockOutlined,
 } from "@ant-design/icons";
 import { apiSend } from "../shared/api";
 import { t, tn } from "../shared/i18n";
 import { formatPoints } from "../shared/points";
-import { STATE_STYLES, formatTime } from "../live-stats/stats";
-import { stateLabel } from "../live-stats/LiveStatsTable";
+import { STATE_STYLES, formatTime, stateLabel } from "../shared/questionState";
 import { isImagePath } from "../quiz/logic";
 import {
   STATUS_LABELS,
@@ -146,9 +144,6 @@ function CurrentQuizCard({
           </Button>
           <Button icon={<ReloadOutlined />} disabled={!current} onClick={() => current && switchTo(current)} data-testid="restart-btn">
             {t("overview.restart")}
-          </Button>
-          <Button icon={<ExportOutlined />} href="/live-stats/" target="_blank">
-            {t("overview.projector")}
           </Button>
         </Space>
       </Flex>

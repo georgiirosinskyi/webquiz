@@ -18,7 +18,6 @@ export default defineConfig({
     chunkSizeWarningLimit: 1500,
     rollupOptions: {
       input: {
-        "live-stats": resolve(__dirname, "live-stats.html"),
         admin: resolve(__dirname, "admin.html"),
         quiz: resolve(__dirname, "quiz.html"),
       },

@@ -78,7 +78,7 @@ def copy_resource(filename: str, dst_dir: Path):
 # Pages built from frontend/ (React + antd) by `npm run build`; PyInstaller and the wheel ship them
 UI_DIR = Path(str(resources.files("webquiz") / "ui"))
 UI_DATA_MARKER = "<!--WEBQUIZ_DATA-->"
-UI_PAGES = ["live-stats.html", "admin.html", "quiz.html"]
+UI_PAGES = ["admin.html", "quiz.html"]
 
 
 HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
@@ -705,8 +705,7 @@ class TestingServer:
         self.registration_tokens: Dict[str, str] = {}  # registration_token -> user_id, for retried registrations
         self.force_all_completed: bool = False  # Admin-triggered flag to force show answers
 
-        # Live stats WebSocket infrastructure
-        self.websocket_clients: List[web.WebSocketResponse] = []  # Connected WebSocket clients (live stats)
+        # Admin WebSocket clients; per-question states of every user for the overview
         self.admin_websocket_clients: List[web.WebSocketResponse] = []  # Connected admin WebSocket clients
         self.live_stats: Dict[str, Dict[int, str]] = {}  # user_id -> {question_id: state}
 
@@ -1088,17 +1087,6 @@ class TestingServer:
         copy_resource("img/top-left.png", img_path)
         copy_resource("img/top-right.png", img_path)
 
-        # Notify WebSocket clients about quiz switch
-        await self.broadcast_to_websockets(
-            {
-                "type": "quiz_switched",
-                "current_quiz": quiz_filename,
-                "quiz_version": self.quiz_version,
-                "questions": self.questions,
-                "total_questions": len(self.questions),
-                "message": self._t("quiz_switched", name=quiz_filename),
-            }
-        )
         # Users were cleared, so the admin page must drop its list of users waiting for approval
         await self.broadcast_to_admin_websockets(
             {
@@ -1666,19 +1654,6 @@ class TestingServer:
 
         return active_clients
 
-    async def broadcast_to_websockets(self, message: dict):
-        """Broadcast message to all connected WebSocket clients (live stats).
-
-        Args:
-            message: Dictionary to send as JSON
-        """
-        self.websocket_clients = await self._broadcast_to_websocket_list(
-            self.websocket_clients, message, "live stats WebSocket"
-        )
-        # Every live stats change concerns one user; the admin overview gets that user's full record
-        if message.get("user_id"):
-            await self.notify_admin_user_updated(message["user_id"])
-
     async def broadcast_to_admin_websockets(self, message: dict):
         """Broadcast message to all connected admin WebSocket clients.
 
@@ -2116,19 +2091,8 @@ class TestingServer:
 
                 self.update_live_stats(user_id, first_question_id, "think")
 
-                # Broadcast new user registration to live stats
-                await self.broadcast_to_websockets(
-                    {
-                        "type": "user_registered",
-                        "user_id": user_id,
-                        "username": username,
-                        "question_id": first_question_id,
-                        "state": "think",
-                        "time_taken": None,
-                        "total_questions": len(self.questions),
-                        "total_points": sum_points(q.get("points", 1) for q in self.questions),
-                    }
-                )
+                # The admin overview gets the new user
+                await self.notify_admin_user_updated(user_id)
         else:
             # Broadcast to admin WebSocket for approval
             await self.broadcast_to_admin_websockets(
@@ -2288,23 +2252,7 @@ class TestingServer:
         state = "skip"
         self.update_live_stats(user_id, question_id, state, time_taken)
 
-        # Broadcast current question result with completion status
-        await self.broadcast_to_websockets(
-            {
-                "type": "state_update",
-                "user_id": user_id,
-                "username": username,
-                "question_id": question_id,
-                "state": state,
-                "time_taken": time_taken,
-                "total_questions": len(self.questions),
-                "total_points": sum_points(q.get("points", 1) for q in self.questions),
-                "earned_points": 0,
-                "question_points": 0,
-                "completed": False,
-                "completed_at": None,
-            }
-        )
+        await self.notify_admin_user_updated(user_id)
 
         logger.info(
             f"Answer skipped by {username} (ID: {user_id}) for question {question_id}: (took {time_taken}s)"
@@ -2449,13 +2397,10 @@ class TestingServer:
         # Check if this was the last question and calculate final stats
         # Use the number of answers instead of question_id to support randomization
         test_completed = len(self.user_answers.get(user_id, [])) == len(self.questions)
-        completion_time = None
         if test_completed:
             user_data["quiz_finish_time"] = datetime.now()
             # Test completed - calculate and store final stats
             self.calculate_and_store_user_stats(user_id)
-            # Get completion time from stored stats
-            completion_time = self.user_stats.get(user_id, {}).get("completed_at").strftime("%d.%m.%Y %H:%M:%S")
             logger.info(f"Test completed for user {user_id} - final stats calculated")
 
         # Prepare response data
@@ -2476,29 +2421,13 @@ class TestingServer:
                 response_data["correct_answer"] = question["correct_answer"]
                 response_data["is_multiple_choice"] = isinstance(question["correct_answer"], list)
 
-        # Stored before the broadcast below awaits, so a retry arriving meanwhile gets this result
+        # Stored before the admin update below awaits, so a retry arriving meanwhile gets this result
         self.answer_results.setdefault(user_id, {})[question_id] = {
             "selected_answer": selected_answer,
             "response": response_data,
         }
 
-        # Broadcast current question result with completion status
-        await self.broadcast_to_websockets(
-            {
-                "type": "state_update",
-                "user_id": user_id,
-                "username": username,
-                "question_id": question_id,
-                "state": state,
-                "time_taken": time_taken,
-                "total_questions": len(self.questions),
-                "total_points": sum_points(q.get("points", 1) for q in self.questions),
-                "earned_points": earned_points,
-                "question_points": question_points,
-                "completed": test_completed,
-                "completed_at": completion_time,
-            }
-        )
+        await self.notify_admin_user_updated(user_id)
 
         logger.info(
             f"Answer submitted by {username} (ID: {user_id}) for question {question_id}: {'Correct' if is_correct else 'Incorrect'} (took {time_taken}s)"
@@ -2596,7 +2525,6 @@ class TestingServer:
         else:
             user_data["quiz_finish_time"] = datetime.now()
 
-        username = user_data["username"]
         user_answer_list = self.user_answers.setdefault(user_id, [])
         answered_ids = {answer.get("question_id") for answer in user_answer_list}
 
@@ -2633,23 +2561,6 @@ class TestingServer:
 
             self.update_live_stats(user_id, question["id"], "fail", 0)
 
-            await self.broadcast_to_websockets(
-                {
-                    "type": "state_update",
-                    "user_id": user_id,
-                    "username": username,
-                    "question_id": question["id"],
-                    "state": "fail",
-                    "time_taken": 0,
-                    "total_questions": len(self.questions),
-                    "total_points": sum_points(q.get("points", 1) for q in self.questions),
-                    "earned_points": 0,
-                    "question_points": normalize_points(question.get("points", 1)),
-                    "completed": True,
-                    "completed_at": user_data["quiz_finish_time"].strftime("%d.%m.%Y %H:%M:%S"),
-                }
-            )
-
         self.question_start_times.pop(user_id, None)
         self.question_start_ids.pop(user_id, None)
 
@@ -2677,8 +2588,6 @@ class TestingServer:
         if user_id not in self.users:
             return web.json_response({"error": self.translations["server_user_not_found"]}, status=404)
 
-        username = self.users[user_id]["username"]
-
         # A repeated notice that arrives after the answer must not start timing again
         if question_id in self.answer_results.get(user_id, {}):
             return web.json_response({"status": "success"})
@@ -2690,23 +2599,7 @@ class TestingServer:
             self.question_start_ids[user_id] = question_id
         self.update_live_stats(user_id, question_id, "think")
 
-        # Get points for current question
-        question = next((q for q in self.questions if q["id"] == question_id), None)
-        question_points = normalize_points(question.get("points", 1)) if question else 1
-
-        await self.broadcast_to_websockets(
-            {
-                "type": "state_update",
-                "user_id": user_id,
-                "username": username,
-                "question_id": question_id,
-                "state": "think",
-                "time_taken": None,
-                "total_questions": len(self.questions),
-                "total_points": sum_points(q.get("points", 1) for q in self.questions),
-                "question_points": question_points,
-            }
-        )
+        await self.notify_admin_user_updated(user_id)
 
         return web.json_response({"status": "success"})
 
@@ -3186,20 +3079,6 @@ class TestingServer:
             first_question_id = user_data.get("question_order", [1])[0] if self.randomize_questions else 1
 
             self.update_live_stats(user_id, first_question_id, "think")
-
-            # Broadcast user approval to live stats WebSocket
-            await self.broadcast_to_websockets(
-                {
-                    "type": "user_registered",
-                    "user_id": user_id,
-                    "username": user_data["username"],
-                    "question_id": first_question_id,
-                    "state": "think",
-                    "time_taken": None,
-                    "total_questions": len(self.questions),
-                    "total_points": sum_points(q.get("points", 1) for q in self.questions),
-                }
-            )
 
         # Broadcast approval to admin WebSocket
         await self.broadcast_to_admin_websockets({"type": "user_approved", "user_id": user_id})
@@ -4641,15 +4520,6 @@ class TestingServer:
         }
         return render_ui_page(self.templates.get("ui/admin.html"), self._ui_page_data(page))
 
-    @local_network_only
-    async def serve_live_stats_page(self, request):
-        """Serve the live stats page.
-
-        Returns:
-            HTML response with live stats interface
-        """
-        return render_ui_page(self.templates.get("ui/live-stats.html"), self._ui_page_data())
-
     async def _handle_websocket_connection(
         self, request, client_list: List[web.WebSocketResponse], initial_state_data: dict, client_type: str
     ):
@@ -4699,53 +4569,6 @@ class TestingServer:
         logger.info(f"{client_type} client disconnected. Total clients: {len(client_list)}")
 
         return ws
-
-    @local_network_only
-    async def websocket_live_stats(self, request):
-        """WebSocket endpoint for live stats updates.
-
-        Filters to only show approved users in live stats.
-
-        Returns:
-            WebSocket connection with live stats updates
-        """
-        # Filter out unapproved users from live stats
-        approved_users = {
-            user_id: user_data["username"]
-            for user_id, user_data in self.users.items()
-            if user_data.get("approved", True)  # Include if approved or no approval field (backward compatibility)
-        }
-
-        # Filter live stats to only include approved users
-        approved_live_stats = {
-            user_id: stats for user_id, stats in self.live_stats.items() if user_id in approved_users
-        }
-
-        # Build completion status for approved users
-        completed_users = {
-            user_id: (len(self.user_answers.get(user_id, [])) == len(self.questions))
-            for user_id in approved_users.keys()
-        }
-
-        # Build completion timestamps for approved users
-        completion_times = {
-            user_id: self.user_stats.get(user_id, {}).get("completed_at").strftime("%d.%m.%Y %H:%M:%S")
-            for user_id in approved_users.keys()
-            if user_id in self.user_stats
-        }
-
-        initial_data = {
-            "type": "initial_state",
-            "live_stats": approved_live_stats,
-            "users": approved_users,
-            "completed_users": completed_users,
-            "completion_times": completion_times,
-            "questions": self.questions,
-            "total_questions": len(self.questions),
-            "total_points": sum_points(q.get("points", 1) for q in self.questions),
-            "current_quiz": self._current_quiz_name(),
-        }
-        return await self._handle_websocket_connection(request, self.websocket_clients, initial_data, "WebSocket")
 
     @local_network_only
     async def websocket_admin(self, request):
@@ -4882,10 +4705,6 @@ async def create_app(config: WebQuizConfig):
     app.router.add_get("/api/admin/archive", server.admin_archive_list)
     app.router.add_get("/api/admin/archive/{run}/{filename}", server.admin_archive_file)
     app.router.add_get("/api/admin/quiz-file/{filename}", server.admin_download_quiz_file)
-
-    # Live stats routes (public access)
-    app.router.add_get("/live-stats/", server.serve_live_stats_page)
-    app.router.add_get("/ws/live-stats", server.websocket_live_stats)
 
     # Serve index.html at root path
     app.router.add_get("/", server.serve_index_page)

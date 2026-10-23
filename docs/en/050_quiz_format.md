@@ -284,7 +284,7 @@ Points can also be decimal numbers with **at most two decimal places**:
 - The default is `1`
 
 **Features:**
-- Points are displayed in **live stats** as earned/total points
+- Points are displayed on the admin **Overview** as earned/total points
 - **Final results** show earned points
 - **Users CSV file** includes `earned_points` and `total_points` columns
 - Questions whose value is not 1 point show a 🏆 indicator during the quiz

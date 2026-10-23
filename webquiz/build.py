@@ -21,7 +21,7 @@ def main():
 
     # The pages built from frontend/ must exist, or the binary would ship without them
     ui_dir = project_root / "webquiz" / "ui"
-    if not (ui_dir / "live-stats.html").exists():
+    if not (ui_dir / "admin.html").exists():
         print("Frontend is not built. Run: cd frontend && npm ci && npm run build")
         sys.exit(1)
 

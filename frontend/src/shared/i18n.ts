@@ -1,4 +1,4 @@
-// Texts of the admin pages (admin app, files, settings, live stats) in the
+// Texts of the admin pages (admin app, archive, settings) in the
 // language of the `language` config option, which the server sends with every page.
 import { en } from "./i18n/en";
 import { uk, type MessageKey } from "./i18n/uk";

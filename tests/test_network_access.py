@@ -1,6 +1,6 @@
 """Tests for local network access control.
 
-Tests that admin and live-stats pages are restricted to local/private networks only.
+Tests that admin pages are restricted to local/private networks only.
 """
 
 import requests
@@ -102,26 +102,11 @@ def test_admin_page_from_public_ip():
         assert "локальної мережі" in data["error"]
 
 
-def test_live_stats_page_from_local_ip():
-    """Test live stats page access from local IP."""
+def test_live_stats_page_is_removed():
+    """The live stats page and its WebSocket are gone; the overview shows the same data."""
     with custom_webquiz_server() as (proc, port):
-        response = requests.get(f"http://localhost:{port}/live-stats/")
-
-        # Should allow access from localhost
-        assert response.status_code == 200
-        assert "text/html" in response.headers.get("Content-Type", "")
-
-
-def test_live_stats_page_from_public_ip():
-    """Test live stats page access from public IP (should be blocked)."""
-    with custom_webquiz_server() as (proc, port):
-        headers = {"X-Forwarded-For": "1.1.1.1"}
-        response = requests.get(f"http://localhost:{port}/live-stats/", headers=headers)
-
-        # Should deny access from public IP
-        assert response.status_code == 403
-        data = response.json()
-        assert "error" in data
+        assert requests.get(f"http://localhost:{port}/live-stats/").status_code == 404
+        assert requests.get(f"http://localhost:{port}/ws/live-stats").status_code == 404
 
 
 def test_files_page_from_local_ip():

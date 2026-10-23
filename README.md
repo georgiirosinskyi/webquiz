@@ -14,7 +14,6 @@ A modern web-based quiz and testing system built with Python and aiohttp that al
 - **Manual Answer Control**: Admin button to reveal answers immediately without waiting for all students
 - **Dynamic Quiz Switching**: Real-time quiz switching with automatic server state reset
 - **Config File Editor**: Web-based configuration editor with Form and YAML views, real-time validation
-- **Live Statistics**: Real-time WebSocket-powered dashboard showing user progress
 - **Real-time Validation**: Server-side answer checking with immediate feedback
 - **Session Persistence**: Cookie-based user sessions for seamless experience
 - **Connection Retry**: The quiz page repeats requests when the connection drops; answers and registrations are never counted twice
@@ -111,12 +110,11 @@ webquiz/
 │       ├── quiz_selection_required.html   # Quiz selection prompt
 │       └── template_error.html            # Error page template
 ├── frontend/               # Web pages: React + TypeScript + Ant Design 6, built with Vite
-│   ├── quiz.html, admin.html, live-stats.html   # Page entries
+│   ├── quiz.html, admin.html   # Page entries
 │   └── src/
 │       ├── quiz/          # User quiz page (antd, same theme as the admin pages)
 │       ├── admin/         # Admin app: menu, overview, quizzes, quiz editor
 │       ├── files/         # Archive and settings sections of the admin app
-│       ├── live-stats/    # Live statistics
 │       └── shared/        # Login, API helpers, theme
 ├── tests/                  # Test suite (14 test files)
 │   ├── conftest.py                      # Test fixtures and configuration
@@ -397,7 +395,7 @@ questions:
 - Points must be greater than 0. A value with more than two decimals (e.g. `1.234`) is rejected when the quiz is saved
 - The admin quiz editor refuses such a value with a message naming the question, so nothing is rounded silently
 - Points are tracked and displayed in:
-  - Live stats: shows earned points / total points for each user
+  - Admin overview: shows earned points / total points for each user
   - Final results: displays points earned along with correct/incorrect count
   - Users CSV: includes `earned_points` and `total_points` columns
 - Questions worth something other than 1 point show a trophy indicator (🏆) during the quiz
@@ -525,7 +523,7 @@ The interface language can be set via the `language` option in `webquiz.yaml`:
 - `language: uk` (default) — Ukrainian interface
 - `language: en` — English interface
 
-This affects all user-facing text: registration form, quiz buttons, progress indicators, error messages, and results display, as well as the admin panel (overview, quizzes, files, settings, access, live stats) and the messages of the admin API. The setting is hot-reloadable — changes are applied immediately when saved via the admin panel without requiring a server restart (an open admin page switches language after a reload).
+This affects all user-facing text: registration form, quiz buttons, progress indicators, error messages, and results display, as well as the admin panel (overview, quizzes, archive, settings, access) and the messages of the admin API. The setting is hot-reloadable — changes are applied immediately when saved via the admin panel without requiring a server restart (an open admin page switches language after a reload).
 
 ### Answer Visibility Options
 
@@ -747,7 +745,6 @@ Admin app (one page with a menu at the top):
 - `/admin/archive` (also `/files/`, `/admin/files`) - Archive: every quiz run with its date, quiz, number of questions and users, share of correct answers and average time per question; a record expands to its files under readable names (answers, users, server log last): view, download CSV or XLSX; sending records to another server
 - `/admin/settings` - Configuration (form or YAML)
 - `/admin/access` - URLs for other devices and the SSH tunnel
-- `/live-stats/` - Full-screen live statistics for a projector
 
 The admin panel automatically detects when the package has been updated while the server is running and displays a "Restart Required" notification, prompting you to restart the server to use the new version.
 
@@ -792,7 +789,7 @@ npm test          # Vitest unit tests
 npm run build     # type-check and build into ../webquiz/ui/
 ```
 
-Open `http://localhost:5173/admin.html` (or `quiz.html`, `live-stats.html`) while the Python server runs. The server serves the built files from `/ui/`, puts each page's data into `window.__WEBQUIZ__` and writes the quiz page into `static/index.html`.
+Open `http://localhost:5173/admin.html` (or `quiz.html`) while the Python server runs. The server serves the built files from `/ui/`, puts each page's data into `window.__WEBQUIZ__` and writes the quiz page into `static/index.html`.
 
 ### Key Technical Decisions
 
@@ -804,7 +801,7 @@ Open `http://localhost:5173/admin.html` (or `quiz.html`, `live-stats.html`) whil
 - **CSV module usage**: Proper escaping for data with commas/quotes
 - **Smart file naming**: CSV files prefixed with quiz names, unique suffixes prevent overwrites
 - **Dynamic quiz switching**: Complete server state reset when switching quizzes
-- **WebSocket support**: Real-time updates for admin and live statistics
+- **WebSocket support**: Real-time updates for the admin pages
 - **Binary distribution**: PyInstaller for standalone executable with auto-configuration
 
 ### Architecture
@@ -813,7 +810,7 @@ Open `http://localhost:5173/admin.html` (or `quiz.html`, `live-stats.html`) whil
 - **Frontend**: React 19 + TypeScript + Ant Design 6 (all pages), built with Vite into the Python package
 - **Storage**: In-memory with periodic CSV backups (30-second intervals)
 - **Session Management**: Cookie-based with server-side validation
-- **Real-time Features**: WebSocket for live stats and admin notifications
+- **Real-time Features**: WebSocket for the admin overview and notifications
 
 ## 🐛 Troubleshooting
 

@@ -147,7 +147,7 @@ def test_config_hot_reload_notifies_websocket_clients():
     with custom_webquiz_server() as (proc, port):
         cookies = get_admin_session(port)
 
-        # Connect to live stats WebSocket
+        # Connect to the admin WebSocket
         ws_messages = []
         ws_connected = threading.Event()
         ws_closed = threading.Event()
@@ -162,7 +162,7 @@ def test_config_hot_reload_notifies_websocket_clients():
             ws_closed.set()
 
         ws = websocket.WebSocketApp(
-            f"ws://localhost:{port}/ws/live-stats", on_message=on_message, on_open=on_open, on_close=on_close
+            f"ws://localhost:{port}/ws/admin", on_message=on_message, on_open=on_open, on_close=on_close
         )
 
         ws_thread = threading.Thread(target=ws.run_forever)

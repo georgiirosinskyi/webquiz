@@ -287,7 +287,7 @@ def test_quiz_page_has_fork_elements(temp_dir):
 def test_pages_have_only_light_theme(temp_dir):
     with custom_webquiz_server(quizzes={"quiz.yaml": quiz()}) as (proc, port):
         cookies = get_admin_session(port)
-        for path in ["/", "/admin/", "/live-stats/", "/files/"]:
+        for path in ["/", "/admin/", "/files/"]:
             response = requests.get(f"http://localhost:{port}{path}", cookies=cookies)
             assert response.status_code == 200, path
             html = response.text

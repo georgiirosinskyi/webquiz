@@ -44,9 +44,9 @@ def test_render_ui_page_without_build():
     assert "npm run build" in response.text
 
 
-def test_live_stats_page_is_built_page(temp_dir):
+def test_admin_page_is_built_page(temp_dir):
     with custom_webquiz_server(config={"language": "en"}, quizzes=QUIZ) as (proc, port):
-        response = requests.get(f"http://localhost:{port}/live-stats/")
+        response = requests.get(f"http://localhost:{port}/admin/")
         assert response.status_code == 200
         html = response.text
         assert '<div id="root"></div>' in html
@@ -66,7 +66,7 @@ def test_live_stats_page_is_built_page(temp_dir):
 def test_ui_assets_are_public(temp_dir):
     """The assets are plain JS/CSS; only the pages themselves are restricted to the local network."""
     with custom_webquiz_server(quizzes=QUIZ) as (proc, port):
-        html = requests.get(f"http://localhost:{port}/live-stats/").text
+        html = requests.get(f"http://localhost:{port}/admin/").text
         asset = re.search(r'src="(/ui/assets/[^"]+\.js)"', html).group(1)
         response = requests.get(f"http://localhost:{port}{asset}", headers={"X-Forwarded-For": "8.8.8.8"})
         assert response.status_code == 200

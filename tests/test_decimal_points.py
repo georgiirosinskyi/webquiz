@@ -142,8 +142,8 @@ class TestDecimalPointsScoring:
         assert final_results["points_percentage"] == 30
 
 @pytest.mark.asyncio
-async def test_live_stats_broadcast_carries_decimal_points():
-    """The live-stats WebSocket reports decimal question and total points."""
+async def test_admin_overview_carries_decimal_points():
+    """The admin WebSocket reports decimal total and earned points."""
     quiz_data = {
         "title": "Decimal Points Quiz",
         "questions": [
@@ -155,8 +155,9 @@ async def test_live_stats_broadcast_carries_decimal_points():
     with custom_webquiz_server(quizzes={"default.yaml": quiz_data}) as (proc, port):
         base_url = f"http://localhost:{port}"
 
-        async with websockets.connect(f"ws://localhost:{port}/ws/live-stats") as websocket:
-            await asyncio.wait_for(websocket.recv(), timeout=2.0)  # initial_state
+        async with websockets.connect(f"ws://localhost:{port}/ws/admin") as websocket:
+            initial = json.loads(await asyncio.wait_for(websocket.recv(), timeout=2.0))
+            assert initial["quiz"]["total_points"] == 1.75
 
             user_id = requests.post(f"{base_url}/api/register", json={"username": "wsuser"}).json()["user_id"]
             requests.post(
@@ -164,15 +165,13 @@ async def test_live_stats_broadcast_carries_decimal_points():
                 json={"user_id": user_id, "question_id": 2, "selected_answer": 1},
             )
 
-            state_update = None
-            while state_update is None:
+            record = None
+            while record is None or record["answered"] < 1:
                 message = json.loads(await asyncio.wait_for(websocket.recv(), timeout=3.0))
-                if message.get("type") == "state_update":
-                    state_update = message
+                if message.get("type") == "user_updated":
+                    record = message["user"]
 
-            assert state_update["question_points"] == 1.25
-            assert state_update["earned_points"] == 1.25
-            assert state_update["total_points"] == 1.75
+            assert record["earned_points"] == 1.25
 
 
 class TestDecimalPointsValidation:

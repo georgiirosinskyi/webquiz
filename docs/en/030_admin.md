@@ -27,7 +27,6 @@ The **current quiz** card at the top shows the quiz title (the file name only wh
 
 - The drop-down list switches to another quiz and **Restart** starts the current quiz again. Both ask for confirmation, because they clear all participants.
 - **Edit** opens the current quiz in the editor.
-- **For the projector** opens Live Stats in a new tab.
 - **Open answers for all** is shown for quizzes with `show_answers_on_completion: true` (see **Answer Management** below).
 
 The table below lists every participant and changes as they answer:
@@ -233,46 +232,6 @@ Before saving, the editor checks every question: it needs text or an image, fill
 - **Save Quiz** — save the quiz and close the editor
 - **Save and Continue** — save the quiz and continue editing
 - **Cancel** — discard changes and close the editor
-
----
-
-### Live Statistics
-
-![Live Statistics](../imgs/livestats.png)
-
-The Live Statistics page provides real-time monitoring of quiz progress for all participants. Open it with **For the projector** on the Overview.
-
-The page title shows the name of the current quiz.
-
-#### Filter
-
-The switch at the top right shows:
-- **All** — all registered participants
-- **In Progress** — participants currently taking the quiz
-- **Completed** — participants who have finished the quiz (newest first)
-
-Each option shows the count of participants in that category.
-
-#### Statistics Grid
-
-The main area displays a grid with:
-- **User column** (stays visible while scrolling sideways) — participant name, an icon for in progress / completed, and the earned points out of the total
-- **Question columns** — question text (an image for image-only questions), the number of correct answers out of the answers given, 📎 for an attached file and 🏆 for questions worth other than 1 point
-
-#### Color Coding
-
-Each cell shows the participant's answer status (the legend is under the grid):
-- **Blue** — currently answering this question
-- **Green** — correct answer
-- **Red** — incorrect answer
-- **Yellow** — skipped
-- **Grey** — not reached yet
-
-Each answered cell also displays the time taken to answer that question.
-
-If the connection to the server drops, the page reconnects by itself and shows a notice; after several failed attempts a **Reconnect** button appears.
-
-This view allows you to monitor quiz progress in real-time and identify participants who may be struggling or need assistance.
 
 ---
 

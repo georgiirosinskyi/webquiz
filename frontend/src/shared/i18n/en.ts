@@ -53,7 +53,6 @@ export const en: Record<MessageKey, string> = {
   "overview.no_quiz": "No quiz selected",
   "overview.choose_quiz": "Choose a quiz",
   "overview.restart": "Restart",
-  "overview.projector": "For the projector",
   "overview.restart_title": "Restart the current quiz?",
   "overview.switch_title": "Switch to \"{name}\"?",
   "overview.reset_users": "All users ({count}) and their answers will be reset. The results stay in the CSV.",
@@ -100,7 +99,7 @@ export const en: Record<MessageKey, string> = {
   "status.completed": "Finished",
   "status.time_up": "Time is up",
 
-  // Question states (overview and live stats)
+  // Question states (overview)
   "state.think": "Answering",
   "state.ok": "Correct",
   "state.fail": "Incorrect",
@@ -390,20 +389,4 @@ export const en: Record<MessageKey, string> = {
   "settings.field_name": "Field name",
   "settings.field_remove": "Remove",
   "settings.add_field": "Add field",
-
-  // Live stats
-  "live.title": "Live Stats",
-  "live.all": "All",
-  "live.in_progress": "In progress",
-  "live.completed": "Completed",
-  "live.reconnecting": "Disconnected from the server. Reconnecting in {seconds}s... ({attempt}/{max})",
-  "live.failed": "Failed to reconnect to the server.",
-  "live.reconnect": "Reconnect",
-  "live.waiting": "Waiting for users to join the quiz...",
-  "live.no_users": "No users in this category yet.",
-  "live.user": "User",
-  "live.user_completed": "Completed",
-  "live.user_in_progress": "In progress",
-  "live.question_short": "Q{n}",
-  "live.question_hint": "{label} - correct: {correct}/{attempts}",
 };

@@ -8,7 +8,7 @@ language: en
 
 - **language** — interface language. Supported values: `"uk"` (Ukrainian, default) and `"en"` (English).
   This setting controls all user-facing text: registration form labels, quiz buttons, progress indicators, validation error messages, and results display.
-  The admin panel (overview, quizzes, files, settings, access, live stats) and the server messages it shows use the same language.
+  The admin panel (overview, quizzes, archive, settings, access) and the server messages it shows use the same language.
   Hot-reloadable — changes are applied immediately when saved via the admin panel; an open admin page switches language after a reload.
 
 ### Extra answers-with-users CSV export
