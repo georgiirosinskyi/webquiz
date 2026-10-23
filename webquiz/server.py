@@ -4338,6 +4338,28 @@ class TestingServer:
         return headers
 
     @admin_auth_required
+    async def admin_archive_zip(self, request):
+        """All files of a run in one zip, named after the run."""
+        run = request.match_info["run"]
+        if not archive.is_valid_run_name(run):
+            return web.json_response({"error": self._t("invalid_filename")}, status=400)
+        run_dir = os.path.join(self.archive_dir, run)
+        if not os.path.isdir(run_dir):
+            return web.json_response({"error": self._t("file_not_found")}, status=404)
+        if run == os.path.basename(self.run_dir or ""):
+            # The current run: include what is still in memory
+            await self.flush_responses_to_csv()
+            await self.flush_users_to_csv()
+            self.write_run_summary()
+        return web.Response(
+            body=archive.zip_run(run_dir),
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{quote(run + '.zip')}",
+                "Content-Type": "application/zip",
+            },
+        )
+
+    @admin_auth_required
     async def admin_archive_file(self, request):
         """One file of a run: as text to view (10 MB at most), or as a download with ?download=1."""
         run = request.match_info["run"]
@@ -4704,6 +4726,7 @@ async def create_app(config: WebQuizConfig):
     app.router.add_get("/attach/{filename}", server.serve_quiz_file)
     app.router.add_get("/api/admin/archive", server.admin_archive_list)
     app.router.add_get("/api/admin/archive/{run}/{filename}", server.admin_archive_file)
+    app.router.add_get("/api/admin/archive-zip/{run}", server.admin_archive_zip)
     app.router.add_get("/api/admin/quiz-file/{filename}", server.admin_download_quiz_file)
 
     # Serve index.html at root path

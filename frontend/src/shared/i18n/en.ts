@@ -326,6 +326,7 @@ export const en: Record<MessageKey, string> = {
   "archive.show_empty": "Show records without users",
   "archive.empty": "No records in the archive yet",
   "archive.no_files": "No files",
+  "archive.download_zip": "Download all files (zip)",
   "archive.load_failed": "Failed to load the archive",
   "archive.refresh": "Refresh",
   "archive.hint": "A new record starts with every quiz switch or restart. Expand a record to view or download its files.",

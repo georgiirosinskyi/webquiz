@@ -37,6 +37,9 @@ export const archiveFileUrl = (run: string, filename: string, download?: "file" 
   `/api/admin/archive/${encodeURIComponent(run)}/${encodeURIComponent(filename)}` +
   (download === "xlsx" ? "?download=1&format=xlsx" : download ? "?download=1" : "");
 
+// All files of a run in one zip
+export const archiveZipUrl = (run: string) => `/api/admin/archive-zip/${encodeURIComponent(run)}`;
+
 // Readable names of the files a run has; other files are shown by their file name
 const FILE_LABELS: Record<string, MessageKey> = {
   "answers.csv": "archive.file_answers",

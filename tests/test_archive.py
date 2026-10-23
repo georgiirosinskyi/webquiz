@@ -283,3 +283,29 @@ def test_archive_csv_downloads_as_xlsx(temp_dir):
         assert ".xlsx" in response.headers["Content-Disposition"]
         with zipfile.ZipFile(io.BytesIO(response.content)) as workbook:
             assert "Олена" in workbook.read("xl/worksheets/sheet1.xml").decode("utf-8")
+
+
+def test_archive_run_downloads_as_zip(temp_dir):
+    import io
+    import zipfile
+
+    with custom_webquiz_server(quizzes={"quiz.yaml": QUIZ}) as (proc, port):
+        cookies = get_admin_session(port)
+        requests.post(f"http://localhost:{port}/api/register", json={"username": "Олена"})
+        run = os.path.basename(latest_run_dir(port))
+        assert requests.get(f"http://localhost:{port}/api/admin/archive-zip/{run}").status_code == 401
+
+        response = requests.get(f"http://localhost:{port}/api/admin/archive-zip/{run}", cookies=cookies)
+        assert response.status_code == 200
+        assert response.headers["Content-Type"] == "application/zip"
+        assert f"{run}.zip" in response.headers["Content-Disposition"]
+        with zipfile.ZipFile(io.BytesIO(response.content)) as run_zip:
+            names = run_zip.namelist()
+            assert {"answers.csv", "users.csv", "server.log", "summary.json"} <= set(names)
+            # The current run is flushed first, so the zip has the user still in memory
+            assert "Олена" in run_zip.read("users.csv").decode("utf-8")
+
+        bad = requests.get(f"http://localhost:{port}/api/admin/archive-zip/notarun", cookies=cookies)
+        assert bad.status_code == 400
+        missing = requests.get(f"http://localhost:{port}/api/admin/archive-zip/2000-01-01-000000-none", cookies=cookies)
+        assert missing.status_code == 404

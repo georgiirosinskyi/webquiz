@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { archiveFileUrl, fileLabelKey, runStart, viewMode, visibleRuns, type ArchiveRun } from "./archive";
+import { archiveFileUrl, archiveZipUrl, fileLabelKey, runStart, viewMode, visibleRuns, type ArchiveRun } from "./archive";
 
 const run = (name: string, users: number, current = false): ArchiveRun => ({ name, users, current, files: [] });
 
@@ -40,6 +40,10 @@ describe("files", () => {
     );
     expect(archiveFileUrl("r", "users.csv", "xlsx")).toBe("/api/admin/archive/r/users.csv?download=1&format=xlsx");
     expect(archiveFileUrl("r", "server.log")).toBe("/api/admin/archive/r/server.log");
+  });
+
+  it("builds the zip URL of a run", () => {
+    expect(archiveZipUrl("2026-10-15-143005-5 клас")).toBe("/api/admin/archive-zip/2026-10-15-143005-5%20%D0%BA%D0%BB%D0%B0%D1%81");
   });
 
   it("gives the known files readable names", () => {

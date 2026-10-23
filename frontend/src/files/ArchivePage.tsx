@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { App, Button, Card, Empty, Flex, Space, Switch, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { DownloadOutlined, EyeOutlined, FileTextOutlined, ReloadOutlined, TableOutlined } from "@ant-design/icons";
+import { DownloadOutlined, EyeOutlined, FileTextOutlined, FileZipOutlined, ReloadOutlined, TableOutlined } from "@ant-design/icons";
 import { apiGet, downloadFile } from "../shared/api";
 import { t } from "../shared/i18n";
 import { formatFileSize } from "../shared/format";
-import { formatTime } from "../live-stats/stats";
+import { formatTime } from "../shared/questionState";
 import { FileViewerModal, type ViewRequest } from "./FileViewerModal";
 import { TransferPanel } from "./TransferPanel";
 import { useTransfer } from "./useTransfer";
-import { archiveFileUrl, fileLabelKey, runStart, viewMode, visibleRuns, type ArchiveRun } from "./archive";
+import { archiveFileUrl, archiveZipUrl, fileLabelKey, runStart, viewMode, visibleRuns, type ArchiveRun } from "./archive";
 import { transferKey } from "./types";
 
 const SHOW_EMPTY_KEY = "webquiz-archive-show-empty";
@@ -44,59 +44,70 @@ function RunFiles({
     const error = await downloadFile(archiveFileUrl(run.name, name, format), saveAs);
     if (error) message.error(t("files.download_failed", { error }));
   };
+  const downloadZip = async () => {
+    const error = await downloadFile(archiveZipUrl(run.name), `${run.name}.zip`);
+    if (error) message.error(t("files.download_failed", { error }));
+  };
   if (run.files.length === 0) return <Typography.Text type="secondary">{t("archive.no_files")}</Typography.Text>;
   // A card per file, three in a row (one on phones)
   return (
-    <div className="archive-files" data-testid="archive-files">
-      {run.files.map((file) => {
-        const label = fileLabelKey(file.name);
-        const title = label ? t(label) : file.name;
-        const isTable = viewMode(file.name) === "table";
-        return (
-          <Card key={file.name} size="small" className="archive-file" data-testid="archive-file" data-file={file.name}>
-            <Flex gap={10} align="flex-start">
-              {isTable ? <TableOutlined className="archive-file-icon" /> : <FileTextOutlined className="archive-file-icon" />}
-              <Flex vertical style={{ minWidth: 0 }}>
-                <Typography.Text strong>{title}</Typography.Text>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {file.name} · {formatFileSize(file.size)}
-                </Typography.Text>
+    <Flex vertical gap={12}>
+      <div>
+        <Button icon={<FileZipOutlined />} onClick={downloadZip} data-testid="archive-zip-btn">
+          {t("archive.download_zip")}
+        </Button>
+      </div>
+      <div className="archive-files" data-testid="archive-files">
+        {run.files.map((file) => {
+          const label = fileLabelKey(file.name);
+          const title = label ? t(label) : file.name;
+          const isTable = viewMode(file.name) === "table";
+          return (
+            <Card key={file.name} size="small" className="archive-file" data-testid="archive-file" data-file={file.name}>
+              <Flex gap={10} align="flex-start">
+                {isTable ? <TableOutlined className="archive-file-icon" /> : <FileTextOutlined className="archive-file-icon" />}
+                <Flex vertical style={{ minWidth: 0 }}>
+                  <Typography.Text strong>{title}</Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {file.name} · {formatFileSize(file.size)}
+                  </Typography.Text>
+                </Flex>
               </Flex>
-            </Flex>
-            <Space size={4} wrap style={{ marginTop: 10 }}>
-              <Button
-                size="small"
-                icon={<EyeOutlined />}
-                onClick={() =>
-                  onView({
-                    url: archiveFileUrl(run.name, file.name),
-                    title: `${title} · ${run.name}`,
-                    mode: viewMode(file.name),
-                    leftColumns,
-                  })
-                }
-              >
-                {t("files.view")}
-              </Button>
-              {isTable ? (
-                <>
-                  <Button size="small" icon={<DownloadOutlined />} onClick={() => download(file.name, "file")}>
-                    CSV
-                  </Button>
-                  <Button size="small" icon={<DownloadOutlined />} onClick={() => download(file.name, "xlsx")}>
-                    XLSX
-                  </Button>
-                </>
-              ) : (
-                <Button size="small" icon={<DownloadOutlined />} onClick={() => download(file.name, "file")}>
-                  {t("files.download")}
+              <Space size={4} wrap style={{ marginTop: 10 }}>
+                <Button
+                  size="small"
+                  icon={<EyeOutlined />}
+                  onClick={() =>
+                    onView({
+                      url: archiveFileUrl(run.name, file.name),
+                      title: `${title} · ${run.name}`,
+                      mode: viewMode(file.name),
+                      leftColumns,
+                    })
+                  }
+                >
+                  {t("files.view")}
                 </Button>
-              )}
-            </Space>
-          </Card>
-        );
-      })}
-    </div>
+                {isTable ? (
+                  <>
+                    <Button size="small" icon={<DownloadOutlined />} onClick={() => download(file.name, "file")}>
+                      CSV
+                    </Button>
+                    <Button size="small" icon={<DownloadOutlined />} onClick={() => download(file.name, "xlsx")}>
+                      XLSX
+                    </Button>
+                  </>
+                ) : (
+                  <Button size="small" icon={<DownloadOutlined />} onClick={() => download(file.name, "file")}>
+                    {t("files.download")}
+                  </Button>
+                )}
+              </Space>
+            </Card>
+          );
+        })}
+      </div>
+    </Flex>
   );
 }
 
