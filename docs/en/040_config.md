@@ -130,7 +130,7 @@ registration:
 This section defines how users register before taking quizzes.
 
 - **approve**
-  If set to `true`, the user will not be able to start the quiz immediately after filling out the form — their request will be added to a waiting list, and the administrator must approve it manually.
+  If set to `true`, the user will not be able to start the quiz immediately after filling out the form — their request will be added to a waiting list, and the administrator must approve it manually. Until then the user can correct the name and the other fields on the waiting screen (**Save changes**); the administrator sees the new data right away.
   If the value is `false`, the user can start the quiz immediately after registration.
 
 - **username_label**

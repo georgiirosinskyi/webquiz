@@ -157,3 +157,23 @@ export function generateRequestToken(): string {
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
+
+type RegistrationField = QuizPageData["registrationFields"][number];
+
+// The registration form values (name and configured fields) from the user data of the server
+export function registrationValues(fields: RegistrationField[], data: Record<string, unknown> | undefined) {
+  const values: Record<string, string> = { username: String(data?.username ?? "") };
+  for (const field of fields) values[field.name] = String(data?.[field.name] ?? "");
+  return values;
+}
+
+// The message for the first empty field of the registration form, or null
+export function registrationProblem(
+  values: Record<string, string>,
+  fields: RegistrationField[],
+  t: Record<string, string>,
+): string | null {
+  if (!(values.username || "").trim()) return t.please_enter_username;
+  const empty = fields.find((field) => !(values[field.name] || "").trim());
+  return empty ? t.please_fill_field.replace("{field}", empty.label) : null;
+}

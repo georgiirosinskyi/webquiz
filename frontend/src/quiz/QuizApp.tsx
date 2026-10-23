@@ -16,6 +16,8 @@ import {
   nextQuestionIndex,
   pickQuestionIndex,
   pointsWord,
+  registrationProblem,
+  registrationValues,
   relativePath,
   remainingSeconds,
   showNavigation,
@@ -56,6 +58,8 @@ interface VerifyResponse {
   answered_questions?: Record<string, Answer>;
   skipped_questions?: number[];
   message?: string;
+  // While waiting for approval: the stored registration data
+  user_data?: Record<string, unknown>;
   error?: string;
 }
 
@@ -144,6 +148,11 @@ export function QuizApp({ page }: { page: QuizPageData }) {
   const [registrationError, showRegistrationError, hideRegistrationError] = useAutoHideError();
   const [waitingError, showWaitingError, hideWaitingError] = useAutoHideError();
   const [testError, showTestError, hideTestError] = useAutoHideError();
+  // The registration data a waiting user can still change
+  const [waitingValues, setWaitingValues] = useState<Record<string, string>>({});
+  const [savingRegistration, setSavingRegistration] = useState(false);
+  const [updateError, showUpdateError, hideUpdateError] = useAutoHideError();
+  const [updateSaved, showUpdateSaved, hideUpdateSaved] = useAutoHideError();
 
   // Mutable copies for the async flows below, which outlive a render
   const questionsRef = useRef(questions);
@@ -360,6 +369,7 @@ export function QuizApp({ page }: { page: QuizPageData }) {
         setUsername(data.username);
         setQuestions(applyQuestionOrder(questionsRef.current, data.question_order));
         if (data.requires_approval && !data.approved) {
+          setWaitingValues(registrationValues(page.registrationFields, data.user_data));
           showWaitingForApproval();
         } else if (data.test_completed && data.final_results) {
           setResults({ final: data.final_results });
@@ -418,19 +428,14 @@ export function QuizApp({ page }: { page: QuizPageData }) {
   }, [waitingForAnswers]);
 
   const registerUser = async () => {
-    const name = (fieldRefs.current.username?.value || "").trim();
-    if (!name) {
-      showRegistrationError(t.please_enter_username);
-      return;
+    const registrationData: Record<string, string> = {};
+    for (const name of ["username", ...page.registrationFields.map((field) => field.name)]) {
+      registrationData[name] = (fieldRefs.current[name]?.value || "").trim();
     }
-    const registrationData: Record<string, string> = { username: name };
-    for (const field of page.registrationFields) {
-      const value = (fieldRefs.current[field.name]?.value || "").trim();
-      if (!value) {
-        showRegistrationError(t.please_fill_field.replace("{field}", field.label));
-        return;
-      }
-      registrationData[field.name] = value;
+    const problem = registrationProblem(registrationData, page.registrationFields, t);
+    if (problem) {
+      showRegistrationError(problem);
+      return;
     }
     hideRegistrationError();
     // Disabled so a slow or retried request is not sent twice
@@ -450,6 +455,7 @@ export function QuizApp({ page }: { page: QuizPageData }) {
       saveRegistrationData(registrationData);
       setQuestions(applyQuestionOrder(questionsRef.current, data.question_order));
       if (data.requires_approval && !data.approved) {
+        setWaitingValues(registrationData);
         showWaitingForApproval();
       } else {
         setCurrent(0); // A new user starts from the beginning
@@ -460,6 +466,40 @@ export function QuizApp({ page }: { page: QuizPageData }) {
       showRegistrationError(t.error_prefix + (error as Error).message);
     } finally {
       setRegistering(false);
+    }
+  };
+
+  // A user waiting for approval corrects the name or the fields
+  const updateRegistration = async () => {
+    const values: Record<string, string> = {};
+    for (const [name, value] of Object.entries(waitingValues)) values[name] = value.trim();
+    const problem = registrationProblem(values, page.registrationFields, t);
+    hideUpdateSaved();
+    if (problem) {
+      showUpdateError(problem);
+      return;
+    }
+    hideUpdateError();
+    setSavingRegistration(true);
+    try {
+      const response = await fetchWithRetry("api/update-registration", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userIdRef.current, ...values }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        showUpdateError(data.error || t.update_error);
+        return;
+      }
+      setWaitingValues(values);
+      setUsername(values.username);
+      saveRegistrationData(values);
+      showUpdateSaved(t.data_updated);
+    } catch (error) {
+      showUpdateError(t.error_prefix + (error as Error).message);
+    } finally {
+      setSavingRegistration(false);
     }
   };
 
@@ -727,6 +767,31 @@ export function QuizApp({ page }: { page: QuizPageData }) {
           <div id="waiting-approval" className={`section${phase === "waiting" ? "" : " hidden"}`}>
             <Result icon={<Spin size="large" />} title={t.waiting_title} subTitle={t.waiting_description} />
             <ErrorMessage id="waiting-error" message={waitingError} />
+            <Form layout="vertical" requiredMark={false} onFinish={updateRegistration} className="registration-form waiting-form">
+              <ErrorMessage id="registration-update-error" message={updateError} />
+              <div id="registration-update-saved" className={`error-message${updateSaved ? "" : " hidden"}`}>
+                {updateSaved && <Alert type="success" showIcon title={updateSaved} />}
+              </div>
+              {[{ name: "username", label: page.usernameLabel }, ...page.registrationFields].map((field) => {
+                const isName = field.name === "username";
+                const id = isName ? "waiting-username" : `waiting-field-${field.name}`;
+                return (
+                  <Form.Item key={field.name} label={field.label} htmlFor={id}>
+                    <Input
+                      id={id}
+                      className={isName ? undefined : "waiting-field"}
+                      data-field-name={isName ? undefined : field.name}
+                      value={waitingValues[field.name] ?? ""}
+                      autoComplete="off"
+                      onChange={(event) => setWaitingValues((values) => ({ ...values, [field.name]: event.target.value }))}
+                    />
+                  </Form.Item>
+                );
+              })}
+              <Button htmlType="submit" block id="save-registration-btn" disabled={savingRegistration} loading={savingRegistration}>
+                {t.save_changes}
+              </Button>
+            </Form>
           </div>
 
           <div id="test-section" className={`section${phase === "test" ? "" : " hidden"}`}>

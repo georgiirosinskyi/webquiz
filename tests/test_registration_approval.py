@@ -144,7 +144,7 @@ def test_verify_user_approved_after_approval():
         assert verify2.json()["approved"] is True
 
 
-# Test PUT /api/update-registration (5 tests)
+# Test PUT /api/update-registration (6 tests)
 
 
 def test_update_registration_while_waiting():
@@ -169,6 +169,33 @@ def test_update_registration_while_waiting():
         assert data["success"] is True
         assert data["user_data"]["username"] == "NewName"
         assert data["user_data"]["grade"] == "10"
+
+
+def test_update_registration_rejects_empty_values():
+    """An empty name or field is an error and keeps the old data; a missing key keeps its value"""
+    config = {"registration": {"approve": True, "fields": ["Grade"]}}
+
+    with custom_webquiz_server(config=config) as (proc, port):
+        user_id = requests.post(
+            f"http://localhost:{port}/api/register", json={"username": "Ann", "grade": "9"}
+        ).json()["user_id"]
+        url = f"http://localhost:{port}/api/update-registration"
+
+        response = requests.put(url, json={"user_id": user_id, "username": "Ann", "grade": " "})
+        assert response.status_code == 400
+        assert "Grade" in response.json()["error"]
+
+        response = requests.put(url, json={"user_id": user_id, "username": "  ", "grade": "10"})
+        assert response.status_code == 400
+
+        user_data = requests.get(f"http://localhost:{port}/api/verify-user/{user_id}").json()["user_data"]
+        assert user_data["username"] == "Ann"
+        assert user_data["grade"] == "9"
+
+        response = requests.put(url, json={"user_id": user_id, "grade": "10"})
+        assert response.status_code == 200
+        assert response.json()["user_data"]["username"] == "Ann"
+        assert response.json()["user_data"]["grade"] == "10"
 
 
 def test_update_registration_after_approval():

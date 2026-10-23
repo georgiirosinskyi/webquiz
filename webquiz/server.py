@@ -2162,27 +2162,33 @@ class TestingServer:
         if user_data.get("approved", False):
             return web.json_response({"error": self.translations["server_update_after_approval"]}, status=400)
 
-        # Update username if provided
-        username = data.get("username", "").strip()
-        if username:
+        # A missing key keeps the value, an empty one is an error; everything is checked before any change
+        updates = {}
+        if "username" in data:
+            username = str(data["username"] or "").strip()
+            if not username:
+                return web.json_response({"error": self.translations["server_username_empty"]}, status=400)
             # Check if new username already exists (exclude current user)
             for existing_user_id, existing_user in self.users.items():
                 if existing_user_id != user_id and existing_user["username"] == username:
                     return web.json_response({"error": self.translations["server_username_exists"]}, status=400)
-            user_data["username"] = username
+            updates["username"] = username
 
         # Update additional registration fields if configured
         if hasattr(self.config, "registration") and self.config.registration.fields:
             for field_label in self.config.registration.fields:
                 # Convert field label to field name (lowercase, sanitized)
                 field_name = field_label.lower().replace(" ", "_")
-                # Get value from request data
-                field_value = data.get(field_name, "").strip()
-                if field_value:  # Only update if provided
-                    user_data[field_name] = field_value
+                if field_name not in data:
+                    continue
+                field_value = str(data[field_name] or "").strip()
+                if not field_value:
+                    return web.json_response(
+                        {"error": self.translations["server_field_empty"].format(field=field_label)}, status=400
+                    )
+                updates[field_name] = field_value
 
-        # Update user data in memory
-        self.users[user_id] = user_data
+        user_data.update(updates)
 
         # Broadcast update to admin WebSocket
         await self.broadcast_to_admin_websockets(

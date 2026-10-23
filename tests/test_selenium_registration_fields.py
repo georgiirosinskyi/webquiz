@@ -10,7 +10,9 @@ from selenium_helpers import (
     wait_for_element,
     wait_for_clickable,
     find_register_button,
+    clear_input,
 )
+import requests
 
 
 @skip_if_selenium_disabled
@@ -264,6 +266,73 @@ def test_registration_with_cyrillic_labels_selenium(temp_dir, browser):
         # Should succeed
         test_section = WebDriverWait(browser, 10).until(EC.visibility_of_element_located((By.ID, "test-section")))
         assert test_section.is_displayed()
+
+
+@skip_if_selenium_disabled
+def test_edit_registration_while_waiting_for_approval(temp_dir, browser):
+    """A user waiting for approval changes the name and the fields; the data stays after a reload"""
+    config = {"registration": {"approve": True, "fields": ["Grade"]}}
+    quiz_data = {
+        "default.yaml": {
+            "title": "Edit While Waiting",
+            "questions": [{"question": "Test question?", "options": ["A", "B"], "correct_answer": 0}],
+        }
+    }
+
+    with custom_webquiz_server(config=config, quizzes=quiz_data) as (proc, port):
+        browser.get(f"http://localhost:{port}/")
+        wait_for_element(browser, By.ID, "username").send_keys("OldName")
+        browser.find_element(By.CSS_SELECTOR, ".registration-field[data-field-name='grade']").send_keys("9")
+        find_register_button(browser).click()
+
+        WebDriverWait(browser, 10).until(EC.visibility_of_element_located((By.ID, "waiting-approval")))
+        username_input = wait_for_element(browser, By.ID, "waiting-username")
+        grade_input = browser.find_element(By.CSS_SELECTOR, ".waiting-field[data-field-name='grade']")
+        assert username_input.get_attribute("value") == "OldName"
+        assert grade_input.get_attribute("value") == "9"
+
+        clear_input(username_input)
+        username_input.send_keys("NewName")
+        clear_input(grade_input)
+        grade_input.send_keys("10")
+        browser.find_element(By.ID, "save-registration-btn").click()
+
+        WebDriverWait(browser, 10).until(
+            lambda d: d.find_element(By.ID, "username-display").text == "NewName"
+        )
+        user_id = browser.get_cookie("user_id")["value"]
+        user_data = requests.get(f"http://localhost:{port}/api/verify-user/{user_id}").json()["user_data"]
+        assert user_data["username"] == "NewName"
+        assert user_data["grade"] == "10"
+
+        # After a reload the form shows the saved data, still waiting
+        browser.refresh()
+        username_input = wait_for_element(browser, By.ID, "waiting-username")
+        WebDriverWait(browser, 10).until(lambda d: username_input.get_attribute("value") == "NewName")
+        grade_input = browser.find_element(By.CSS_SELECTOR, ".waiting-field[data-field-name='grade']")
+        assert grade_input.get_attribute("value") == "10"
+
+
+@skip_if_selenium_disabled
+def test_edit_registration_rejects_empty_field(temp_dir, browser):
+    """An empty field is not sent: the error shows and the server keeps the old data"""
+    config = {"registration": {"approve": True, "fields": ["Grade"]}}
+
+    with custom_webquiz_server(config=config) as (proc, port):
+        browser.get(f"http://localhost:{port}/")
+        wait_for_element(browser, By.ID, "username").send_keys("Someone")
+        browser.find_element(By.CSS_SELECTOR, ".registration-field[data-field-name='grade']").send_keys("9")
+        find_register_button(browser).click()
+
+        grade_input = wait_for_element(browser, By.CSS_SELECTOR, ".waiting-field[data-field-name='grade']")
+        clear_input(grade_input)
+        browser.find_element(By.ID, "save-registration-btn").click()
+
+        error = wait_for_element(browser, By.ID, "registration-update-error")
+        WebDriverWait(browser, 10).until(lambda d: "Grade" in error.text)
+        user_id = browser.get_cookie("user_id")["value"]
+        user_data = requests.get(f"http://localhost:{port}/api/verify-user/{user_id}").json()["user_data"]
+        assert user_data["grade"] == "9"
 
 
 if __name__ == "__main__":

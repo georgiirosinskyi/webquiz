@@ -10,6 +10,8 @@ import {
   nextQuestionIndex,
   pickQuestionIndex,
   pointsWord,
+  registrationProblem,
+  registrationValues,
   relativePath,
   remainingSeconds,
   showNavigation,
@@ -112,5 +114,24 @@ describe("formatting", () => {
     expect(remainingSeconds(31000, 1000)).toBe(30);
     expect(remainingSeconds(31000, 31500)).toBe(0);
     expect(remainingSeconds(31000, 30100)).toBe(1); // rounds up
+  });
+});
+
+describe("registration form", () => {
+  const fields = [{ label: "Grade", name: "grade" }];
+  const t = { please_enter_username: "name!", please_fill_field: 'fill "{field}"' };
+
+  it("takes the name and the configured fields from the user data", () => {
+    expect(registrationValues(fields, { username: "Ann", grade: "9", approved: false, user_id: "1" })).toEqual({
+      username: "Ann",
+      grade: "9",
+    });
+    expect(registrationValues(fields, undefined)).toEqual({ username: "", grade: "" });
+  });
+
+  it("names the first empty field", () => {
+    expect(registrationProblem({ username: " ", grade: "9" }, fields, t)).toBe("name!");
+    expect(registrationProblem({ username: "Ann", grade: "  " }, fields, t)).toBe('fill "Grade"');
+    expect(registrationProblem({ username: "Ann", grade: "9" }, fields, t)).toBeNull();
   });
 });
