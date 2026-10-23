@@ -76,7 +76,7 @@ export function newQuestion(): QuestionForm {
     question: "",
     image: "",
     file: "",
-    options: ["", ""],
+    options: ["", "", "", ""],
     correct: [0],
     min_correct: null,
     default_value: "0",

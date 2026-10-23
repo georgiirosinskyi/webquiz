@@ -240,7 +240,7 @@ For each question, you can configure:
   - **Multiple correct answers** — participants can select multiple options
   - **Text answer** — participants type their answer in a text field (validated using checker code). *This feature is currently in beta testing.*
 
-- **Answer Options** — for single/multiple choice questions, add answer options. Each option can be text or an image path. Mark the correct answer(s) with the radio button or checkbox.
+- **Answer Options** — for single/multiple choice questions, add answer options (a new question starts with 4 empty ones). Each option can be text or an image path. Mark the correct answer(s) with the radio button or checkbox.
 
 - **Points per Question** — the number of points awarded for a correct answer (default: 1). Questions with more than 1 point show a trophy indicator.
 
