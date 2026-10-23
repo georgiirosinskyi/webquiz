@@ -45,7 +45,7 @@ def test_overview_shows_progress_and_grade(temp_dir, browser):
         WebDriverWait(browser, 10).until(lambda d: user_status(d, "Petro") == "completed")
         row = browser.find_element(By.XPATH, "//div[@data-testid='users-table']//tr[.//*[text()='Petro']]")
         assert "1/1" in row.text
-        assert row.find_elements(By.CSS_SELECTOR, '.progress-dot[data-state="ok"]')
+        assert "✓ 1" in row.find_element(By.CSS_SELECTOR, '[data-testid="progress-summary"]').text
 
 
 @skip_if_selenium_disabled

@@ -214,18 +214,22 @@ body {
   background: #fffbe6 !important;
 }
 
-.progress-dots {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 3px;
-  max-width: 260px;
+.progress-summary {
+  width: 160px;
 }
 
-.progress-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+.progress-summary-counts,
+.progress-summary-counts .ant-typography {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.progress-summary-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #f0f0f0;
 }
 
 .username-text {

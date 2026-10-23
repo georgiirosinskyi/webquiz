@@ -15,7 +15,6 @@ import {
   Statistic,
   Table,
   Tag,
-  Tooltip,
   Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -34,27 +33,24 @@ import { stateLabel } from "../live-stats/LiveStatsTable";
 import { isImagePath } from "../quiz/logic";
 import {
   STATUS_LABELS,
+  USER_SORTERS,
   answerRows,
   averagePercent,
+  fieldSorter,
   countUsers,
   filterOverviewUsers,
   formatDuration,
   liveTimes,
-  progressCells,
+  progressSummary,
   registrationFieldNames,
   sortUsers,
+  userNumbers,
   type OverviewFilter,
 } from "./overview";
 import { fieldNameToLabel, type AdminUser, type CurrentQuiz, type QuizInfo } from "./types";
 
-// Progress dots use solid colors, the result tags the pale STATE_STYLES backgrounds
-const DOT_COLORS: Record<string, string> = {
-  think: "#1677ff",
-  ok: "#52c41a",
-  fail: "#ff4d4f",
-  skip: "#faad14",
-  empty: "#d9d9d9",
-};
+// The progress bar uses solid colors, the result tags the pale STATE_STYLES backgrounds
+const BAR_COLORS = { ok: "#52c41a", fail: "#ff4d4f", skip: "#faad14" };
 
 // Ticks every second so the timers of running tests move.
 function useNow(): number {
@@ -204,24 +200,28 @@ function CurrentQuizCard({
   );
 }
 
-function ProgressDots({ user, quiz }: { user: AdminUser; quiz: CurrentQuiz | null }) {
+// One bar (green correct, red wrong, yellow skipped) and the counts
+function ProgressSummary({ user, quiz }: { user: AdminUser; quiz: CurrentQuiz | null }) {
   const total = quiz?.total_questions || user.question_order.length;
+  const summary = progressSummary(user);
+  const width = (count: number) => `${(count / Math.max(total, 1)) * 100}%`;
   return (
-    <Flex align="center" gap={8} wrap>
-      <span className="progress-dots">
-        {progressCells(user).map((cell, index) => (
-          <Tooltip key={cell.id} title={`${index + 1}: ${stateLabel(cell.state)}`}>
-            <span
-              className="progress-dot"
-              data-state={cell.state}
-              style={{ background: DOT_COLORS[cell.state] }}
-            />
-          </Tooltip>
-        ))}
+    <Flex vertical gap={2} className="progress-summary" data-testid="progress-summary">
+      <span className="progress-summary-bar">
+        <span style={{ width: width(summary.ok), background: BAR_COLORS.ok }} />
+        <span style={{ width: width(summary.fail), background: BAR_COLORS.fail }} />
+        <span style={{ width: width(summary.skip), background: BAR_COLORS.skip }} />
       </span>
-      <Typography.Text type="secondary" style={{ whiteSpace: "nowrap" }}>
-        {user.answered}/{total}
-      </Typography.Text>
+      <Flex justify="space-between" gap={8} className="progress-summary-counts">
+        <span>
+          <Typography.Text type="success">✓ {summary.ok}</Typography.Text>{" "}
+          <Typography.Text type="danger">✗ {summary.fail}</Typography.Text>
+          {summary.skip > 0 && <Typography.Text type="warning"> ⏭ {summary.skip}</Typography.Text>}
+        </span>
+        <Typography.Text>
+          {user.answered}/{total}
+        </Typography.Text>
+      </Flex>
     </Flex>
   );
 }
@@ -313,11 +313,14 @@ function UserDetails({ user, quiz }: { user: AdminUser; quiz: CurrentQuiz | null
 
 function UsersTable({
   users,
+  numbers,
   quiz,
   now,
   onApprove,
 }: {
   users: AdminUser[];
+  // Fixed number of every user (registration order), not the row position
+  numbers: Map<string, number>;
   quiz: CurrentQuiz | null;
   now: number;
   onApprove: (userId: string) => void;
@@ -330,11 +333,13 @@ function UsersTable({
       title: t("common.number"),
       width: 48,
       responsive: ["sm"],
-      render: (_, __, index) => index + 1,
+      sorter: (a, b) => (numbers.get(a.user_id) || 0) - (numbers.get(b.user_id) || 0),
+      render: (_, user) => numbers.get(user.user_id),
     },
     {
       key: "username",
       title: t("overview.col_user"),
+      sorter: USER_SORTERS.username,
       render: (_, user) => (
         <Typography.Text strong className="username-text">
           {user.username}
@@ -345,11 +350,13 @@ function UsersTable({
       key: `field-${name}`,
       title: fieldNameToLabel(name),
       responsive: ["md" as const],
+      sorter: fieldSorter(name),
       render: (_: unknown, user: AdminUser) => user.registration_fields?.[name] || "",
     })),
     {
       key: "status",
       title: t("overview.col_status"),
+      sorter: USER_SORTERS.status,
       render: (_, user) => (
         <Tag color={STATUS_LABELS[user.status].color} data-testid="user-status" data-status={user.status}>
           {t(STATUS_LABELS[user.status].key)}
@@ -359,11 +366,15 @@ function UsersTable({
     {
       key: "progress",
       title: t("overview.col_progress"),
-      render: (_, user) => (user.status === "pending" ? "—" : <ProgressDots user={user} quiz={quiz} />),
+      sorter: USER_SORTERS.progress,
+      sortDirections: ["descend", "ascend"],
+      render: (_, user) => (user.status === "pending" ? "—" : <ProgressSummary user={user} quiz={quiz} />),
     },
     {
       key: "points",
       title: t("overview.col_points"),
+      sorter: USER_SORTERS.points,
+      sortDirections: ["descend", "ascend"],
       render: (_, user) =>
         user.status === "pending" ? "—" : `${formatPoints(user.earned_points)}/${formatPoints(quiz?.total_points || 0)}`,
     },
@@ -371,22 +382,28 @@ function UsersTable({
       key: "mark",
       title: t("overview.col_mark"),
       responsive: ["sm"],
+      sorter: USER_SORTERS.mark,
+      sortDirections: ["descend", "ascend"],
       render: (_, user) => (user.mark === null ? "—" : <Typography.Text strong>{user.mark}</Typography.Text>),
     },
     {
       key: "time",
       title: t("overview.col_time"),
       responsive: ["sm"],
+      sorter: USER_SORTERS.time,
       render: (_, user) => {
         const { elapsed, remaining } = liveTimes(user, now);
         if (elapsed === null) return "—";
         return (
           <Flex vertical>
             <span>{formatDuration(elapsed)}</span>
-            {remaining !== null && (
+            {remaining !== null ? (
               <Typography.Text type={remaining <= 60 ? "danger" : "secondary"} style={{ fontSize: 12 }}>
                 {t("overview.time_left", { time: formatDuration(remaining) })}
               </Typography.Text>
+            ) : (
+              // Keeps the row height when the test ends and "time left" goes away
+              quiz && quiz.time_limit > 0 && <span style={{ fontSize: 12 }}>{" "}</span>
             )}
           </Flex>
         );
@@ -450,6 +467,7 @@ export function OverviewPage({
   const [search, setSearch] = useState("");
 
   const sorted = useMemo(() => sortUsers(users), [users]);
+  const numbers = useMemo(() => userNumbers(users), [users]);
   const visible = useMemo(() => filterOverviewUsers(sorted, filter, search), [sorted, filter, search]);
   const counts = countUsers(users);
   const pendingIds = users.filter((user) => user.status === "pending").map((user) => user.user_id);
@@ -518,7 +536,7 @@ export function OverviewPage({
             description={users.length === 0 ? t("overview.no_users") : t("overview.no_users_in_filter")}
           />
         ) : (
-          <UsersTable users={visible} quiz={quiz} now={now} onApprove={approve} />
+          <UsersTable users={visible} numbers={numbers} quiz={quiz} now={now} onApprove={approve} />
         )}
       </Card>
     </Flex>

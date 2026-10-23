@@ -33,11 +33,13 @@ The **current quiz** card at the top shows the quiz title and file, its settings
 The table below lists every participant and changes as they answer:
 
 - **Status** — *Waiting for approval*, *In progress*, *Finished* or *Time is up*.
-- **Progress** — a dot per question in the order the participant sees the questions (blue — answering, green — correct, red — incorrect, yellow — skipped, grey — not opened yet) and the number of answers given.
+- **Progress** — a bar (green — correct, red — incorrect, yellow — skipped, grey — not answered yet) with the counts "✓ correct ✗ incorrect ⏭ skipped · answers/questions". Expand the row to see the answer to each question.
 - **Points**, **Grade** (when the test is finished) and **Time** (with the remaining time when the quiz has a time limit).
 - Registration fields (for example, Class) get their own columns.
 
-When approval is enabled (`registration.approve: true`, see [Configuration](040_config.md)), participants waiting for approval come first, with a yellow background and an **Approve** button; **Approve all** approves everybody at once. The quiz timer starts only after approval.
+When approval is enabled (`registration.approve: true`, see [Configuration](040_config.md)), participants waiting for approval have a yellow background and an **Approve** button; **Approve all** approves everybody at once. The quiz timer starts only after approval.
+The table is in registration order, and **#** is the participant's fixed number by registration: it does not change when the participant finishes or the table is sorted. Click a column header to sort the table by it (click again for the reverse order). **Progress** sorts by the number of answers given, and with the same number by the number of correct ones; **Progress**, **Points** and **Grade** show the highest values first.
+
 Click a row to see every question of the participant: the answer they gave (green — correct, red — incorrect, "—" — no answer), the correct answer, the result and the time. Filter the list with **All / Waiting / In progress / Finished** and the search field (it searches names and registration fields).
 
 - **Answer Management**

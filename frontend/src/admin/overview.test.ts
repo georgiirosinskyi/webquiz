@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  USER_SORTERS,
   answerRows,
   averagePercent,
   countUsers,
+  fieldSorter,
   filterOverviewUsers,
   formatDuration,
   liveTimes,
   progressCells,
+  progressSummary,
   registrationFieldNames,
   sortUsers,
+  userNumbers,
   upsertUser,
 } from "./overview";
 import type { AdminUser, CurrentQuiz } from "./types";
@@ -41,8 +45,17 @@ const users = [
 ];
 
 describe("sortUsers", () => {
-  it("puts pending first, then in progress, then finished by registration time", () => {
-    expect(sortUsers(users).map((u) => u.user_id)).toEqual(["b", "c", "d", "a"]);
+  it("keeps registration order whatever the status", () => {
+    expect(sortUsers(users).map((u) => u.user_id)).toEqual(["d", "a", "c", "b"]);
+  });
+});
+
+describe("userNumbers", () => {
+  it("numbers users by registration and keeps the number when the status changes", () => {
+    const numbers = userNumbers(users);
+    expect([...numbers.entries()]).toEqual([["d", 1], ["a", 2], ["c", 3], ["b", 4]]);
+    const finished = upsertUser(users, user({ ...users[2], status: "completed" }), 1);
+    expect(userNumbers(finished).get("c")).toBe(3);
   });
 });
 
@@ -107,6 +120,21 @@ describe("progressCells", () => {
   });
 });
 
+describe("progressSummary", () => {
+  it("counts correct, wrong, skipped and the rest", () => {
+    const partly = user({
+      question_order: [1, 2, 3, 4, 5],
+      live_stats: {
+        "1": { state: "ok", time_taken: 1 },
+        "2": { state: "fail", time_taken: 1 },
+        "3": { state: "skip", time_taken: null },
+        "4": { state: "think", time_taken: null },
+      },
+    });
+    expect(progressSummary(partly)).toEqual({ ok: 1, fail: 1, skip: 1, rest: 2 });
+  });
+});
+
 describe("registrationFieldNames", () => {
   it("collects field names in order of appearance", () => {
     const withFields = [user({ registration_fields: { class: "1" } }), user({ registration_fields: { class: "2", school: "3" } })];
@@ -140,5 +168,37 @@ describe("upsertUser", () => {
     expect(updated).toHaveLength(4);
     expect(updated[2]).toMatchObject({ status: "completed", received_at: 5 });
     expect(upsertUser(users, user({ user_id: "z" }), 5)).toHaveLength(5);
+  });
+});
+
+describe("USER_SORTERS", () => {
+  const order = (list: AdminUser[], sorter: (a: AdminUser, b: AdminUser) => number) =>
+    [...list].sort(sorter).map((u) => u.user_id);
+
+  it("sorts progress by answers, then by correct answers", () => {
+    const list = [
+      user({ user_id: "a", answered: 3, correct: 1 }),
+      user({ user_id: "b", answered: 5, correct: 0 }),
+      user({ user_id: "c", answered: 3, correct: 3 }),
+    ];
+    expect(order(list, USER_SORTERS.progress)).toEqual(["a", "c", "b"]);
+  });
+
+  it("sorts names and fields like people read them", () => {
+    const list = [user({ user_id: "a", username: "Олена", registration_fields: { class: "10-А" } }), user({ user_id: "b", username: "анна", registration_fields: { class: "9-А" } })];
+    expect(order(list, USER_SORTERS.username)).toEqual(["b", "a"]);
+    expect(order(list, fieldSorter("class"))).toEqual(["b", "a"]);
+  });
+
+  it("sorts grades as numbers, missing grades first", () => {
+    const list = [user({ user_id: "a", mark: 10 }), user({ user_id: "b", mark: null }), user({ user_id: "c", mark: "9" })];
+    expect(order(list, USER_SORTERS.mark)).toEqual(["b", "c", "a"]);
+  });
+
+  it("sorts status, points and time", () => {
+    expect(order(users, USER_SORTERS.status)).toEqual(["b", "c", "a", "d"]);
+    const list = [user({ user_id: "a", earned_points: 2, elapsed_seconds: 30 }), user({ user_id: "b", earned_points: 1, elapsed_seconds: null })];
+    expect(order(list, USER_SORTERS.points)).toEqual(["b", "a"]);
+    expect(order(list, USER_SORTERS.time)).toEqual(["b", "a"]);
   });
 });

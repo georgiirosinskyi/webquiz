@@ -10,16 +10,19 @@ export const STATUS_LABELS: Record<UserStatus, { key: MessageKey; color: string 
   time_up: { key: "status.time_up", color: "error" },
 };
 
-// Pending users first (they need the admin), then those still answering, then finished ones
+// Status column order: waiting for approval, answering, finished
 const STATUS_ORDER: Record<UserStatus, number> = { pending: 0, in_progress: 1, completed: 2, time_up: 2 };
 
 export const isFinished = (user: AdminUser) => user.status === "completed" || user.status === "time_up";
 
+// Registration order: a user keeps their place when the status changes (finishing does not move the row)
 export function sortUsers(users: AdminUser[]): AdminUser[] {
-  return [...users].sort(
-    (a, b) =>
-      STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || (a.registered_at || "").localeCompare(b.registered_at || ""),
-  );
+  return [...users].sort((a, b) => (a.registered_at || "").localeCompare(b.registered_at || ""));
+}
+
+// Fixed number of every user (1, 2, ... in registration order), the same whatever the table is sorted or filtered by
+export function userNumbers(users: AdminUser[]): Map<string, number> {
+  return new Map(sortUsers(users).map((user, index) => [user.user_id, index + 1]));
 }
 
 export function countUsers(users: AdminUser[]): Record<OverviewFilter, number> {
@@ -73,6 +76,41 @@ export function formatDuration(seconds: number | null | undefined): string {
 export function progressCells(user: AdminUser): { id: number; state: CellState | "empty" }[] {
   return user.question_order.map((id) => ({ id, state: user.live_stats[String(id)]?.state || "empty" }));
 }
+
+// How many questions are correct, wrong, skipped and not answered yet.
+export function progressSummary(user: AdminUser): Record<"ok" | "fail" | "skip" | "rest", number> {
+  const summary = { ok: 0, fail: 0, skip: 0, rest: 0 };
+  for (const cell of progressCells(user)) {
+    if (cell.state === "ok" || cell.state === "fail" || cell.state === "skip") summary[cell.state] += 1;
+    else summary.rest += 1;
+  }
+  return summary;
+}
+
+// Column sorters of the users table (ascending; antd reverses them for descending).
+const byText = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+
+// Grades are numbers or text ("A"); numbers sort numerically, a missing grade comes first
+function compareMarks(a: AdminUser["mark"], b: AdminUser["mark"]): number {
+  if (a === null || a === undefined || b === null || b === undefined) return (a == null ? 0 : 1) - (b == null ? 0 : 1);
+  const numberA = Number(a);
+  const numberB = Number(b);
+  if (!Number.isNaN(numberA) && !Number.isNaN(numberB)) return numberA - numberB;
+  return byText(String(a), String(b));
+}
+
+export const USER_SORTERS = {
+  username: (a: AdminUser, b: AdminUser) => byText(a.username, b.username),
+  status: (a: AdminUser, b: AdminUser) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status],
+  // More answers is further; with the same number of answers, more correct ones is further
+  progress: (a: AdminUser, b: AdminUser) => a.answered - b.answered || a.correct - b.correct,
+  points: (a: AdminUser, b: AdminUser) => a.earned_points - b.earned_points,
+  mark: (a: AdminUser, b: AdminUser) => compareMarks(a.mark, b.mark),
+  time: (a: AdminUser, b: AdminUser) => (a.elapsed_seconds ?? -1) - (b.elapsed_seconds ?? -1),
+};
+
+export const fieldSorter = (name: string) => (a: AdminUser, b: AdminUser) =>
+  byText(a.registration_fields?.[name] || "", b.registration_fields?.[name] || "");
 
 // Registration field names of all users, in the order they first appear.
 export function registrationFieldNames(users: AdminUser[]): string[] {
