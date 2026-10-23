@@ -33,7 +33,7 @@ class Machine:
         self.name = name
         self.tunnel = tunnel
         self.online = True
-        self.dirs = {kind: str(root / name / kind) for kind in ("quizzes", "logs", "csv", "images", "attachments")}
+        self.dirs = {kind: str(root / name / kind) for kind in ("quizzes", "archive", "images", "attachments")}
         for path in self.dirs.values():
             os.makedirs(path)
         self.messages = []
@@ -54,6 +54,12 @@ class Machine:
             content = content.encode("utf-8")
         with open(os.path.join(self.dirs[kind], filename), "wb") as f:
             f.write(content)
+
+    def write_run(self, run, files):
+        """A run folder of the archive with the given {file name: content}"""
+        os.makedirs(os.path.join(self.dirs["archive"], run))
+        for filename, content in files.items():
+            self.write("archive", os.path.join(run, filename), content)
 
     def read(self, kind, filename):
         with open(os.path.join(self.dirs[kind], filename)) as f:
@@ -114,6 +120,9 @@ async def send(sender, receiver, files):
     return requests[0]
 
 
+RUN = "2026-10-15-143005-math"
+
+
 # ----- Name and file validation -----
 
 
@@ -132,10 +141,11 @@ def test_server_name_validation():
 def test_allowed_files():
     assert is_allowed_file("quizzes", "math.yaml")
     assert is_allowed_file("quizzes", "math.YML")
-    assert is_allowed_file("logs", "0001.log")
-    assert is_allowed_file("csv", "results.csv")
+    assert is_allowed_file("archive", f"{RUN}.zip")
+    assert not is_allowed_file("archive", "results.zip")
+    assert not is_allowed_file("archive", RUN)
+    assert not is_allowed_file("logs", "0001.log")
     assert not is_allowed_file("quizzes", "math.yaml.backup")
-    assert not is_allowed_file("logs", "0001.csv")
     assert not is_allowed_file("static", "index.html")
     assert not is_allowed_file("quizzes", "../math.yaml")
     assert not is_allowed_file("quizzes", "sub\\math.yaml")
@@ -158,35 +168,34 @@ def test_allowed_files():
 async def test_accept_downloads_all_files(machines):
     a, b = machines
     a.write("quizzes", "math.yaml", "title: Math\n")
-    a.write("logs", "0001.log", "log line\n")
-    a.write("csv", "results.csv", "a,b\n1,2\n")
+    a.write_run(RUN, {"users.csv": "a,b\n1,2\n", "server.log": "log line\n"})
 
     request = await send(
         a,
         b,
         [
             {"type": "quizzes", "name": "math.yaml"},
-            {"type": "logs", "name": "0001.log"},
-            {"type": "csv", "name": "results.csv"},
+            {"type": "archive", "name": f"{RUN}.zip"},
         ],
     )
     assert request["from"] == "room-a"
-    assert [f["size"] for f in request["files"]] == [12, 9, 8]
+    assert request["files"][0]["size"] == 12
     stored = next(iter(b.manager.incoming.values()))
     assert stored["files"][0]["sha256"] == hashlib.sha256(b"title: Math\n").hexdigest()
-    assert [f["case"] for f in request["files"]] == ["new", "new", "new"]
-    # Logs and CSV files are saved with the sender name
-    assert [f["target"] for f in request["files"]] == ["math.yaml", "room-a_0001.log", "room-a_results.csv"]
+    assert [f["case"] for f in request["files"]] == ["new", "new"]
+    assert [f["target"] for f in request["files"]] == ["math.yaml", f"{RUN}.zip"]
     assert "token" not in request
     assert b.messages[-1]["type"] == "transfer_request"
 
     result = await b.manager.accept(request["id"])
 
     assert result["failed"] == []
-    assert [f["saved_as"] for f in result["saved"]] == ["math.yaml", "room-a_0001.log", "room-a_results.csv"]
+    assert [f["saved_as"] for f in result["saved"]] == ["math.yaml", f"{RUN}.zip"]
     assert b.read("quizzes", "math.yaml") == "title: Math\n"
-    assert b.read("logs", "room-a_0001.log") == "log line\n"
-    assert b.read("csv", "room-a_results.csv") == "a,b\n1,2\n"
+    # The run arrives as a folder again
+    assert b.read("archive", os.path.join(RUN, "users.csv")) == "a,b\n1,2\n"
+    assert b.read("archive", os.path.join(RUN, "server.log")) == "log line\n"
+    assert b.files("archive") == [RUN]
     assert b.manager.list_incoming() == []
     assert b.messages[-1] == {"type": "transfer_request_removed", "id": request["id"]}
 
@@ -244,29 +253,62 @@ async def test_cases_and_default_actions(machines):
 async def test_suggested_names_never_overwrite(machines):
     a, b = machines
     a.write("quizzes", "math.yaml", "new")
-    a.write("logs", "0001.log", "new log")
+    a.write_run(RUN, {"users.csv": "new"})
     b.write("quizzes", "math.yaml", "old")
     b.write("quizzes", "room-a_math.yaml", "older")
-    b.write("logs", "room-a_0001.log", "old log")
+    b.write_run(RUN, {"users.csv": "old"})
+    b.write_run(f"{RUN}-room-a", {"users.csv": "older"})
 
-    files = [{"type": "quizzes", "name": "math.yaml"}, {"type": "logs", "name": "0001.log"}]
+    files = [{"type": "quizzes", "name": "math.yaml"}, {"type": "archive", "name": f"{RUN}.zip"}]
     request = await send(a, b, files)
     assert plan_of(request, "math.yaml")["suggested_name"] == "room-a_math_2.yaml"
-    assert plan_of(request, "0001.log")["suggested_name"] == "room-a_0001_2.log"
+    # A renamed run keeps the date first, so it still sorts and reads as a run
+    assert plan_of(request, f"{RUN}.zip")["case"] == "different"
+    assert plan_of(request, f"{RUN}.zip")["suggested_name"] == f"{RUN}-room-a-2.zip"
 
     result = await b.manager.accept(request["id"])
-    assert [f["saved_as"] for f in result["saved"]] == ["room-a_math_2.yaml", "room-a_0001_2.log"]
+    assert [f["saved_as"] for f in result["saved"]] == ["room-a_math_2.yaml", f"{RUN}-room-a-2.zip"]
     assert b.read("quizzes", "math.yaml") == "old"
     assert b.read("quizzes", "room-a_math.yaml") == "older"
-    assert b.read("logs", "room-a_0001.log") == "old log"
+    assert b.read("archive", os.path.join(RUN, "users.csv")) == "old"
+    assert b.read("archive", os.path.join(f"{RUN}-room-a-2", "users.csv")) == "new"
+
+
+async def test_same_run_is_detected_and_current_run_is_in_use(machines):
+    a, b = machines
+    other = "2026-10-16-090000-geo"
+    a.write_run(RUN, {"users.csv": "same"})
+    a.write_run(other, {"users.csv": "new"})
+    b.write_run(RUN, {"users.csv": "same"})
+    b.write_run(other, {"users.csv": "running"})
+    b.files_in_use = [os.path.join(b.dirs["archive"], other)]
+
+    request = await send(a, b, [{"type": "archive", "name": f"{RUN}.zip"}, {"type": "archive", "name": f"{other}.zip"}])
+    assert plan_of(request, f"{RUN}.zip")["case"] == "same"
+    assert plan_of(request, f"{other}.zip")["case"] == "in_use"
+    assert plan_of(request, f"{other}.zip")["actions"] == ["rename", "skip"]
+
+
+async def test_replace_run_swaps_the_folder(machines):
+    a, b = machines
+    a.write_run(RUN, {"users.csv": "new"})
+    b.write_run(RUN, {"users.csv": "old", "extra.txt": "only here"})
+
+    request = await send(a, b, [{"type": "archive", "name": f"{RUN}.zip"}])
+    result = await b.manager.accept(request["id"], [{"type": "archive", "name": f"{RUN}.zip", "action": "replace"}])
+
+    assert result["failed"] == []
+    assert b.files("archive") == [RUN]
+    assert sorted(os.listdir(os.path.join(b.dirs["archive"], RUN))) == ["users.csv"]
+    assert b.read("archive", os.path.join(RUN, "users.csv")) == "new"
 
 
 async def test_admin_chooses_replace_rename_skip(machines):
     a, b = machines
     a.write("quizzes", "math.yaml", "new math")
     a.write("quizzes", "geo.yaml", "new geo")
-    a.write("logs", "0001.log", "log")
-    a.write("csv", "results.csv", "a,b")
+    a.write("quizzes", "algebra.yaml", "algebra")
+    a.write_run(RUN, {"users.csv": "a,b"})
     b.write("quizzes", "math.yaml", "old math")
 
     request = await send(
@@ -275,8 +317,8 @@ async def test_admin_chooses_replace_rename_skip(machines):
         [
             {"type": "quizzes", "name": "math.yaml"},
             {"type": "quizzes", "name": "geo.yaml"},
-            {"type": "logs", "name": "0001.log"},
-            {"type": "csv", "name": "results.csv"},
+            {"type": "quizzes", "name": "algebra.yaml"},
+            {"type": "archive", "name": f"{RUN}.zip"},
         ],
     )
     result = await b.manager.accept(
@@ -284,8 +326,8 @@ async def test_admin_chooses_replace_rename_skip(machines):
         [
             {"type": "quizzes", "name": "math.yaml", "action": "replace"},
             {"type": "quizzes", "name": "geo.yaml", "action": "rename", "new_name": "Географія 7.yaml"},
-            {"type": "logs", "name": "0001.log", "action": "skip"},
-            # results.csv: no choice, default (save as room-a_results.csv)
+            {"type": "quizzes", "name": "algebra.yaml", "action": "skip"},
+            # the run: no choice, default (save)
         ],
     )
 
@@ -293,12 +335,12 @@ async def test_admin_chooses_replace_rename_skip(machines):
     assert [(f["name"], f["action"], f["saved_as"]) for f in result["saved"]] == [
         ("math.yaml", "replace", "math.yaml"),
         ("geo.yaml", "rename", "Географія 7.yaml"),
-        ("results.csv", "save", "room-a_results.csv"),
+        (f"{RUN}.zip", "save", f"{RUN}.zip"),
     ]
-    assert [(f["name"], f["action"]) for f in result["skipped"]] == [("0001.log", "skip")]
+    assert [(f["name"], f["action"]) for f in result["skipped"]] == [("algebra.yaml", "skip")]
     assert b.read("quizzes", "math.yaml") == "new math"
     assert b.read("quizzes", "Географія 7.yaml") == "new geo"
-    assert b.files("logs") == []
+    assert "algebra.yaml" not in b.files("quizzes")
     assert a.manager.get_state()["outgoing"][0]["status"] == "accepted"
 
 
@@ -612,15 +654,15 @@ async def test_old_incoming_requests_are_removed(machines):
 
 async def test_file_size_limit(machines, monkeypatch):
     a, b = machines
-    a.write("logs", "0001.log", "x" * 100)
-    request = await send(a, b, [{"type": "logs", "name": "0001.log"}])
+    a.write("quizzes", "big.yaml", "x" * 100)
+    request = await send(a, b, [{"type": "quizzes", "name": "big.yaml"}])
     monkeypatch.setattr(transfer_module, "MAX_FILE_SIZE", 10)
 
     result = await b.manager.accept(request["id"])
 
     assert result["saved"] == []
     assert "larger" in result["failed"][0]["error"]
-    assert b.files("logs") == []
+    assert b.files("quizzes") == []
 
 
 # ----- Sender errors -----
@@ -679,10 +721,10 @@ async def test_send_skips_duplicate_files(machines):
     "data, message",
     [
         ("not a dict", "Invalid request"),
-        ({"from": "../x", "token": "t" * 43, "files": [{"type": "logs", "name": "a.log"}]}, "Invalid sender"),
-        ({"from": "room-b", "token": "t" * 43, "files": [{"type": "logs", "name": "a.log"}]}, "Invalid sender"),
-        ({"from": "room-a", "token": "short", "files": [{"type": "logs", "name": "a.log"}]}, "Invalid token"),
-        ({"from": "room-a", "token": "t" * 43, "files": [{"type": "logs", "name": "../a.log"}]}, "cannot be"),
+        ({"from": "../x", "token": "t" * 43, "files": [{"type": "quizzes", "name": "a.yaml"}]}, "Invalid sender"),
+        ({"from": "room-b", "token": "t" * 43, "files": [{"type": "quizzes", "name": "a.yaml"}]}, "Invalid sender"),
+        ({"from": "room-a", "token": "short", "files": [{"type": "quizzes", "name": "a.yaml"}]}, "Invalid token"),
+        ({"from": "room-a", "token": "t" * 43, "files": [{"type": "quizzes", "name": "../a.yaml"}]}, "cannot be"),
         ({"from": "room-a", "token": "t" * 43, "files": []}, "No files"),
     ],
 )
@@ -695,7 +737,7 @@ def test_incoming_validation(machines, data, message):
 
 def test_incoming_ignores_invalid_checksum(machines):
     a, b = machines
-    files = [{"type": "logs", "name": "a.log", "size": 1, "sha256": "not-a-checksum"}]
+    files = [{"type": "quizzes", "name": "a.yaml", "size": 1, "sha256": "not-a-checksum"}]
     request = b.manager.add_incoming({"from": "room-a", "token": "t" * 43, "files": files})
     assert request["files"][0]["sha256"] is None
 
@@ -704,13 +746,13 @@ def test_incoming_requires_tunnel(machines):
     a, b = machines
     b.online = False
     with pytest.raises(TransferError) as error:
-        b.manager.add_incoming({"from": "room-a", "token": "t" * 43, "files": [{"type": "logs", "name": "a.log"}]})
+        b.manager.add_incoming({"from": "room-a", "token": "t" * 43, "files": [{"type": "quizzes", "name": "a.yaml"}]})
     assert error.value.status == 409
 
 
 def test_incoming_request_limit(machines):
     a, b = machines
-    data = {"from": "room-a", "token": "t" * 43, "files": [{"type": "logs", "name": "a.log", "size": True}]}
+    data = {"from": "room-a", "token": "t" * 43, "files": [{"type": "quizzes", "name": "a.yaml", "size": True}]}
     for _ in range(transfer_module.MAX_INCOMING_REQUESTS):
         request = b.manager.add_incoming(data)
     assert request["files"][0]["size"] == 0  # invalid size is ignored

@@ -163,8 +163,7 @@ def test_load_config_from_yaml_with_paths():
     config_data = {
         "paths": {
             "quizzes_dir": "custom_quizzes",
-            "logs_dir": "custom_logs",
-            "csv_dir": "custom_data",
+            "archive_dir": "custom_archive",
             "static_dir": "custom_static",
         }
     }
@@ -176,8 +175,7 @@ def test_load_config_from_yaml_with_paths():
     try:
         config = load_config_from_yaml(config_path)
         assert config.paths.quizzes_dir == "custom_quizzes"
-        assert config.paths.logs_dir == "custom_logs"
-        assert config.paths.csv_dir == "custom_data"
+        assert config.paths.archive_dir == "custom_archive"
         assert config.paths.static_dir == "custom_static"
     finally:
         os.unlink(config_path)
@@ -369,7 +367,7 @@ def test_dataclass_defaults():
     # PathsConfig
     paths = PathsConfig()
     assert paths.quizzes_dir is not None  # Should be set by __post_init__
-    assert paths.logs_dir is not None
+    assert paths.archive_dir is not None
 
     # AdminConfig
     admin = AdminConfig()
@@ -389,3 +387,18 @@ def test_dataclass_defaults():
     assert config.paths is not None
     assert config.admin is not None
     assert config.registration is not None
+
+
+def test_load_config_ignores_removed_path_keys():
+    """paths.logs_dir and paths.csv_dir of old config files are ignored (replaced by archive_dir)."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        yaml.dump({"paths": {"logs_dir": "old_logs", "csv_dir": "old_data", "quizzes_dir": "q"}}, f)
+        config_path = f.name
+
+    try:
+        config = load_config_from_yaml(config_path)
+        assert config.paths.quizzes_dir == "q"
+        assert not hasattr(config.paths, "logs_dir")
+        assert config.paths.archive_dir.endswith("archive")
+    finally:
+        os.unlink(config_path)

@@ -1,8 +1,7 @@
-"""Selenium tests for the Files and Settings sections of the admin app (frontend/src/files)."""
+"""Selenium tests for the Archive and Settings sections of the admin app (frontend/src/files)."""
 
 import requests
 import yaml
-from selenium.common.exceptions import ElementClickInterceptedException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -10,39 +9,34 @@ from conftest import custom_webquiz_server, get_admin_session, get_page_data
 from selenium_helpers import skip_if_selenium_disabled, browser
 
 
-def login(browser, base_url, path="/files/", ready='[data-testid="files-panel"]'):
+def login(browser, base_url, path="/files/", ready='[data-testid="archive-table"]'):
     browser.get(f"{base_url}{path}")
     browser.find_element(By.ID, "master-key").send_keys("test123")
     browser.find_element(By.XPATH, "//button[@type='submit']").click()
     WebDriverWait(browser, 10).until(lambda d: d.find_elements(By.CSS_SELECTOR, ready))
 
 
-def click_tab(browser, label):
-    browser.find_element(By.XPATH, f"//div[@role='tab'][contains(., '{label}')]").click()
-
-
 @skip_if_selenium_disabled
-def test_login_and_edit_quiz(browser):
-    # The English admin pages
+def test_archive_shows_run_and_its_csv(browser):
+    # The English admin pages; the old /files/ address opens the archive
     with custom_webquiz_server(config={"language": "en"}) as (proc, port):
         base_url = f"http://localhost:{port}"
+        user_id = requests.post(f"{base_url}/api/register", json={"username": "Olena"}).json()["user_id"]
+        requests.post(f"{base_url}/api/submit-answer", json={"user_id": user_id, "question_id": 1, "selected_answer": 1})
         login(browser, base_url)
 
-        click_tab(browser, "Quizzes")
         row = WebDriverWait(browser, 10).until(
-            lambda d: d.find_element(By.XPATH, "//tr[.//*[text()='test_quiz.yaml']]")
+            lambda d: d.find_element(By.XPATH, "//div[@data-testid='archive-table']//tr[.//*[text()='Test Quiz']]")
         )
-        row.find_element(By.XPATH, ".//button[contains(., 'Edit')]").click()
+        assert "100%" in row.text  # one correct answer of one
+        row.click()
+        files = WebDriverWait(browser, 10).until(lambda d: d.find_element(By.CSS_SELECTOR, '[data-testid="archive-files"]'))
+        users_row = files.find_element(By.CSS_SELECTOR, '[data-testid="archive-file"][data-file="users.csv"]')
+        users_row.find_element(By.XPATH, ".//button[contains(., 'View')]").click()
 
-        editor = WebDriverWait(browser, 10).until(lambda d: d.find_element(By.ID, "quiz-editor-content"))
-        WebDriverWait(browser, 10).until(lambda d: "What is 2 + 2?" in editor.get_attribute("value"))
-
-        # Clicks are intercepted while the modal is still animating in
-        validate = browser.find_element(By.XPATH, "//button[contains(., 'Validate YAML')]")
-        WebDriverWait(browser, 10, ignored_exceptions=[ElementClickInterceptedException]).until(
-            lambda d: validate.click() or True
+        WebDriverWait(browser, 10).until(
+            lambda d: "Olena" in d.find_element(By.CSS_SELECTOR, '[data-testid="csv-table"]').get_attribute("textContent")
         )
-        WebDriverWait(browser, 10).until(lambda d: "Valid YAML! Questions: 1." in d.page_source)
 
 
 @skip_if_selenium_disabled

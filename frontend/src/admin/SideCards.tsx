@@ -15,8 +15,7 @@ import {
 
 const TRANSFER_TYPE_LABELS: Record<string, MessageKey> = {
   quizzes: "transfer.type_quizzes",
-  logs: "transfer.type_logs",
-  csv: "transfer.type_csv",
+  archive: "transfer.type_archive",
   images: "transfer.type_images",
   attachments: "transfer.type_attachments",
 };

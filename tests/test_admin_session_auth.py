@@ -144,8 +144,8 @@ def test_session_cookie_for_files_endpoint():
 
         # Use the session cookie to access files endpoint
         cookies = auth_response.cookies
-        files_response = requests.get(f"http://localhost:{port}/api/files/list", cookies=cookies)
+        files_response = requests.get(f"http://localhost:{port}/api/admin/archive", cookies=cookies)
 
         assert files_response.status_code == 200
         data = files_response.json()
-        assert "quizzes" in data
+        assert "runs" in data

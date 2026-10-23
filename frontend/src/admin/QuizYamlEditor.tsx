@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { Alert, App, Button, Input, Modal, Space, Spin } from "antd";
-import { apiSend, apiText } from "../shared/api";
+import { apiGet, apiSend } from "../shared/api";
 import { t } from "../shared/i18n";
 
 type Feedback = { type: "success" | "error"; text: string; details?: string[] } | null;
 
-// Direct YAML editing of a quiz file with server-side validation.
-export function QuizEditorModal({
+// Direct YAML editing of a quiz file with server-side validation (the server keeps a .backup copy).
+export function QuizYamlEditor({
   filename,
   onClose,
   onSaved,
@@ -24,10 +24,15 @@ export function QuizEditorModal({
     if (!filename) return;
     setContent(null);
     setFeedback(null);
-    apiText(`/api/files/quizzes/view/${encodeURIComponent(filename)}`).then((result) => {
-      setContent(result.text);
-      if (!result.ok) setFeedback({ type: "error", text: t("common.error", { error: result.error || "" }) });
-    });
+    apiGet<{ content: string }>(`/api/admin/quiz/${encodeURIComponent(filename)}`)
+      .then((result) => {
+        setContent(result.ok ? result.data.content : "");
+        if (!result.ok) setFeedback({ type: "error", text: t("common.error", { error: result.data.error || result.status }) });
+      })
+      .catch((error) => {
+        setContent("");
+        setFeedback({ type: "error", text: t("common.error", { error: (error as Error).message }) });
+      });
   }, [filename]);
 
   const validate = async () => {
@@ -61,11 +66,10 @@ export function QuizEditorModal({
     }
     setBusy(true);
     try {
-      const result = await apiSend<{ message: string }>(
-        "PUT",
-        `/api/files/quizzes/save/${encodeURIComponent(filename)}`,
-        { content },
-      );
+      const result = await apiSend<{ message: string }>("PUT", `/api/admin/quiz/${encodeURIComponent(filename)}`, {
+        mode: "text",
+        content,
+      });
       if (result.ok) {
         message.success(t("yaml.saved", { name: filename }));
         onSaved();

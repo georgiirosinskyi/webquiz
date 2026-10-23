@@ -171,8 +171,7 @@ def run_server(config):
     """Run the server in foreground mode."""
     print("🚀 Starting WebQuiz Testing System...")
     print(f"📁 Quizzes directory: {config.paths.quizzes_dir}")
-    print(f"📝 Logs directory: {config.paths.logs_dir}")
-    print(f"📊 CSV directory: {config.paths.csv_dir}")
+    print(f"🗄️ Archive directory: {config.paths.archive_dir}")
     print(f"📂 Static directory: {config.paths.static_dir}")
     print(f"🔑 Master key: {'Set' if config.admin.master_key else 'Not set (admin disabled)'}")
     print(f"🌐 Server will be available at: http://{config.server.host}:{config.server.port} (accessible on network)")
@@ -233,8 +232,7 @@ Examples:
   webquiz --port 9090                  Listen on a custom port
   webquiz --quizzes-dir my_quizzes     Use custom quizzes directory
   webquiz --master-key secret123       Set admin master key
-  webquiz --logs-dir /var/log          Use custom logs directory
-  webquiz --csv-dir /data              Use custom CSV directory
+  webquiz --archive-dir /data          Use custom archive directory (CSV files and logs of quiz runs)
   webquiz --static /var/www/quiz       Use custom static files directory
   WEBQUIZ_MASTER_KEY=secret webquiz    Set master key via environment
   webquiz --config prod.yaml --master-key override  Mix config file with CLI overrides
@@ -265,9 +263,7 @@ CLI parameters always override config file values
 
     parser.add_argument("--master-key", help="Master key for admin access (can also use WEBQUIZ_MASTER_KEY env var)")
 
-    parser.add_argument("--logs-dir", help="Directory for log files (default: logs/)")
-
-    parser.add_argument("--csv-dir", help="Directory for CSV response files (default: data/)")
+    parser.add_argument("--archive-dir", help="Directory for quiz runs: CSV files and logs (default: archive/)")
 
     parser.add_argument("--static", help="Path to static files directory (default: static)")
 
@@ -283,8 +279,7 @@ CLI parameters always override config file values
         port=args.port,
         quizzes_dir=args.quizzes_dir,
         master_key=args.master_key,
-        logs_dir=args.logs_dir,
-        csv_dir=args.csv_dir,
+        archive_dir=args.archive_dir,
         static_dir=args.static,
         url_format=args.url_format,
     )

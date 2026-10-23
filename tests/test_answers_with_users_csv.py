@@ -14,7 +14,7 @@ import time
 import pytest
 import requests
 
-from tests.conftest import custom_webquiz_server
+from tests.conftest import custom_webquiz_server, latest_run_dir
 
 
 QUIZ_DATA = {
@@ -60,7 +60,7 @@ def test_answers_with_users_csv_not_created_when_disabled():
     """By default, no .answers_with_users.csv file is generated."""
     with custom_webquiz_server(quizzes={"default.yaml": QUIZ_DATA}) as (_, port):
         base_url = f"http://localhost:{port}"
-        csv_dir = f"data_{port}"
+        csv_dir = latest_run_dir(port)
 
         response = requests.post(f"{base_url}/api/register", json={"username": "alice"})
         assert response.status_code == 200
@@ -72,9 +72,9 @@ def test_answers_with_users_csv_not_created_when_disabled():
         time.sleep(6)
 
         # Regular answers CSV should exist
-        assert _find_csv(csv_dir, ".csv") is not None, "answers CSV should exist"
+        assert _find_csv(csv_dir, "answers.csv") is not None, "answers CSV should exist"
         # But the third file should NOT
-        assert _find_csv(csv_dir, ".answers_with_users.csv") is None, (
+        assert _find_csv(csv_dir, "answers_with_users.csv") is None, (
             "extra answers_with_users CSV must not be created when disabled"
         )
 
@@ -84,7 +84,7 @@ def test_answers_with_users_csv_created_when_enabled():
     config = {"extra_answers_with_users_csv": True}
     with custom_webquiz_server(config=config, quizzes={"default.yaml": QUIZ_DATA}) as (_, port):
         base_url = f"http://localhost:{port}"
-        csv_dir = f"data_{port}"
+        csv_dir = latest_run_dir(port)
 
         response = requests.post(f"{base_url}/api/register", json={"username": "bob"})
         assert response.status_code == 200
@@ -92,7 +92,7 @@ def test_answers_with_users_csv_created_when_enabled():
 
         _submit_all(base_url, user_id, [(1, 1), (2, 0)])
 
-        extra_path = os.path.join(csv_dir, "default_0001.answers_with_users.csv")
+        extra_path = os.path.join(csv_dir, "answers_with_users.csv")
         assert _wait_for_file(extra_path, timeout=10.0), "answers_with_users CSV was never created"
 
         with open(extra_path, newline="", encoding="utf-8") as f:
@@ -126,7 +126,7 @@ def test_answers_with_users_csv_includes_registration_fields():
     }
     with custom_webquiz_server(config=config, quizzes={"default.yaml": QUIZ_DATA}) as (_, port):
         base_url = f"http://localhost:{port}"
-        csv_dir = f"data_{port}"
+        csv_dir = latest_run_dir(port)
 
         response = requests.post(
             f"{base_url}/api/register",
@@ -137,7 +137,7 @@ def test_answers_with_users_csv_includes_registration_fields():
 
         _submit_all(base_url, user_id, [(1, 1), (2, 0)])
 
-        extra_path = os.path.join(csv_dir, "default_0001.answers_with_users.csv")
+        extra_path = os.path.join(csv_dir, "answers_with_users.csv")
         assert _wait_for_file(extra_path, timeout=10.0), "answers_with_users CSV was never created"
 
         with open(extra_path, newline="", encoding="utf-8") as f:
@@ -168,14 +168,14 @@ def test_answers_with_users_csv_appends_across_flushes():
     config = {"extra_answers_with_users_csv": True}
     with custom_webquiz_server(config=config, quizzes={"default.yaml": QUIZ_DATA}) as (_, port):
         base_url = f"http://localhost:{port}"
-        csv_dir = f"data_{port}"
+        csv_dir = latest_run_dir(port)
 
         # User 1 submits first answer, wait for flush
         r = requests.post(f"{base_url}/api/register", json={"username": "user1"})
         user_id_1 = r.json()["user_id"]
         _submit_all(base_url, user_id_1, [(1, 1)])
 
-        extra_path = os.path.join(csv_dir, "default_0001.answers_with_users.csv")
+        extra_path = os.path.join(csv_dir, "answers_with_users.csv")
         assert _wait_for_file(extra_path, timeout=10.0)
 
         # User 2 submits answers after first flush has happened

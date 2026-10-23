@@ -3,7 +3,7 @@ import { App, Badge, Card, Flex, Layout, Menu, Typography } from "antd";
 import type { MenuProps } from "antd";
 import {
   DashboardOutlined,
-  FolderOpenOutlined,
+  InboxOutlined,
   GlobalOutlined,
   SettingOutlined,
   UnorderedListOutlined,
@@ -13,7 +13,7 @@ import { apiGet } from "../shared/api";
 import { t, type MessageKey } from "../shared/i18n";
 import { getPageData, getServerData } from "../shared/serverData";
 import { ConfigEditor } from "../files/ConfigEditor";
-import { FileManager } from "../files/FilesPage";
+import { ArchivePage } from "../files/ArchivePage";
 import { OverviewPage } from "./OverviewPage";
 import { QuizEditor, type EditorTarget } from "./QuizEditor";
 import { QuizzesCard } from "./QuizzesCard";
@@ -51,7 +51,7 @@ const TRANSFER_RESULT_TEXT: Record<string, MessageKey> = {
 const SECTION_TITLES: Record<Section, MessageKey> = {
   overview: "menu.overview",
   quizzes: "menu.quizzes",
-  files: "menu.files",
+  archive: "menu.archive",
   settings: "menu.settings",
   access: "menu.access",
 };
@@ -180,8 +180,8 @@ function AdminShell() {
 
   const menuItems: MenuProps["items"] = [
     { key: "overview", icon: <DashboardOutlined />, label: label(t("menu.overview"), pendingCount) },
-    { key: "quizzes", icon: <UnorderedListOutlined />, label: label(t("menu.quizzes")) },
-    { key: "files", icon: <FolderOpenOutlined />, label: label(t("menu.files"), transferCount) },
+    { key: "quizzes", icon: <UnorderedListOutlined />, label: label(t("menu.quizzes"), transferCount) },
+    { key: "archive", icon: <InboxOutlined />, label: label(t("menu.archive")) },
     ...(page.configPath ? [{ key: "settings", icon: <SettingOutlined />, label: label(t("menu.settings")) }] : []),
     { key: "access", icon: <GlobalOutlined />, label: label(t("menu.access"), 0, !!tunnel?.connected) },
   ];
@@ -210,6 +210,7 @@ function AdminShell() {
       content = (
         <Flex vertical gap={16}>
           <SectionHeader title={t("menu.quizzes")} />
+          {transferRequests}
           <QuizzesCard list={list} reload={loadQuizzes} onEdit={setEditor} />
           {page.downloadableQuizzes.length > 0 && (
             <DownloadableQuizzes quizzes={page.downloadableQuizzes} onDownloaded={loadQuizzes} />
@@ -217,14 +218,12 @@ function AdminShell() {
         </Flex>
       );
       break;
-    case "files":
+    case "archive":
       content = (
         <Flex vertical gap={16}>
-          <SectionHeader title={t("menu.files")} />
+          <SectionHeader title={t("menu.archive")} />
           {transferRequests}
-          <Card>
-            <FileManager />
-          </Card>
+          <ArchivePage />
         </Flex>
       );
       break;

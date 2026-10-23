@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canTransfer, configToForm, formToConfig, parseTransferKey, transferKey } from "./types";
+import { configToForm, formToConfig, parseTransferKey, transferKey } from "./types";
 
 describe("transfer keys", () => {
   it("keeps slashes of quiz subfolders in the name", () => {
@@ -7,11 +7,11 @@ describe("transfer keys", () => {
     expect(parseTransferKey(key)).toEqual({ type: "quizzes", name: "grade5/math.yaml" });
   });
 
-  it("allows only the transferable extensions", () => {
-    expect(canTransfer("quizzes", "a.YML")).toBe(true);
-    expect(canTransfer("csv", "a.csv")).toBe(true);
-    expect(canTransfer("logs", "a.csv")).toBe(false);
-    expect(canTransfer("quizzes", ".hidden.yaml")).toBe(false);
+  it("parses archive runs", () => {
+    expect(parseTransferKey(transferKey("archive", "2026-10-15-143005-math.zip"))).toEqual({
+      type: "archive",
+      name: "2026-10-15-143005-math.zip",
+    });
   });
 });
 

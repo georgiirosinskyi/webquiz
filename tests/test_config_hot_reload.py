@@ -319,7 +319,7 @@ def test_config_hot_reload_restart_required_paths():
         # Try to change paths (requires restart)
         new_config = """paths:
   quizzes_dir: "new_quizzes"
-  csv_dir: "new_data"
+  archive_dir: "new_archive"
 """
         response = requests.put(
             f"http://localhost:{port}/api/admin/config", cookies=cookies, json={"content": new_config}
@@ -330,7 +330,7 @@ def test_config_hot_reload_restart_required_paths():
         assert data["success"] is True
         assert "потрібен перезапуск" in data["message"].lower()
         assert "paths.quizzes_dir" in data["message"]
-        assert "paths.csv_dir" in data["message"]
+        assert "paths.archive_dir" in data["message"]
 
 
 def test_config_hot_reload_restart_required_master_key():

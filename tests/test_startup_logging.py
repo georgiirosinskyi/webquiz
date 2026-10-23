@@ -6,7 +6,7 @@ import platform
 import tempfile
 import time
 
-from conftest import custom_webquiz_server
+from conftest import custom_webquiz_server, latest_run_dir
 
 
 def test_startup_logging_creates_log_file():
@@ -15,12 +15,8 @@ def test_startup_logging_creates_log_file():
         # Give the server time to write logs
         time.sleep(0.5)
 
-        # Find log file in the port-specific logs directory
-        logs_dir = f"logs_{port}"
-        assert os.path.exists(logs_dir), f"Logs directory {logs_dir} should exist"
-
-        log_files = [f for f in os.listdir(logs_dir) if f.endswith(".log")]
-        assert len(log_files) > 0, "Should have at least one log file"
+        # The log is in the folder of the current run in the archive
+        assert os.path.isfile(os.path.join(latest_run_dir(port), "server.log"))
 
 
 def test_startup_logging_contains_environment_info():
@@ -30,12 +26,8 @@ def test_startup_logging_contains_environment_info():
         time.sleep(0.5)
 
         # Find and read log file
-        logs_dir = f"logs_{port}"
-        log_files = [f for f in os.listdir(logs_dir) if f.endswith(".log")]
-        assert len(log_files) > 0
-
-        log_path = os.path.join(logs_dir, log_files[0])
-        with open(log_path, "r") as f:
+        log_path = os.path.join(latest_run_dir(port), "server.log")
+        with open(log_path, "r", encoding="utf-8") as f:
             log_content = f.read()
 
         # Check for environment information markers
@@ -50,11 +42,9 @@ def test_startup_logging_contains_python_info():
     with custom_webquiz_server() as (proc, port):
         time.sleep(0.5)
 
-        logs_dir = f"logs_{port}"
-        log_files = [f for f in os.listdir(logs_dir) if f.endswith(".log")]
-        log_path = os.path.join(logs_dir, log_files[0])
+        log_path = os.path.join(latest_run_dir(port), "server.log")
 
-        with open(log_path, "r") as f:
+        with open(log_path, "r", encoding="utf-8") as f:
             log_content = f.read()
 
         # Check Python-related info
@@ -67,11 +57,9 @@ def test_startup_logging_contains_os_info():
     with custom_webquiz_server() as (proc, port):
         time.sleep(0.5)
 
-        logs_dir = f"logs_{port}"
-        log_files = [f for f in os.listdir(logs_dir) if f.endswith(".log")]
-        log_path = os.path.join(logs_dir, log_files[0])
+        log_path = os.path.join(latest_run_dir(port), "server.log")
 
-        with open(log_path, "r") as f:
+        with open(log_path, "r", encoding="utf-8") as f:
             log_content = f.read()
 
         # Check OS-related info
@@ -85,11 +73,9 @@ def test_startup_logging_contains_server_config():
     with custom_webquiz_server() as (proc, port):
         time.sleep(0.5)
 
-        logs_dir = f"logs_{port}"
-        log_files = [f for f in os.listdir(logs_dir) if f.endswith(".log")]
-        log_path = os.path.join(logs_dir, log_files[0])
+        log_path = os.path.join(latest_run_dir(port), "server.log")
 
-        with open(log_path, "r") as f:
+        with open(log_path, "r", encoding="utf-8") as f:
             log_content = f.read()
 
         # Check server configuration
@@ -104,18 +90,15 @@ def test_startup_logging_contains_path_config():
     with custom_webquiz_server() as (proc, port):
         time.sleep(0.5)
 
-        logs_dir = f"logs_{port}"
-        log_files = [f for f in os.listdir(logs_dir) if f.endswith(".log")]
-        log_path = os.path.join(logs_dir, log_files[0])
+        log_path = os.path.join(latest_run_dir(port), "server.log")
 
-        with open(log_path, "r") as f:
+        with open(log_path, "r", encoding="utf-8") as f:
             log_content = f.read()
 
         # Check path configuration
         assert "Path Configuration:" in log_content
         assert "Quizzes directory:" in log_content
-        assert "Logs directory:" in log_content
-        assert "CSV directory:" in log_content
+        assert "Archive directory:" in log_content
         assert "Static directory:" in log_content
 
 
@@ -124,11 +107,9 @@ def test_startup_logging_contains_admin_config():
     with custom_webquiz_server() as (proc, port):
         time.sleep(0.5)
 
-        logs_dir = f"logs_{port}"
-        log_files = [f for f in os.listdir(logs_dir) if f.endswith(".log")]
-        log_path = os.path.join(logs_dir, log_files[0])
+        log_path = os.path.join(latest_run_dir(port), "server.log")
 
-        with open(log_path, "r") as f:
+        with open(log_path, "r", encoding="utf-8") as f:
             log_content = f.read()
 
         # Check admin configuration
@@ -143,11 +124,9 @@ def test_startup_logging_contains_registration_config():
     with custom_webquiz_server() as (proc, port):
         time.sleep(0.5)
 
-        logs_dir = f"logs_{port}"
-        log_files = [f for f in os.listdir(logs_dir) if f.endswith(".log")]
-        log_path = os.path.join(logs_dir, log_files[0])
+        log_path = os.path.join(latest_run_dir(port), "server.log")
 
-        with open(log_path, "r") as f:
+        with open(log_path, "r", encoding="utf-8") as f:
             log_content = f.read()
 
         # Check registration configuration
@@ -161,11 +140,9 @@ def test_startup_logging_contains_dependency_versions():
     with custom_webquiz_server() as (proc, port):
         time.sleep(0.5)
 
-        logs_dir = f"logs_{port}"
-        log_files = [f for f in os.listdir(logs_dir) if f.endswith(".log")]
-        log_path = os.path.join(logs_dir, log_files[0])
+        log_path = os.path.join(latest_run_dir(port), "server.log")
 
-        with open(log_path, "r") as f:
+        with open(log_path, "r", encoding="utf-8") as f:
             log_content = f.read()
 
         # Check dependency versions
@@ -177,11 +154,9 @@ def test_startup_logging_contains_working_directory():
     with custom_webquiz_server() as (proc, port):
         time.sleep(0.5)
 
-        logs_dir = f"logs_{port}"
-        log_files = [f for f in os.listdir(logs_dir) if f.endswith(".log")]
-        log_path = os.path.join(logs_dir, log_files[0])
+        log_path = os.path.join(latest_run_dir(port), "server.log")
 
-        with open(log_path, "r") as f:
+        with open(log_path, "r", encoding="utf-8") as f:
             log_content = f.read()
 
         # Check working directory
@@ -194,11 +169,9 @@ def test_startup_logging_contains_binary_mode_info():
     with custom_webquiz_server() as (proc, port):
         time.sleep(0.5)
 
-        logs_dir = f"logs_{port}"
-        log_files = [f for f in os.listdir(logs_dir) if f.endswith(".log")]
-        log_path = os.path.join(logs_dir, log_files[0])
+        log_path = os.path.join(latest_run_dir(port), "server.log")
 
-        with open(log_path, "r") as f:
+        with open(log_path, "r", encoding="utf-8") as f:
             log_content = f.read()
 
         # Check binary mode info (should be False when running from tests)

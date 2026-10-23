@@ -10,9 +10,10 @@ describe("sectionFromPath", () => {
     expect(sectionFromPath("/admin/access")).toBe("access");
   });
 
-  it("opens the files section from the old file manager URL", () => {
-    expect(sectionFromPath("/files/")).toBe("files");
-    expect(sectionFromPath("/admin/files")).toBe("files");
+  it("opens the archive from its path and from the old file manager URLs", () => {
+    expect(sectionFromPath("/admin/archive")).toBe("archive");
+    expect(sectionFromPath("/files/")).toBe("archive");
+    expect(sectionFromPath("/admin/files")).toBe("archive");
   });
 
   it("falls back to the overview for unknown sections", () => {

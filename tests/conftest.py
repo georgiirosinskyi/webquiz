@@ -78,8 +78,7 @@ def custom_webquiz_server(config=None, quizzes=None):
         "server": {"port": port},
         "paths": {
             "quizzes_dir": f"quizzes_{port}",
-            "logs_dir": f"logs_{port}",
-            "csv_dir": f"data_{port}",
+            "archive_dir": f"archive_{port}",
             "static_dir": f"static_{port}",
         },
         "admin": {"master_key": "test123", "trusted_ips": []},
@@ -208,8 +207,7 @@ def custom_webquiz_server(config=None, quizzes=None):
         try:
             for directory in [
                 quizzes_dir,
-                final_config["paths"]["logs_dir"],
-                final_config["paths"]["csv_dir"],
+                final_config["paths"]["archive_dir"],
                 final_config["paths"]["static_dir"],
             ]:
                 if os.path.exists(directory):
@@ -221,6 +219,14 @@ def custom_webquiz_server(config=None, quizzes=None):
         except Exception as e:
             # Log cleanup errors but don't fail the test
             print(f"Warning: Cleanup error: {e}")
+
+
+def latest_run_dir(port, archive_dir=None):
+    """Folder of the newest quiz run in the test server's archive (see webquiz/archive.py)."""
+    archive_dir = archive_dir or f"archive_{port}"
+    runs = sorted(name for name in os.listdir(archive_dir) if os.path.isdir(os.path.join(archive_dir, name)))
+    assert runs, f"No runs in {archive_dir}"
+    return os.path.join(archive_dir, runs[-1])
 
 
 def get_admin_session(port, master_key="test123"):

@@ -45,22 +45,24 @@ class ServerConfig:
     url_format: str = "http://{IP}:{PORT}/"
 
 
+# Replaced by paths.archive_dir; still accepted in old config files and ignored
+REMOVED_PATH_KEYS = ("logs_dir", "csv_dir")
+
+
 @dataclass
 class PathsConfig:
     """Paths configuration data class"""
 
     quizzes_dir: str = None
-    logs_dir: str = None
-    csv_dir: str = None
+    # One folder per quiz run (CSV files, log, summary), see the Archive section of the admin app
+    archive_dir: str = None
     static_dir: str = None
 
     def __post_init__(self):
         if self.quizzes_dir is None:
             self.quizzes_dir = resolve_path_relative_to_binary("quizzes")
-        if self.logs_dir is None:
-            self.logs_dir = resolve_path_relative_to_binary("logs")
-        if self.csv_dir is None:
-            self.csv_dir = resolve_path_relative_to_binary("data")
+        if self.archive_dir is None:
+            self.archive_dir = resolve_path_relative_to_binary("archive")
         if self.static_dir is None:
             self.static_dir = resolve_path_relative_to_binary("static")
 
@@ -207,7 +209,11 @@ def load_config_from_yaml(config_path: str) -> WebQuizConfig:
 
         # Create config objects from YAML data
         server_config = ServerConfig(**(config_data.get("server", {})))
-        paths_config = PathsConfig(**(config_data.get("paths", {})))
+        paths_data = dict(config_data.get("paths") or {})
+        for removed in REMOVED_PATH_KEYS:
+            if paths_data.pop(removed, None) is not None:
+                logger.warning(f"paths.{removed} is no longer used: quiz data and logs are kept in paths.archive_dir")
+        paths_config = PathsConfig(**paths_data)
         admin_config = AdminConfig(**(config_data.get("admin", {})))
         registration_config = RegistrationConfig(**(config_data.get("registration", {})))
         appearance_config = AppearanceConfig(**(config_data.get("appearance") or {}))

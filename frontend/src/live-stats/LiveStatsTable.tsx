@@ -49,7 +49,7 @@ function QuestionHeader({ question, index, stats }: { question: Question; index:
     <Tooltip title={hint}>
       <Flex vertical align="center" gap={4}>
         {imageOnly && <img src={question.image} alt={label} className="header-image" />}
-        <Typography.Text strong className="question-text">
+        <Typography.Text strong className="live-question-text">
           {label}
         </Typography.Text>
         <Space size={4} wrap style={{ justifyContent: "center" }}>

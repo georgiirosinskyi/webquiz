@@ -142,6 +142,8 @@ data/
 data_*/
 logs/
 logs_*/
+archive/
+archive_*/
 quizzes/
 quizzes_*/
 test_quizzes/

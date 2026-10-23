@@ -2,7 +2,7 @@ body {
   margin: 0;
 }
 
-.question-text {
+.live-question-text {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;

@@ -3,7 +3,7 @@ import requests
 import csv
 import os
 import time
-from conftest import custom_webquiz_server
+from conftest import custom_webquiz_server, latest_run_dir
 
 
 def test_registration_with_no_fields():
@@ -70,19 +70,16 @@ def test_registration_field_validation():
         assert "error" in response.json()
 
 
-def test_csv_naming_convention(temp_dir):
-    """Test that paired CSV files use same number (quiz_0001.csv and quiz_0001.users.csv)"""
+def test_csv_files_share_the_run_folder(temp_dir):
+    """The answers and users CSV files of a run are in its archive folder"""
     config = {"registration": {"fields": ["Grade"]}}
 
     with custom_webquiz_server(config=config) as (proc, port):
         base_url = f"http://localhost:{port}"
 
-        # Register user
         reg_response = requests.post(f"{base_url}/api/register", json={"username": "pairtest", "grade": "10"})
         assert reg_response.status_code == 200
         user_id = reg_response.json()["user_id"]
-
-        # Submit answer
         requests.post(
             f"{base_url}/api/submit-answer", json={"user_id": user_id, "question_id": 1, "selected_answer": 1}
         )
@@ -90,22 +87,10 @@ def test_csv_naming_convention(temp_dir):
         # Wait for periodic CSV flush (runs every 5 seconds)
         time.sleep(6)
 
-        # Check that both files exist with same number
-        import glob
-        import re
-
-        user_csv_files = glob.glob(f"{temp_dir}/data_*/test_quiz_*.users.csv")
-        answer_csv_files = glob.glob(f"{temp_dir}/data_*/test_quiz_*.csv")
-        answer_csv_files = [f for f in answer_csv_files if not f.endswith(".users.csv")]
-
-        assert len(user_csv_files) > 0
-        assert len(answer_csv_files) > 0
-
-        # Extract numbers from filenames
-        user_number = re.search(r"_(\d{4})\.users\.csv", user_csv_files[0]).group(1)
-        answer_number = re.search(r"_(\d{4})\.csv", answer_csv_files[0]).group(1)
-
-        assert user_number == answer_number, "CSV files should use same number"
+        run = latest_run_dir(port)
+        assert os.path.basename(run).endswith("-test_quiz")
+        assert os.path.isfile(os.path.join(run, "users.csv"))
+        assert os.path.isfile(os.path.join(run, "answers.csv"))
 
 
 def test_user_id_format():
@@ -159,10 +144,7 @@ def test_registration_with_cyrillic_field_labels(temp_dir):
         time.sleep(6)
 
         # Read user CSV
-        import glob
-
-        user_csv_files = glob.glob(f"{temp_dir}/data_*/test_quiz_*.users.csv")
-        assert len(user_csv_files) > 0
+        user_csv_files = [os.path.join(latest_run_dir(port), "users.csv")]
 
         # Users CSV keeps field labels as headers and identifies users by name
         with open(user_csv_files[0], "r", encoding="utf-8", newline="") as f:

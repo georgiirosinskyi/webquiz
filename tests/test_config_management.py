@@ -16,8 +16,7 @@ def test_update_config_with_valid_data():
 
 paths:
   quizzes_dir: "quizzes"
-  logs_dir: "logs"
-  csv_dir: "data"
+  archive_dir: "archive"
   static_dir: "static"
 
 admin:
@@ -561,8 +560,7 @@ def test_save_config_json_preserves_comments_and_blank_lines():
             "\n"
             "paths:\n"
             f"  quizzes_dir: quizzes_{port}\n"
-            f"  logs_dir: logs_{port}\n"
-            f"  csv_dir: data_{port}\n"
+            f"  archive_dir: archive_{port}\n"
             f"  static_dir: static_{port}\n"
             "\n"
             "admin:\n"

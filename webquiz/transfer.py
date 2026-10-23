@@ -18,7 +18,8 @@ protects the sender: only offered files are served, only with the token, and
 only until the offer is finished or expired.
 
 Images (quizzes/imgs/) and attachments (quizzes/attach/) used by an offered
-quiz are added to the offer automatically.
+quiz are added to the offer automatically. A run of the archive is offered as
+"<run folder>.zip" (built on the fly) and unpacked into a folder again.
 
 For every incoming file the receiver shows its case (new file, the same file
 already exists, a different file exists, or the file is used by the running
@@ -32,7 +33,9 @@ import logging
 import os
 import re
 import secrets
+import shutil
 import tempfile
+import zipfile
 from datetime import datetime, timedelta
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote
@@ -42,6 +45,7 @@ import yaml
 from aiohttp import web
 from ruamel.yaml import YAML as RuamelYAML
 
+from . import archive as run_archive
 from .translations import admin_text
 
 logger = logging.getLogger(__name__)
@@ -49,8 +53,8 @@ logger = logging.getLogger(__name__)
 # File types that can be transferred and their allowed extensions (None: any)
 FILE_TYPES = {
     "quizzes": (".yaml", ".yml"),
-    "logs": (".log",),
-    "csv": (".csv",),
+    # A run folder of the archive, sent as "<run>.zip" and unpacked into a folder again
+    "archive": (".zip",),
     "images": (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".svg", ".webp"),
     "attachments": None,
 }
@@ -72,8 +76,6 @@ MAX_INCOMING_REQUESTS = 20
 HTTP_TIMEOUT = 30.0
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
-# Logs and CSV files have the same names on every server, so they get the sender name
-PREFIXED_TYPES = ("logs", "csv")
 
 
 class TransferError(Exception):
@@ -104,7 +106,24 @@ def is_allowed_file(file_type: Any, filename: Any) -> bool:
     if any(ord(char) < 32 or char in '<>:"/\\|?*' for char in filename):
         return False
     extensions = FILE_TYPES[file_type]
+    if file_type == "archive":
+        return filename.endswith(".zip") and run_archive.is_valid_run_name(filename[: -len(".zip")])
     return extensions is None or filename.lower().endswith(extensions)
+
+
+def local_path(directory: str, file_type: str, name: str) -> str:
+    """Where a file of this type lives: an archive run is the folder without ".zip"."""
+    if file_type == "archive":
+        return os.path.join(directory, name[: -len(".zip")])
+    return os.path.join(directory, name)
+
+
+def file_content(path: str, file_type: str) -> bytes:
+    """What is sent for a file: a run folder as a zip, any other file as it is."""
+    if file_type == "archive":
+        return run_archive.zip_run(path)
+    with open(path, "rb") as f:
+        return f.read()
 
 
 def file_sha256(path: str) -> str:
@@ -333,7 +352,7 @@ class TransferManager:
 
         Args:
             target: Socket name of the receiving server
-            files: List of {"type": "quizzes"|"logs"|"csv"|..., "name": filename}
+            files: List of {"type": "quizzes"|"archive"|..., "name": filename}
 
         Returns:
             Outgoing offer view
@@ -347,8 +366,9 @@ class TransferManager:
         directories = self.get_directories()
         entries = []
         for item in self._parse_file_list(files):
-            path = os.path.join(directories[item["type"]], item["name"])
-            if not os.path.isfile(path):
+            path = local_path(directories[item["type"]], item["type"], item["name"])
+            exists = os.path.isdir(path) if item["type"] == "archive" else os.path.isfile(path)
+            if not exists:
                 raise TransferError(self._t("transfer_file_not_found", name=item["name"]), 404)
             entries.append({**item, "path": path})
 
@@ -366,15 +386,17 @@ class TransferManager:
         if len(unique) > MAX_FILES_PER_OFFER:
             raise TransferError(self._t("transfer_too_many_media", max=MAX_FILES_PER_OFFER))
         # The checksum lets the receiver see if it already has the same file
-        entries = [
-            {
-                "type": entry["type"],
-                "name": entry["name"],
-                "size": os.path.getsize(entry["path"]),
-                "sha256": file_sha256(entry["path"]),
-            }
-            for entry in unique.values()
-        ]
+        entries = []
+        for entry in unique.values():
+            content = file_content(entry["path"], entry["type"])
+            entries.append(
+                {
+                    "type": entry["type"],
+                    "name": entry["name"],
+                    "size": len(content),
+                    "sha256": hashlib.sha256(content).hexdigest(),
+                }
+            )
 
         self._remove_expired()
         token = secrets.token_urlsafe(32)
@@ -428,7 +450,11 @@ class TransferManager:
         if not offered or not is_allowed_file(file_type, filename):
             return web.json_response({"error": "Not found"}, status=404)
 
-        path = os.path.join(self.get_directories()[file_type], filename)
+        path = local_path(self.get_directories()[file_type], file_type, filename)
+        if file_type == "archive":
+            if not os.path.isdir(path):
+                return web.json_response({"error": "Not found"}, status=404)
+            return web.Response(body=run_archive.zip_run(path), content_type="application/octet-stream")
         if not os.path.isfile(path):
             return web.json_response({"error": "Not found"}, status=404)
         return web.FileResponse(path, headers={"Content-Type": "application/octet-stream"})
@@ -507,14 +533,23 @@ class TransferManager:
         return os.path.abspath(path) in in_use
 
     @staticmethod
-    def _free_name(directory: str, name: str, sender: str, taken: set) -> str:
-        """First name for a renamed file that is not used yet: "{sender}_{name}", then "_2", "_3", ..."""
-        prefixed = name if name.startswith(f"{sender}_") else f"{sender}_{name}"
-        stem, extension = os.path.splitext(prefixed)
-        candidate = prefixed
+    def _free_name(directory: str, file_type: str, name: str, sender: str, taken: set) -> str:
+        """First name for a renamed file that is not used yet
+
+        "{sender}_{name}", then "_2", "_3", ...; an archive run keeps the date first
+        ("2026-10-15-143005-math-{sender}.zip") so it still sorts and reads as a run.
+        """
+        if file_type == "archive":
+            stem, extension = name[: -len(".zip")] + f"-{sender}", ".zip"
+            separator = "-"
+        else:
+            prefixed = name if name.startswith(f"{sender}_") else f"{sender}_{name}"
+            stem, extension = os.path.splitext(prefixed)
+            separator = "_"
+        candidate = stem + extension
         counter = 2
-        while candidate in taken or os.path.exists(os.path.join(directory, candidate)):
-            candidate = f"{stem}_{counter}{extension}"
+        while candidate in taken or os.path.exists(local_path(directory, file_type, candidate)):
+            candidate = f"{stem}{separator}{counter}{extension}"
             counter += 1
         return candidate
 
@@ -529,21 +564,21 @@ class TransferManager:
         """
         directories = self.get_directories()
         sender = request["from"]
-        targets = [
-            f"{sender}_{entry['name']}" if entry["type"] in PREFIXED_TYPES else entry["name"]
-            for entry in request["files"]
-        ]
+        targets = [entry["name"] for entry in request["files"]]
         taken = {(entry["type"], target) for entry, target in zip(request["files"], targets)}
 
         plans = []
         for entry, target in zip(request["files"], targets):
             directory = directories[entry["type"]]
-            path = os.path.join(directory, target)
+            is_run = entry["type"] == "archive"
+            path = local_path(directory, entry["type"], target)
             if not os.path.exists(path):
                 case, actions, default = "new", ["save", "rename", "skip"], "save"
-            elif not os.path.isfile(path) or self._is_in_use(path):
+            elif (os.path.isdir(path) != is_run) or self._is_in_use(path):
                 case, actions, default = "in_use", ["rename", "skip"], "rename"
-            elif entry.get("sha256") and file_sha256(path) == entry["sha256"]:
+            elif entry.get("sha256") and (
+                hashlib.sha256(run_archive.zip_run(path)).hexdigest() if is_run else file_sha256(path)
+            ) == entry["sha256"]:
                 case, actions, default = "same", ["replace", "rename", "skip"], "skip"
             else:
                 case, actions, default = "different", ["replace", "rename", "skip"], "rename"
@@ -554,7 +589,7 @@ class TransferManager:
                     "case": case,
                     "actions": actions,
                     "default_action": default,
-                    "suggested_name": self._free_name(directory, target, sender, same_type_taken),
+                    "suggested_name": self._free_name(directory, entry["type"], target, sender, same_type_taken),
                 }
             )
         return plans
@@ -595,7 +630,7 @@ class TransferManager:
                 if not is_allowed_file(entry["type"], name):
                     errors.append(self._t("transfer_bad_name", name=entry["name"], new_name=name))
                     continue
-                if os.path.exists(os.path.join(directories[entry["type"]], name)):
+                if os.path.exists(local_path(directories[entry["type"]], entry["type"], name)):
                     errors.append(self._t("transfer_name_exists", name=entry["name"], new_name=name))
                     continue
             if (entry["type"], name) in chosen:
@@ -646,17 +681,35 @@ class TransferManager:
                         temp_file.write(chunk)
             if entry["type"] == "quizzes" and renamed_media:
                 rewrite_quiz_media(temp_path, renamed_media)
-            final_path = os.path.join(directory, save_as)
+            final_path = local_path(directory, entry["type"], save_as)
             if not overwrite and os.path.exists(final_path):
                 raise TransferError(self._t("transfer_appeared", name=save_as))
             if overwrite and self._is_in_use(final_path):
                 raise TransferError(self._t("transfer_in_use", name=save_as))
-            os.replace(temp_path, final_path)
+            if entry["type"] == "archive":
+                self._save_run(temp_path, directory, final_path)
+            else:
+                os.replace(temp_path, final_path)
         except httpx.HTTPError as e:
             raise TransferError(self._t("transfer_download_failed", error=e))
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
+
+    def _save_run(self, zip_path: str, directory: str, final_path: str):
+        """Unpack a received run next to the archive, then put it in place of an older copy"""
+        with open(zip_path, "rb") as f:
+            data = f.read()
+        unpacked = tempfile.mkdtemp(prefix=".transfer-", dir=directory)
+        os.rmdir(unpacked)
+        try:
+            run_archive.unzip_run(data, unpacked)
+        except (ValueError, zipfile.BadZipFile):
+            shutil.rmtree(unpacked, ignore_errors=True)
+            raise TransferError(self._t("transfer_bad_archive"))
+        if os.path.isdir(final_path):
+            shutil.rmtree(final_path)
+        os.replace(unpacked, final_path)
 
     async def _report_result(self, client: httpx.AsyncClient, sender_url: str, token: str, status: str):
         try:

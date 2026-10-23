@@ -54,14 +54,14 @@ def test_spoofed_localhost_through_tunnel_is_blocked():
     with custom_webquiz_server(config=config) as (proc, port):
         headers = {"X-Forwarded-For": "127.0.0.1, 8.8.8.8", "X-Real-IP": "8.8.8.8"}
 
-        response = requests.get(f"http://localhost:{port}/api/files/list", headers=headers)
+        response = requests.get(f"http://localhost:{port}/api/admin/archive", headers=headers)
         assert response.status_code == 403
 
         response = requests.post(f"http://localhost:{port}/api/admin/auth", headers=headers)
         assert response.status_code == 403
 
         # The real localhost (no proxy headers) is still trusted
-        response = requests.get(f"http://localhost:{port}/api/files/list")
+        response = requests.get(f"http://localhost:{port}/api/admin/archive")
         assert response.status_code == 200
 
 

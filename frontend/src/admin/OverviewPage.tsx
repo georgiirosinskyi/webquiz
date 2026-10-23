@@ -85,10 +85,10 @@ function CurrentQuizCard({
       content: users.length > 0 ? t("overview.reset_users", { count: users.length }) : t("overview.new_csv"),
       okText: restart ? t("overview.restart") : t("overview.switch"),
       onOk: async () => {
-        const result = await apiSend<{ csv_file: string }>("POST", "/api/admin/switch-quiz", { quiz_filename: filename });
+        const result = await apiSend<{ run: string }>("POST", "/api/admin/switch-quiz", { quiz_filename: filename });
         if (result.ok) {
           message.success(
-            t(restart ? "overview.restarted" : "overview.switched", { name: filename, csv: result.data.csv_file }),
+            t(restart ? "overview.restarted" : "overview.switched", { name: filename, csv: result.data.run }),
           );
         } else {
           message.error(result.data.error || t("overview.switch_failed"));

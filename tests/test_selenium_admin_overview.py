@@ -59,9 +59,9 @@ def test_menu_switches_sections_without_reload(temp_dir, browser):
         wait_for_element(browser, By.CSS_SELECTOR, '[data-testid="quiz-list"]')
         assert browser.current_url.endswith("/admin/quizzes")
 
-        browser.find_element(By.XPATH, "//li[contains(@class,'ant-menu-item')][contains(., 'Файли')]").click()
-        wait_for_element(browser, By.CSS_SELECTOR, '[data-testid="files-panel"]')
-        assert browser.current_url.endswith("/admin/files")
+        browser.find_element(By.XPATH, "//li[contains(@class,'ant-menu-item')][contains(., 'Архів')]").click()
+        wait_for_element(browser, By.CSS_SELECTOR, '[data-testid="archive-table"]')
+        assert browser.current_url.endswith("/admin/archive")
 
         browser.back()
         wait_for_element(browser, By.CSS_SELECTOR, '[data-testid="quiz-list"]')

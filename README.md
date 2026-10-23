@@ -6,7 +6,7 @@ A modern web-based quiz and testing system built with Python and aiohttp that al
 
 - **Multi-Quiz System**: Questions loaded from `quizzes/` directory with multiple YAML files
 - **Multiple Question Types**: Single choice, multiple choice, and text input questions with Python-based validation
-- **Admin Interface**: Web-based admin app with master key authentication: a live overview of the current quiz and all participants (status, progress, points, grade, time, approval), quiz management, files, settings and access in one menu
+- **Admin Interface**: Web-based admin app with master key authentication: a live overview of the current quiz and all participants (status, progress, points, grade, time, approval), quiz management, the archive of quiz runs, settings and access in one menu
 - **Registration Approval**: Optional admin approval workflow for new registrations with real-time notifications
 - **Question Randomization**: Configurable per-student question order randomization for fair testing
 - **Question Grouping**: Keep related questions together during randomization with `stick_to_the_previous` attribute
@@ -25,7 +25,7 @@ A modern web-based quiz and testing system built with Python and aiohttp that al
 - **SSH Tunnel Support**: Optional public access via SSH reverse tunnel with auto-reconnect
 - **Binary Distribution**: Standalone PyInstaller executable with auto-configuration
 - **Comprehensive Testing**: 222+ tests covering all functionality with CI/CD pipeline
-- **Flexible File Paths**: Configurable paths for quizzes, logs, CSV, and static files
+- **Flexible File Paths**: Configurable paths for quizzes, the archive (CSV files and logs of every quiz run) and static files
 
 ## 🚀 Quick Start
 
@@ -115,7 +115,7 @@ webquiz/
 │   └── src/
 │       ├── quiz/          # User quiz page (antd, same theme as the admin pages)
 │       ├── admin/         # Admin app: menu, overview, quizzes, quiz editor
-│       ├── files/         # Files and settings sections of the admin app
+│       ├── files/         # Archive and settings sections of the admin app
 │       ├── live-stats/    # Live statistics
 │       └── shared/        # Login, API helpers, theme
 ├── tests/                  # Test suite (14 test files)
@@ -127,7 +127,7 @@ webquiz/
 │   ├── test_registration_approval.py    # Registration approval tests
 │   ├── test_registration_fields.py      # Registration fields tests
 │   ├── test_index_generation.py         # Template generation tests
-│   ├── test_files_management.py         # File manager tests
+│   ├── test_archive.py                  # Quiz run archive tests
 │   ├── test_integration_multiple_choice.py  # Multiple choice integration tests
 │   ├── test_multiple_answers.py         # Multiple answer tests
 │   ├── test_show_right_answer.py        # Show answer tests
@@ -160,12 +160,11 @@ webquiz --port 9090
 
 # Start server with custom directories
 webquiz --quizzes-dir my_quizzes
-webquiz --logs-dir /var/log
-webquiz --csv-dir /data
+webquiz --archive-dir /data
 webquiz --static /var/www/quiz
 
 # Combine multiple options
-webquiz --master-key secret123 --quizzes-dir quizzes --logs-dir logs
+webquiz --master-key secret123 --quizzes-dir quizzes --archive-dir archive
 
 # Set master key via environment variable
 export WEBQUIZ_MASTER_KEY=secret123
@@ -193,8 +192,7 @@ webquiz --version
 - `--master-key`: Enable admin interface with authentication
 - `--port`: Port to listen on (default: `8080`)
 - `--quizzes-dir`: Directory containing quiz YAML files (default: `./quizzes`)
-- `--logs-dir`: Directory for server logs (default: current directory)
-- `--csv-dir`: Directory for CSV exports (default: current directory)
+- `--archive-dir`: Directory for the archive of quiz runs: one folder per run with its CSV files and log (default: `./archive`)
 - `--static`: Directory for static files (default: `./static`)
 - `-d, --daemon`: Run server in background
 - `--stop`: Stop daemon server
@@ -282,7 +280,7 @@ The project has **222+ tests** across **15 test files** covering:
 - **Admin Quiz Editor** (7 tests): Wizard mode quiz creation with randomize_questions and show_answers_on_completion
 - **Config Management** (23 tests): Config editor, validation, and form-based JSON updates
 - **Registration Approval** (20 tests): Approval workflow and timing
-- **Files Management** (38 tests): File manager interface
+- **Archive** (`test_archive.py`): Run folders, summary, per-run log, archive API, quiz file download
 - **Admin Overview** (6 + 3 Selenium tests): Live participant records on the admin WebSocket and the overview page (`test_admin_overview_websocket.py`, `test_selenium_admin_overview.py`)
 - **SSH Tunnel** (31 tests): Key generation, config fetch, connect/disconnect (`test_tunnel.py`)
 - **File Transfer** (59 tests): Sending files between servers through the tunnel (`test_transfer.py`, `test_transfer_api.py`)
@@ -631,17 +629,17 @@ tunnel:
 
 ### Sending Files Between Servers
 
-Servers connected to the **same tunnel server with the same SSH user** (one socket directory, e.g. all computers of one school) can send quiz, log and CSV files to each other through the tunnel.
+Servers connected to the **same tunnel server with the same SSH user** (one socket directory, e.g. all computers of one school) can send quizzes and archive records (whole run folders) to each other through the tunnel.
 
 1. Give every server a fixed, unique `socket_name` (e.g. `room-12`) and connect the tunnel on both.
-2. **Sender**: open the admin **Files** section (`/admin/files`), tick the files, type the name of the other server and click **Send**. Only a list of the files is sent at this point. The **Send files to another server** panel is shown only while the tunnel is connected.
-3. **Receiver**: the admin **Files** section shows the request (the menu item gets a badge). For every file it shows what is already there and lets the admin choose what to do (see below), then **Accept** / **Reject**.
-4. On **Accept**, the receiver downloads the files from the sender as chosen. The sender's Files section shows the answer.
+2. **Sender**: open the admin **Quizzes** section (`/admin/quizzes`) or **Archive** section (`/admin/archive`), tick the quizzes or records, type the name of the other server and click **Send**. Only a list of the files is sent at this point. The **Send files to another server** panel is shown only while the tunnel is connected.
+3. **Receiver**: the admin **Quizzes** and **Archive** sections show the request (the Quizzes menu item gets a badge). For every file it shows what is already there and lets the admin choose what to do (see below), then **Accept** / **Reject**.
+4. On **Accept**, the receiver downloads the files from the sender as chosen. The sender's panel shows the answer.
 
 Images and attachments used by a quiz (`image`, image `options` and `file` fields, from `quizzes/imgs/` and `quizzes/attach/`) are added to the request automatically. Files that a quiz references but that do not exist on the sender are skipped.
 
 Choosing what happens to each file:
-- Quizzes, images and attachments are saved under their own name. Logs and CSV files are saved with the sender name (`room-12_0001.log`, `room-12_math_0001.csv`), because every server uses the same names.
+- Quizzes, images, attachments and archive records are saved under their own name. A record is sent as `<run>.zip` (built on the fly with fixed timestamps, so identical runs have the same checksum) and unpacked into a folder of the receiver's archive; a renamed record gets the sender name at the end (`2026-10-15-143005-math-room-12`).
 - For every file the receiver shows one case and a default action. The sender sends a SHA-256 checksum of every file, so the receiver can tell whether its own file has the same content.
 
 | Case | Possible actions | Default |
@@ -649,7 +647,7 @@ Choosing what happens to each file:
 | New file (no file with this name) | Save, Rename, Skip | Save |
 | The same file already exists | Replace, Rename, Skip | Skip |
 | A different file with this name exists | Replace, Rename, Skip | Rename |
-| The running server uses this file (current log, current CSV files, active quiz) | Rename, Skip | Rename |
+| The running server uses this file (current archive record, active quiz) | Rename, Skip | Rename |
 
 - **Rename** suggests a free name (`room-12_map.png`, then `_2`, `_3`, …); the admin can change it.
 - Choices are checked before anything is downloaded. If a choice is not possible (for example, the new name already exists), nothing is saved and the request stays open.
@@ -657,14 +655,17 @@ Choosing what happens to each file:
 
 Rules and limits:
 - Both servers must stay connected until the receiver accepts. A request expires after 30 minutes.
-- Only `.yaml`/`.yml` quizzes, `.log` logs, `.csv` files and the images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.svg`, `.webp`) and attachments of sent quizzes; at most 100 files per request (images and attachments included) and 50 MB per file.
+- Only `.yaml`/`.yml` quizzes, archive records and the images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.svg`, `.webp`) and attachments of sent quizzes; at most 100 files per request (images and attachments included) and 50 MB per file.
 - All traffic goes through the public tunnel URL (`https://[server]/start/[name]/api/transfer/...`). A request carries a random token; the sender serves only the offered files, only with this token, and only until the request is answered or expires. The receiver downloads only from its own tunnel server, so files can only come from a server connected with a key of the same SSH user.
 
 ## 📊 Data Export
 
-User responses are automatically exported to CSV files with quiz-prefixed filenames and unique suffixes to prevent overwrites:
+Every quiz switch or restart starts a new **archive record**: a folder `archive/YYYY-MM-DD-HHMMSS-<quiz>/` with
+everything of that run — `answers.csv`, `users.csv`, the optional `answers_with_users.csv`, `server.log` (the log
+of the run; the first run after a start also holds the startup information) and `summary.json` (numbers for the
+admin **Archive** table). Old `data/` and `logs/` folders of earlier versions are left as they are.
 
-**Example:** `math_quiz_user_responses_0001.csv`
+**Example:** `archive/2026-10-15-143005-math_quiz/answers.csv`
 
 ```csv
 user_id,question,selected_answer,correct_answer,is_correct,time_taken_seconds
@@ -672,7 +673,7 @@ user_id,question,selected_answer,correct_answer,is_correct,time_taken_seconds
 123456,"What is 5 × 3?","15","15",True,2.87
 ```
 
-A second file with `.users.csv` suffix contains user statistics:
+`users.csv` contains user statistics:
 
 ```csv
 user_id,username,registered_at,total_questions_asked,correct_answers,earned_points,total_points,total_time
@@ -686,13 +687,13 @@ user_id,username,registered_at,total_questions_asked,correct_answers,earned_poin
 ### Extra answers-with-users CSV (per-answer rows with user info)
 
 If you set `extra_answers_with_users_csv: true` in `webquiz.yaml`, a **third**
-CSV file is generated with the suffix `.answers_with_users.csv`. It has one row
+CSV file `answers_with_users.csv` is generated in the run folder. It has one row
 per submitted answer (like the answers CSV) but the user-identifying columns
 (`user_id`, `username`, and any registration fields configured under
 `registration.fields`) are prepended to each row. This avoids having to join
 the two existing CSVs in a spreadsheet or analysis tool.
 
-**Example:** `math_quiz_0001.answers_with_users.csv`
+**Example:** `archive/2026-10-15-143005-math_quiz/answers_with_users.csv`
 
 ```csv
 user_id,username,school,question,selected_answer,correct_answer,is_correct,time_taken_seconds
@@ -743,7 +744,7 @@ webquiz --master-key secret123
 Admin app (one page with a menu at the top):
 - `/admin/` - **Overview**: the current quiz (switch, restart, edit, open answers) and a live table of all participants with status, progress per question, points, grade, time left and approval buttons; a click on a row shows each answer the participant gave next to the correct one
 - `/admin/quizzes` - Quiz files as a tree by folders, with question count, points, time limit and settings of each quiz: switch, edit, duplicate, unite, delete, download quiz sets
-- `/admin/files` (also `/files/`) - CSV results, logs, quiz files, sending files to another server
+- `/admin/archive` (also `/files/`, `/admin/files`) - Archive: every quiz run with its date, quiz, number of questions and users, share of correct answers and average time per question; a record expands to its files under readable names (answers, users, server log last): view, download CSV or XLSX; sending records to another server
 - `/admin/settings` - Configuration (form or YAML)
 - `/admin/access` - URLs for other devices and the SSH tunnel
 - `/live-stats/` - Full-screen live statistics for a projector

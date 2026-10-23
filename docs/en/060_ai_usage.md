@@ -26,7 +26,7 @@ In this section, you'll learn how to effectively use AI for:
 - Manual verification of specific questions
 - Working with sensitive data
 
-> **Tip:** To view CSV files, open **Files** → **CSV files** tab (see [Administrative Interface](030_admin.md) for details).
+> **Tip:** To view CSV files, open **Archive** and expand the record of the run (see [Administrative Interface](030_admin.md) for details).
 
 ---
 
@@ -34,8 +34,10 @@ In this section, you'll learn how to effectively use AI for:
 
 WebQuiz stores quiz results in **two separate CSV files**:
 
-1. **Answers file** — `{quiz_name}_{number}.csv`
-2. **Users file** — `{quiz_name}_{number}.users.csv`
+1. **Answers file** — `answers.csv`
+2. **Users file** — `users.csv`
+
+Both are in the folder of the archive record, for example `archive/2026-10-15-143005-history/`; download them in the **Archive** section.
 
 This separation ensures **anonymity during analysis** — you can share the answers file with AI without revealing student names.
 
@@ -91,7 +93,7 @@ This separation ensures **anonymity during analysis** — you can share the answ
 
 If you need **detailed analysis of specific students**, you can combine both files via the `user_id` column. However, for most AI analyses, the answers file alone (anonymous analysis) is sufficient.
 
-> **Tip:** For most AI analyses, only the answers file (`{quiz}_0001.csv`) without the users file is sufficient — it's safer and simpler.
+> **Tip:** For most AI analyses, only the answers file (`answers.csv`) without the users file is sufficient — it's safer and simpler.
 
 ---
 
@@ -367,7 +369,7 @@ questions:
 **After generation:**
 1. Copy generated YAML to a file (e.g., `history_test.yaml`)
 2. Place the file in the `quizzes/` folder
-3. Validate the quiz via **Files** → **Quizzes** → **Validate** button
+3. Open the quiz in **Quizzes** → **Edit**: the editor shows any errors
 4. Try the quiz yourself before using with students
 
 ---
@@ -718,7 +720,7 @@ Process of continuous quiz improvement based on AI analysis:
 
 **Step 1:** Conduct quiz with students
 
-**Step 2:** Export CSV results via **Files** → **CSV files**
+**Step 2:** Download the CSV results in the **Archive** section (expand the record → **Download**)
 
 **Step 3:** Use AI for difficulty analysis (Prompt 1)
 
@@ -743,7 +745,7 @@ Task: Make harder or replace with another
 Output format: WebQuiz YAML (only these 2 questions)
 ```
 
-**Step 6:** Replace problematic questions in YAML file via **Files** → **Quizzes** → **Edit** button
+**Step 6:** Replace problematic questions in **Quizzes** → **Edit**
 
 **Step 7:** Run quiz again and compare results
 

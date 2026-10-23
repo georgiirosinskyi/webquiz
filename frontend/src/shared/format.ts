@@ -48,3 +48,13 @@ export function parseCsv(text: string): string[][] {
   if (row.length > 1 || row[0] !== "") rows.push(row);
   return rows;
 }
+
+// Pixel width of each CSV column from its longest line (header included), so a table with a fixed
+// header keeps the header and the body aligned.
+export function csvColumnWidths(rows: string[][], min = 70, max = 320): number[] {
+  const count = Math.max(0, ...rows.map((row) => row.length));
+  return Array.from({ length: count }, (_, i) => {
+    const longest = Math.max(0, ...rows.map((row) => Math.max(0, ...(row[i] || "").split("\n").map((line) => line.length))));
+    return Math.min(max, Math.max(min, longest * 8 + 24));
+  });
+}

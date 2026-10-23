@@ -64,7 +64,7 @@ If you see a warning, allow the application to run or add it to your antivirus's
 The admin panel opens on the **Overview**:
 - The current quiz with a list to switch to another one, and **Edit** / **Restart** buttons
 - A live table of participants: status, progress, points, grade and time
-- A menu at the top: **Quizzes** (manage quiz files), **Files**, **Settings** and **Access** (the local network URL for other devices)
+- A menu at the top: **Quizzes** (manage quiz files), **Archive** (results and logs of every run), **Settings** and **Access** (the local network URL for other devices)
 - The current WebQuiz version and a link to the documentation at the bottom
 
 ---
@@ -78,8 +78,7 @@ They are used to store configuration, results, and diagnostic information.
 |---------------|----------|
 | **config.yaml** | The main configuration file. Stores system parameters, including user registration settings, test format, and general options. |
 | **quizzes/** | Directory for storing quizzes in YAML format. You can create your own question files or edit the default example that comes included. |
-| **results/** | Quiz results in CSV format will be stored here. They can be viewed or opened in spreadsheet editors. |
-| **logs/** | Directory containing application logs. Records messages about launches, errors, or warnings. If something goes wrong during testing, these files will help identify the cause. |
+| **archive/** | The archive of quiz runs: every run gets its own folder with the CSV results and the server log. View and download them in the **Archive** section of the admin panel; the log helps to find the cause if something goes wrong. |
 | **static/** | Contains the web interface that users see. Typically, you don't need to edit these files. |
 
 ---

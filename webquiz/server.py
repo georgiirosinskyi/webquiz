@@ -17,6 +17,7 @@ import secrets
 import math
 import re
 from datetime import datetime, timedelta
+from urllib.parse import quote
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from aiohttp import web, WSMsgType
@@ -30,6 +31,7 @@ from .config import DEFAULT_BACKGROUND_COLOR, WebQuizConfig, load_config_from_ya
 from .translations import admin_text, get_translations
 from .tunnel import TunnelManager
 from .transfer import TransferManager, TransferError
+from . import archive
 
 from webquiz import __version__ as package_version
 from webquiz import checker as checker_module
@@ -311,7 +313,7 @@ def load_config_with_overrides(config_path: Optional[str] = None, **cli_override
         if value is not None:  # Only override if CLI parameter was provided
             if key in ["host", "port", "url_format"]:
                 setattr(config.server, key, value)
-            elif key in ["quizzes_dir", "logs_dir", "csv_dir", "static_dir"]:
+            elif key in ["quizzes_dir", "archive_dir", "static_dir"]:
                 setattr(config.paths, key, value)
             elif key in ["master_key"]:
                 setattr(config.admin, key, value)
@@ -386,8 +388,7 @@ def log_startup_environment(config: WebQuizConfig):
     # Path configuration
     logger.info("Path Configuration:")
     logger.info(f"  Quizzes directory: {config.paths.quizzes_dir}")
-    logger.info(f"  Logs directory: {config.paths.logs_dir}")
-    logger.info(f"  CSV directory: {config.paths.csv_dir}")
+    logger.info(f"  Archive directory: {config.paths.archive_dir}")
     logger.info(f"  Static directory: {config.paths.static_dir}")
 
     # Admin configuration (without exposing master key)
@@ -671,10 +672,13 @@ class TestingServer:
         self.current_quiz_file = None  # Will be set when quiz is selected
         # Changes on every quiz switch or restart; quiz pages built for another version must reload
         self.quiz_version: Optional[str] = None
-        self.logs_dir = config.paths.logs_dir
-        self.csv_dir = config.paths.csv_dir
+        self.archive_dir = config.paths.archive_dir
         self.static_dir = config.paths.static_dir
-        self.log_file = None  # Will be set during initialization
+        # Folder of the current run in archive_dir (see start_run), its log and CSV files
+        self.run_dir: Optional[str] = None
+        self.run_started_at: Optional[datetime] = None
+        self._written_summary: Optional[dict] = None
+        self.log_file = None
         self.csv_file = None  # Will be set when quiz is selected (answers CSV)
         self.user_csv_file = None  # Will be set when quiz is selected (users CSV)
         # Optional third CSV: per-answer rows with user_id, username and registration
@@ -713,20 +717,13 @@ class TestingServer:
         self.transfer = TransferManager(
             get_directories=lambda: {
                 "quizzes": self.quizzes_dir,
-                "logs": self.logs_dir,
-                "csv": self.csv_dir,
+                "archive": self.archive_dir,
                 "images": os.path.join(self.quizzes_dir, "imgs"),
                 "attachments": os.path.join(self.quizzes_dir, "attach"),
             },
             get_endpoint=lambda: self.tunnel_manager.get_public_endpoint() if self.tunnel_manager else None,
             notify=self.broadcast_to_admin_websockets,
-            get_files_in_use=lambda: [
-                self.log_file,
-                self.csv_file,
-                self.user_csv_file,
-                self.answers_with_users_csv_file,
-                self.current_quiz_file,
-            ],
+            get_files_in_use=lambda: [self.run_dir, self.current_quiz_file],
             get_language=lambda: self.config.language,
         )
 
@@ -778,69 +775,55 @@ class TestingServer:
             data["page"] = page
         return data
 
-    def generate_log_path(self) -> str:
-        """Generate log file path in logs directory with simple numeric naming.
+    def _run_summary(self) -> dict:
+        """Numbers of the current run for the Archive section (written to summary.json)."""
+        answers = [a for user_answers in self.user_answers.values() for a in user_answers]
+        # time_taken == -1 marks a placeholder for a question left unanswered when the test was finished
+        given = [a for a in answers if a.get("time_taken") != -1]
+        return {
+            "quiz": self._current_quiz_name(),
+            "title": self.quiz_title,
+            "started_at": self.run_started_at.isoformat(timespec="seconds") if self.run_started_at else None,
+            "total_questions": len(self.questions),
+            "users": len(self.users),
+            "answers": len(given),
+            "correct_percent": round(sum(1 for a in given if a.get("is_correct")) * 100 / len(given)) if given else None,
+            "avg_time_per_question": round(sum(a.get("time_taken") or 0 for a in given) / len(given), 1) if given else None,
+        }
 
-        Finds the next available number (0001, 0002, etc.) for the log file.
+    def write_run_summary(self):
+        """Update summary.json of the current run when its numbers changed."""
+        if not self.run_dir:
+            return
+        summary = self._run_summary()
+        if summary != self._written_summary:
+            archive.write_summary(self.run_dir, summary)
+            self._written_summary = summary
 
-        Returns:
-            Path to the new log file
-        """
-        ensure_directory_exists(self.logs_dir)
+    def start_run(self, quiz_filename: str):
+        """Create the archive folder of a new run and point the CSV files and the log to it."""
+        self.run_dir = archive.create_run_dir(self.archive_dir, quiz_filename)
+        self.run_started_at = datetime.now()
+        self._written_summary = None
+        self.csv_file = os.path.join(self.run_dir, archive.ANSWERS_CSV)
+        self.user_csv_file = os.path.join(self.run_dir, archive.USERS_CSV)
+        if self.config.extra_answers_with_users_csv:
+            self.answers_with_users_csv_file = os.path.join(self.run_dir, archive.ANSWERS_WITH_USERS_CSV)
+        else:
+            self.answers_with_users_csv_file = None
+        self.log_file = os.path.join(self.run_dir, archive.LOG_FILE)
+        archive.run_log_handler.set_file(self.log_file)
 
-        # Find the next available number
-        suffix = 1
-        while True:
-            log_path = os.path.join(self.logs_dir, f"{suffix:04d}.log")
-            if not os.path.exists(log_path):
-                return log_path
-            suffix += 1
-
-    def generate_csv_path(self, quiz_name: str, csv_type: str = "answers") -> str:
-        """Generate CSV file path in CSV directory with quiz name and numeric naming.
-
-        Ensures all three CSV types use the same numeric suffix.
-
-        Args:
-            quiz_name: Name of the quiz file
-            csv_type: Type of CSV - 'answers', 'users', or 'answers_with_users'
-
-        Returns:
-            Path to CSV file:
-              - answers:             quiz_0001.csv
-              - users:               quiz_0001.users.csv
-              - answers_with_users:  quiz_0001.answers_with_users.csv
-        """
-        ensure_directory_exists(self.csv_dir)
-
-        # Clean quiz name (remove extension and replace path separators)
-        quiz_prefix = quiz_name.replace(".yaml", "").replace(".yml", "")
-        quiz_prefix = quiz_prefix.replace("/", "_").replace("\\", "_")
-
-        # Find the next available number for this quiz
-        suffix = 1
-        while True:
-            answers_csv = os.path.join(self.csv_dir, f"{quiz_prefix}_{suffix:04d}.csv")
-            users_csv = os.path.join(self.csv_dir, f"{quiz_prefix}_{suffix:04d}.users.csv")
-            answers_with_users_csv = os.path.join(
-                self.csv_dir, f"{quiz_prefix}_{suffix:04d}.answers_with_users.csv"
-            )
-
-            if csv_type == "users":
-                csv_path = users_csv
-            elif csv_type == "answers_with_users":
-                csv_path = answers_with_users_csv
-            else:  # answers
-                csv_path = answers_csv
-
-            # Use the same numeric suffix across all three file types
-            if (
-                not os.path.exists(answers_csv)
-                and not os.path.exists(users_csv)
-                and not os.path.exists(answers_with_users_csv)
-            ):
-                return csv_path
-            suffix += 1
+    async def finish_run(self):
+        """Write what is still in memory to the current run's files before the next run starts."""
+        if not self.run_dir:
+            return
+        try:
+            await self.flush_responses_to_csv()
+            await self.flush_users_to_csv()
+            self.write_run_summary()
+        except Exception as e:
+            logger.exception(f"Could not save the run {self.run_dir}: {e}")
 
     def reset_server_state(self):
         """Reset all server state for new quiz.
@@ -899,10 +882,8 @@ class TestingServer:
             paths_data = raw_config.get("paths", {})
             if "quizzes_dir" in paths_data and self.quizzes_dir != new_config.paths.quizzes_dir:
                 restart_reasons.append("paths.quizzes_dir")
-            if "logs_dir" in paths_data and self.logs_dir != new_config.paths.logs_dir:
-                restart_reasons.append("paths.logs_dir")
-            if "csv_dir" in paths_data and self.csv_dir != new_config.paths.csv_dir:
-                restart_reasons.append("paths.csv_dir")
+            if "archive_dir" in paths_data and self.archive_dir != new_config.paths.archive_dir:
+                restart_reasons.append("paths.archive_dir")
             if "static_dir" in paths_data and self.static_dir != new_config.paths.static_dir:
                 restart_reasons.append("paths.static_dir")
 
@@ -1085,21 +1066,20 @@ class TestingServer:
         quiz_filename = self._quiz_relative_name(resolved_path)
         quiz_path = os.path.join(self.quizzes_dir, *quiz_filename.split("/"))
 
+        # The previous run keeps everything its users did
+        await self.finish_run()
+
         # Reset server state
         self.reset_server_state()
         self.quiz_version = secrets.token_hex(8)
 
-        # Update current quiz and CSV filenames (answers, users, optional extra)
+        # New archive folder for the CSV files and the log of this run
         self.current_quiz_file = quiz_path
-        self.csv_file = self.generate_csv_path(quiz_filename, "answers")
-        self.user_csv_file = self.generate_csv_path(quiz_filename, "users")
-        if self.config.extra_answers_with_users_csv:
-            self.answers_with_users_csv_file = self.generate_csv_path(quiz_filename, "answers_with_users")
-        else:
-            self.answers_with_users_csv_file = None
+        self.start_run(quiz_filename)
 
         # Load new questions
         await self.load_questions_from_file(quiz_path)
+        self.write_run_summary()
 
         # Regenerate index.html with new questions
         await self.create_default_index_html()
@@ -1131,7 +1111,7 @@ class TestingServer:
             }
         )
 
-        logger.info(f"Switched to quiz: {quiz_filename}, CSV: {self.csv_file}")
+        logger.info(f"Switched to quiz: {quiz_filename}, run folder: {self.run_dir}")
 
     async def create_admin_selection_page(self):
         """Create a page informing admin to select a quiz first.
@@ -1158,19 +1138,6 @@ class TestingServer:
         async with aiofiles.open(index_path, "w", encoding="utf-8") as f:
             await f.write(selection_html)
         logger.info(f"Created admin selection page: {index_path}")
-
-    async def initialize_log_file(self):
-        """Initialize new log file with unique suffix in logs directory.
-
-        Creates the log file and logs initial server start message.
-        """
-
-        # Generate log file path
-        self.log_file = self.generate_log_path()
-        # Create the new log file
-        with open(self.log_file, "w", encoding="utf-8") as f:
-            f.write("")
-        logger.info(f"=== Server Started - New Log File Created: {self.log_file} ===")
 
     async def initialize_tunnel(self):
         """Initialize SSH tunnel if configured.
@@ -1460,7 +1427,7 @@ class TestingServer:
         # Write headers if file doesn't exist
         if not file_exists:
             csv_writer.writerow(
-                ["ПІБ", "Питання", "Відповідь", "Правильна відповідь", "Результат", "Витрачено часу"]
+                ["Дата і час", "ПІБ", "Питання", "Відповідь", "Правильна відповідь", "Результат", "Витрачено часу"]
             )
 
         # Write all responses to buffer
@@ -1469,8 +1436,10 @@ class TestingServer:
             username = user_data["username"]
             result = "Вірно" if response['is_correct'] == True else "Помилка"
             total_time_formatted = self.format_seconds_to_hms(int(response["time_taken_seconds"]))
+            answered_at = datetime.fromisoformat(response["timestamp"]).strftime("%d.%m.%Y %H:%M:%S")
             csv_writer.writerow(
                 [
+                    answered_at,
                     username,
                     response["question"],
                     response["selected_answer"],
@@ -1661,6 +1630,11 @@ class TestingServer:
                 await self.flush_users_to_csv()
             except Exception as e:
                 logger.exception(f"Error during flush_users_to_csv: {e}")
+
+            try:
+                self.write_run_summary()
+            except Exception as e:
+                logger.exception(f"Error writing the run summary: {e}")
 
     async def _broadcast_to_websocket_list(
         self, clients_list: List[web.WebSocketResponse], message: dict, client_type: str = "WebSocket"
@@ -3068,6 +3042,7 @@ class TestingServer:
                 "message": self._t("quiz_switched", name=quiz_filename),
                 "current_quiz": self._current_quiz_name(),
                 "csv_file": os.path.basename(self.csv_file),
+                "run": os.path.basename(self.run_dir),
             }
         )
 
@@ -3432,11 +3407,14 @@ class TestingServer:
             if not quiz_content:
                 return web.json_response({"error": self._t("quiz_content_required")}, status=400)
 
-            # Validate YAML
+            # Validate YAML; the errors are shown in the YAML editor
             try:
                 parsed = yaml.safe_load(quiz_content)
-                if not self._validate_quiz_data(parsed):
-                    return web.json_response({"error": self._t("invalid_quiz_structure")}, status=400)
+                errors = []
+                if not self._validate_quiz_data(parsed, errors):
+                    return web.json_response(
+                        {"error": self._t("invalid_quiz_structure"), "errors": errors}, status=400
+                    )
             except yaml.YAMLError as e:
                 return web.json_response({"error": self._t("invalid_yaml", error=str(e))}, status=400)
 
@@ -3894,7 +3872,7 @@ class TestingServer:
             if not isinstance(paths, dict):
                 errors.append(self._t("section_dict", field="paths"))
             else:
-                path_fields = ["quizzes_dir", "logs_dir", "csv_dir", "static_dir"]
+                path_fields = ["quizzes_dir", "archive_dir", "static_dir"]
                 for field in path_fields:
                     if field in paths and not isinstance(paths[field], str):
                         errors.append(self._t("field_str", field=f"paths.{field}"))
@@ -4453,217 +4431,92 @@ class TestingServer:
 
         return {"configPath": config_path or None, "configContent": config_content, "configData": config_data}
 
-    def _list_files_in_directory(self, directory, file_type):
-        """Helper to list files in a directory with metadata.
+    @admin_auth_required
+    async def admin_archive_list(self, request):
+        """Runs in the archive, newest first; the current run gets its live numbers."""
+        current = os.path.basename(self.run_dir) if self.run_dir else None
+        runs = archive.list_runs(self.archive_dir)
+        for run in runs:
+            run["current"] = run["name"] == current
+            if run["current"]:
+                run.update(self._run_summary())
+        return web.json_response(
+            {"runs": runs, "current": current, "left_columns": sorted(self._left_aligned_headers())}
+        )
 
-        Args:
-            directory: Directory path to list
-            file_type: Type label for files (e.g., "log", "csv")
+    def _left_aligned_headers(self) -> set:
+        """CSV headers of free text: the user's name, registration fields and the question and answer texts.
 
-        Returns:
-            List of file dictionaries with name, size, modified, type (sorted by modified)
+        They stay left-aligned in the table view and in XLSX; every other column (dates, results, times,
+        counts) is centered.
         """
-        files = []
-        if os.path.exists(directory):
-            for filename in os.listdir(directory):
-                file_path = os.path.join(directory, filename)
-                if os.path.isfile(file_path):
-                    stat = os.stat(file_path)
-                    files.append(
-                        {
-                            "name": filename,
-                            "size": stat.st_size,
-                            "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                            "type": file_type,
-                        }
-                    )
-        # Sort files by modified date (newest first)
-        files.sort(key=lambda x: x["modified"], reverse=True)
-        return files
+        headers = {"ПІБ", "username", "Питання", "Відповідь", "Правильна відповідь"}
+        headers.update({"question", "selected_answer", "correct_answer"})
+        registration = getattr(self.config, "registration", None)
+        labels = list(getattr(registration, "fields", None) or []) + list(getattr(registration, "disabled_fields", None) or [])
+        for label in labels:
+            headers.update({label, label.replace(" ", "_"), label.lower().replace(" ", "_")})
+        return headers
 
     @admin_auth_required
-    async def files_list(self, request):
-        """List all files in logs_dir, csv_dir, and quizzes_dir with metadata.
-
-        Returns:
-            JSON response with logs, csv, and quizzes file lists
-        """
-        logs_files = self._list_files_in_directory(self.logs_dir, "log")
-        csv_files = self._list_files_in_directory(self.csv_dir, "csv")
-        quizzes_files = self._list_files_in_directory(self.quizzes_dir, "yaml")
-
-        return web.json_response({"logs": logs_files, "csv": csv_files, "quizzes": quizzes_files})
-
-    def _get_file_path_and_validate(self, file_type, filename):
-        """Helper to validate file type, filename, and return file path.
-
-        Prevents path traversal attacks and validates file existence.
-
-        Args:
-            file_type: Type of file ("csv", "logs", or "quizzes")
-            filename: Name of the file
-
-        Returns:
-            Tuple of (file_path, error_response) where error_response is None on success
-        """
-        # Determine base directory from file type
-        if file_type == "csv":
-            base_dir = self.csv_dir
-        elif file_type == "logs":
-            base_dir = self.logs_dir
-        elif file_type == "quizzes":
-            base_dir = self.quizzes_dir
-        else:
-            return None, web.json_response({"error": self._t("invalid_file_type")}, status=400)
-
-        # Validate filename (prevent path traversal)
-        if not self._is_safe_filename(filename):
-            return None, web.json_response({"error": self._t("invalid_filename")}, status=400)
-
-        file_path = os.path.join(base_dir, filename)
-
-        # Check if file exists
-        if not os.path.exists(file_path):
-            return None, web.json_response({"error": self._t("file_not_found")}, status=404)
-
-        # Check if it's actually a file (not directory)
-        if not os.path.isfile(file_path):
-            return None, web.json_response({"error": self._t("not_a_file")}, status=400)
-
-        return file_path, None
-
-    @admin_auth_required
-    async def files_view(self, request):
-        """View file contents (text files only, with 10MB size limit).
-
-        Args:
-            request: aiohttp request with type and filename in path
-
-        Returns:
-            Plain text response with file content or error if too large/binary
-        """
-        file_type = request.match_info["type"]
+    async def admin_archive_file(self, request):
+        """One file of a run: as text to view (10 MB at most), or as a download with ?download=1."""
+        run = request.match_info["run"]
         filename = request.match_info["filename"]
+        if not archive.is_valid_run_name(run) or not archive.is_valid_file_name(filename):
+            return web.json_response({"error": self._t("invalid_filename")}, status=400)
+        file_path = os.path.join(self.archive_dir, run, filename)
+        if not os.path.isfile(file_path):
+            return web.json_response({"error": self._t("file_not_found")}, status=404)
+        if run == os.path.basename(self.run_dir or ""):
+            # The current run: show what is still in memory too
+            await self.flush_responses_to_csv()
+            await self.flush_users_to_csv()
 
-        # Validate and get file path
-        file_path, error = self._get_file_path_and_validate(file_type, filename)
-        if error:
-            return error
-
-        # Check file size (limit to 10MB for viewing)
-        MAX_VIEW_SIZE = 1024 * 1024 * 10  # 10MB
-        file_size = os.path.getsize(file_path)
-
-        if file_size > MAX_VIEW_SIZE:
-            return web.json_response(
-                {
-                    "error": self._t("file_too_large", size=file_size),
-                    "size": file_size,
+        if request.query.get("download") and request.query.get("format") == "xlsx" and filename.endswith(".csv"):
+            xlsx_name = f"{run}-{filename[: -len('.csv')]}.xlsx"
+            return web.Response(
+                body=archive.csv_to_xlsx(file_path, self._left_aligned_headers()),
+                headers={
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{quote(xlsx_name)}",
+                    "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 },
-                status=400,
             )
 
-        # Read file content
+        if request.query.get("download"):
+            content_type = "text/csv" if filename.endswith(".csv") else "text/plain"
+            return web.FileResponse(
+                file_path,
+                headers={
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{quote(f'{run}-{filename}')}",
+                    "Content-Type": content_type,
+                },
+            )
+
+        max_view_size = 1024 * 1024 * 10
+        file_size = os.path.getsize(file_path)
+        if file_size > max_view_size:
+            return web.json_response({"error": self._t("file_too_large", size=file_size), "size": file_size}, status=400)
         try:
             async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
                 content = await f.read()
         except UnicodeDecodeError:
             return web.json_response({"error": self._t("file_not_utf8")}, status=400)
-
-        return web.Response(
-            text=content, content_type="text/plain", headers={"Content-Disposition": f'inline; filename="{filename}"'}
-        )
+        return web.Response(text=content, content_type="text/plain")
 
     @admin_auth_required
-    async def files_download(self, request):
-        """Download file directly.
-
-        Args:
-            request: aiohttp request with type and filename in path
-
-        Returns:
-            File response with appropriate content-type and disposition headers
-        """
-        file_type = request.match_info["type"]
-        filename = request.match_info["filename"]
-
-        # Validate and get file path
-        file_path, error = self._get_file_path_and_validate(file_type, filename)
-        if error:
-            return error
-
-        # Determine content type
-        if file_type == "csv":
-            content_type = "text/csv"
-        elif file_type == "quizzes":
-            content_type = "text/yaml"
-        else:
-            content_type = "text/plain"
-
-        # Return file response with proper headers
-        return web.FileResponse(
-            file_path,
-            headers={"Content-Disposition": f'attachment; filename="{filename}"', "Content-Type": content_type},
-        )
-
-    @admin_auth_required
-    async def files_save_quiz(self, request):
-        """Save quiz file with validation and backup.
-
-        Args:
-            request: aiohttp request with filename in path and content in body
-
-        Returns:
-            JSON response with success status and backup filename
-        """
-        filename = request.match_info["filename"]
-        data = await request.json()
-        content = data.get("content", "").strip()
-
-        if not content:
-            return web.json_response({"error": self._t("content_required")}, status=400)
-
-        # Validate filename
-        if not self._is_safe_filename(filename):
-            return web.json_response({"error": self._t("invalid_filename")}, status=400)
-
-        quiz_path = os.path.join(self.quizzes_dir, filename)
-
-        if not os.path.exists(quiz_path):
+    async def admin_download_quiz_file(self, request):
+        """Download a quiz YAML file (the name may include subfolders, URL-encoded)."""
+        quiz_path = self._resolve_quiz_path(request.match_info["filename"])
+        if not quiz_path or not os.path.isfile(quiz_path):
             return web.json_response({"error": self._t("quiz_not_found")}, status=404)
-
-        # Validate YAML
-        try:
-            parsed = yaml.safe_load(content)
-            errors = []
-            if not self._validate_quiz_data(parsed, errors):
-                return web.json_response({"error": self._t("invalid_quiz_structure"), "errors": errors}, status=400)
-        except yaml.YAMLError as e:
-            return web.json_response({"error": self._t("invalid_yaml", error=str(e))}, status=400)
-
-        # Create backup
-        backup_path = quiz_path + ".backup"
-
-        shutil.copy2(quiz_path, backup_path)
-
-        # Write the updated content with fsync for SD card/slow storage reliability
-        async with aiofiles.open(quiz_path, "w", encoding="utf-8") as f:
-            await f.write(content)
-            await f.flush()
-            os.fsync(f.fileno())
-
-        # If this is the currently active quiz, reload it
-        if filename == self.current_quiz_file:
-            logger.info(f"Reloading active quiz after edit: {filename}")
-            await self.load_questions()
-
-        logger.info(f"Saved quiz file: {filename}")
-        return web.json_response(
-            {
-                "success": True,
-                "message": self._t("quiz_saved_backup", name=filename),
-                "backup": backup_path,
-            }
+        filename = os.path.basename(quiz_path)
+        return web.FileResponse(
+            quiz_path,
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
+                "Content-Type": "text/yaml; charset=utf-8",
+            },
         )
 
     def _is_safe_filename(self, filename):
@@ -4943,14 +4796,11 @@ async def create_app(config: WebQuizConfig):
 
     server = TestingServer(config)
 
-    # Initialize log file first (this will set server.log_file)
-    await server.initialize_log_file()
-
-    # Configure logging with the actual log file path
+    # The log goes into the folder of the current run (startup lines wait for the first run)
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.FileHandler(server.log_file), logging.StreamHandler()],  # Also log to console
+        format=archive.LOG_FORMAT,
+        handlers=[archive.run_log_handler, logging.StreamHandler()],  # Also log to console
         force=True,  # Override any existing configuration
     )
 
@@ -5029,10 +4879,9 @@ async def create_app(config: WebQuizConfig):
     app.router.add_get("/files/", server.serve_admin_page)
     # Quiz file attachment download route
     app.router.add_get("/attach/{filename}", server.serve_quiz_file)
-    app.router.add_get("/api/files/list", server.files_list)
-    app.router.add_get("/api/files/{type}/view/{filename}", server.files_view)
-    app.router.add_get("/api/files/{type}/download/{filename}", server.files_download)
-    app.router.add_put("/api/files/quizzes/save/{filename}", server.files_save_quiz)
+    app.router.add_get("/api/admin/archive", server.admin_archive_list)
+    app.router.add_get("/api/admin/archive/{run}/{filename}", server.admin_archive_file)
+    app.router.add_get("/api/admin/quiz-file/{filename}", server.admin_download_quiz_file)
 
     # Live stats routes (public access)
     app.router.add_get("/live-stats/", server.serve_live_stats_page)

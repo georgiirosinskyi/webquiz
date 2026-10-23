@@ -73,8 +73,7 @@ server:
 ```
 paths:
   quizzes_dir: "quizzes"
-  logs_dir: "logs"
-  csv_dir: "data"
+  archive_dir: "archive"
   static_dir: "static"
 ```
 
@@ -85,18 +84,14 @@ The `paths` section defines the location of service folders. If the specified di
   On first launch, an example quiz `default.yaml` is created here.
   It can also contain an **`imgs`** subfolder where images used in questions are stored.
 
-- **logs_dir: "logs"**
-  Contains server operation logs.
-  These files record messages about launches, errors, or other events.
-  Each new launch creates a new log, for example `0001.log`, `0002.log`.
-
-- **csv_dir: "data"**
-  Directory where quiz results are stored in CSV format.
-  For each quiz, two files are created (three when `extra_answers_with_users_csv: true`):
-  - `default_0001.csv` — user answers without personal data;
-  - `default_0001.users.csv` — user data with registration fields, including total quiz completion time in `MM:SS` format (minutes:seconds);
-  - `default_0001.answers_with_users.csv` — only when `extra_answers_with_users_csv: true`: per-answer rows with `user_id`, `username`, and registration fields prepended to each answer.
-  All files can be opened in any spreadsheet editor (Excel, Google Sheets).
+- **archive_dir: "archive"**
+  The archive of quiz runs. Every quiz switch or restart creates a folder `YYYY-MM-DD-HHMMSS-<quiz>` in it with all data of that run:
+  - `answers.csv` — user answers with the date and time of each answer;
+  - `users.csv` — user data with registration fields, grade and the total quiz time (HH:MM:SS);
+  - `answers_with_users.csv` — only when `extra_answers_with_users_csv: true`: per-answer rows with `user_id`, `username`, and registration fields prepended to each answer;
+  - `server.log` — the server log of this run;
+  - `summary.json` — numbers for the **Archive** table (internal file).
+  The CSV files open in any spreadsheet editor (Excel, Google Sheets). The `logs_dir` and `csv_dir` options of earlier versions are no longer used: if a config file has them, the server ignores them (with a warning in the log).
 
 - **static_dir: "static"**
   Directory with static web files.

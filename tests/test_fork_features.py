@@ -6,14 +6,13 @@ and the quiz page elements (timer, navigation, skip button), light theme only.
 """
 
 import csv
-import glob
 import os
 import re
 import time
 
 import requests
 
-from conftest import custom_webquiz_server, get_admin_session, get_page_data
+from conftest import custom_webquiz_server, get_admin_session, get_page_data, latest_run_dir
 
 
 FOUR_QUESTIONS = {
@@ -178,10 +177,9 @@ def test_csv_files_use_localized_format(temp_dir):
             assert submit(port, user_id, question_id, answer).status_code == 200
 
         time.sleep(6)  # periodic flush runs every 5 seconds
-        data_dir = f"data_{port}"
-        users_csv = glob.glob(os.path.join(data_dir, "*.users.csv"))
-        answers_csv = [p for p in glob.glob(os.path.join(data_dir, "*.csv")) if p not in users_csv]
-        assert len(users_csv) == 1 and len(answers_csv) == 1
+        run = latest_run_dir(port)
+        users_csv = [os.path.join(run, "users.csv")]
+        answers_csv = [os.path.join(run, "answers.csv")]
 
         with open(users_csv[0], encoding="utf-8", newline="") as f:
             rows = list(csv.reader(f))
@@ -196,9 +194,13 @@ def test_csv_files_use_localized_format(temp_dir):
             content = f.read()
         assert "\r\n" not in content, "CSV lines end with \\n"
         rows = list(csv.reader(content.splitlines()))
-        assert rows[0] == ["ПІБ", "Питання", "Відповідь", "Правильна відповідь", "Результат", "Витрачено часу"]
-        assert [row[4] for row in rows[1:]] == ["Вірно", "Вірно", "Вірно", "Помилка"]
-        assert all(row[0] == "Іваненко" for row in rows[1:])
+        assert rows[0] == [
+            "Дата і час", "ПІБ", "Питання", "Відповідь", "Правильна відповідь", "Результат", "Витрачено часу"
+        ]
+        assert [row[5] for row in rows[1:]] == ["Вірно", "Вірно", "Вірно", "Помилка"]
+        # Date and time of each answer first, DD.MM.YYYY HH:MM:SS
+        assert all(re.match(r"^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}$", row[0]) for row in rows[1:])
+        assert all(row[1] == "Іваненко" for row in rows[1:])
 
 
 def test_quizzes_found_in_subfolders(temp_dir):
@@ -310,8 +312,7 @@ def question_start(port, user_id, question_id):
 
 def users_csv_rows(port):
     time.sleep(6)  # periodic flush runs every 5 seconds
-    users_csv = glob.glob(os.path.join(f"data_{port}", "*.users.csv"))
-    assert len(users_csv) == 1
+    users_csv = [os.path.join(latest_run_dir(port), "users.csv")]
     with open(users_csv[0], encoding="utf-8", newline="") as f:
         return list(csv.reader(f))
 

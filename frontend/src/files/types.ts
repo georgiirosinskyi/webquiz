@@ -1,15 +1,8 @@
 import { DEFAULT_BACKGROUND_COLOR } from "../shared/background";
 import type { MessageKey } from "../shared/i18n";
 
-export type FileType = "csv" | "logs" | "quizzes";
-
-export interface FileInfo {
-  name: string;
-  size: number;
-  modified: string;
-}
-
-export type FileLists = Record<FileType, FileInfo[]>;
+// What can be sent to another server: quiz files and archive runs (sent as "<run>.zip")
+export type FileType = "quizzes" | "archive";
 
 export interface ConfigData {
   language: string;
@@ -40,20 +33,8 @@ export interface TransferState {
   outgoing: OutgoingOffer[];
 }
 
-// Must match FILE_TYPES in webquiz/transfer.py
-const TRANSFER_EXTENSIONS: Record<FileType, string[]> = {
-  quizzes: [".yaml", ".yml"],
-  logs: [".log"],
-  csv: [".csv"],
-};
-
-export function canTransfer(type: FileType, name: string): boolean {
-  const lower = name.toLowerCase();
-  return !name.startsWith(".") && TRANSFER_EXTENSIONS[type].some((ext) => lower.endsWith(ext));
-}
-
-// Selection keys are "type/name"; names never contain "/" for csv and logs,
-// quizzes may (subfolders), so only the first slash separates the type.
+// Selection keys are "type/name"; quiz names may contain "/" (subfolders),
+// so only the first slash separates the type.
 export function transferKey(type: FileType, name: string): string {
   return `${type}/${name}`;
 }

@@ -11,11 +11,11 @@ All admin pages are one application with a menu at the top:
 
 - **Overview** — the main screen: the current quiz and all participants, updated live. The badge shows how many participants wait for approval.
 - **Quizzes** — quiz files, the quiz editor, uniting quizzes and downloading quiz sets.
-- **Files** — CSV results, logs, quiz files and sending files to another server. The badge shows incoming file transfer requests.
+- **Archive** — every quiz run with its CSV files and log. The badge for incoming file requests is on **Quizzes**.
 - **Settings** — the server configuration (`webquiz.yaml`). Shown only when the server was started with a config file.
 - **Access** — URLs for other devices and the SSH tunnel. A green dot shows that the tunnel is connected.
 
-Every section has its own address (`/admin/quizzes`, `/admin/files`, `/admin/settings`, `/admin/access`), so you can bookmark it; the old `/files/` address opens the Files section. The browser Back button moves between sections. The version and the documentation link are at the bottom of every section.
+Every section has its own address (`/admin/quizzes`, `/admin/archive`, `/admin/settings`, `/admin/access`), so you can bookmark it; the old `/files/` and `/admin/files` addresses open the Archive section. The browser Back button moves between sections. The version and the documentation link are at the bottom of every section.
 
 ---
 
@@ -69,7 +69,7 @@ Click a row to see every question of the participant: the answer they gave (gree
   The current active quiz is marked with a green **current** tag; its name is also shown above the table.
 
   Click a row to select a quiz, tick the checkboxes (or **Ctrl+click** / **Cmd+click** on macOS) to select several, and double-click a row to open it in the editor.
-  With one quiz selected, the buttons **Switch** (**Restart current** for the active quiz), **Edit**, **Duplicate** and **Delete** are available. With several quizzes selected, **Unite quizzes** appears instead of Switch/Edit/Duplicate. The active quiz cannot be deleted.
+  With one quiz selected, the buttons **Switch** (**Restart current** for the active quiz), **Edit**, **Duplicate** and **Delete** are available. **Download** saves the YAML files of the selected quizzes to your computer. **Edit YAML** opens the quiz text for direct editing: **Validate YAML** shows the errors, **Save** writes the file (a `.backup` copy is made first, the active quiz is reloaded). With several quizzes selected, **Unite quizzes** appears instead of Switch/Edit/Duplicate. The active quiz cannot be deleted.
 
   You can switch between quizzes or create new ones.
 
@@ -107,75 +107,53 @@ Click a row to see every question of the participant: the answer they gave (gree
 
 ---
 
-### Files
+### Archive
 
-![WebQuiz File Manager](../imgs/file_manager.png)
+The **Archive** section in the menu. Every quiz switch or restart starts a new **archive record** — its own folder in the `archive` folder (see [Configuration](040_config.md)), for example `2026-10-15-143005-math`. It holds all data of that run:
+- `answers.csv` — the users' answers;
+- `users.csv` — users with registration fields, grade and time;
+- `answers_with_users.csv` — only with `extra_answers_with_users_csv: true`;
+- `server.log` — the server log of this record (the first record after the server starts also has the startup information).
 
-The **Files** section of the menu.
-It allows you to quickly view, download, edit, and diagnose files created by the server.
+The archive table shows for every record: the start **Date**, the **Quiz** (title and file; the running record has a **current** tag), the number of **questions**, the number of **users**, the share of **correct** answers among the given ones and the average **time per question**. The numbers of the current record update live.
 
-- **File Transfer Requests**
-  This panel appears when another WebQuiz server on the same tunnel server wants to send files (see [Sending Files to Another Server](#sending-files-to-another-server)).
-  It shows the name of the sending server and every file with its case:
-  - **New file** — there is no file with this name. Choose **Save**, **Rename** or **Skip**.
-  - **The same file already exists** — choose **Skip** (default), **Replace** or **Rename**.
+Click a record to see its files. They are shown as cards, three in a row (one on a phone), with readable names: **Results** (first), **Detailed answers**, **Answers with user data**, **Server log** (last); below the name are the file name and size. **View** opens a CSV file as a table (centered headers; the name, registration fields, questions and answers left-aligned, the rest centered) and the log as text. CSV files download with the **CSV** or **XLSX** button (an Excel workbook with a bold header, cell borders and centered cells except the name, registration fields and the question and answer texts), the log with **Download**.
+
+Records without users (for example after saving the settings, which restarts the quiz) are hidden; the **Show records without users** switch shows them too.
+
+Old files from the `data/` and `logs/` folders of earlier versions are not moved and not shown in the archive; they stay on disk as they were.
+
+- **Incoming File Requests**
+  This panel appears in the **Quizzes** and **Archive** sections when another WebQuiz server on the same tunnel server wants to send quizzes or archive records (see [Sending to Another Server](#sending-to-another-server)). The badge on the **Quizzes** menu item shows the number of requests.
+  It shows the sender's name and every file with its case:
+  - **New file** — there is no file (record) with this name. Choose **Save**, **Rename** or **Skip**.
+  - **Same file already exists** — choose **Skip** (default), **Replace** or **Rename**.
   - **A different file with this name exists** — choose **Rename** (default), **Replace** or **Skip**.
-  - **The file is used by the server now** (current log, current CSV files, active quiz) — choose **Rename** or **Skip**. It cannot be replaced.
+  - **File is used by the server** (the current archive record, the active quiz) — choose **Rename** or **Skip**. It cannot be replaced.
 
-  For **Rename**, a free name is suggested; you can change it. Then click:
-  - **Accept** — download the files as chosen. They appear in the File Manager. If a choice is not possible, an error is shown and nothing is downloaded, so you can choose again.
+  For **Rename** a free name is suggested; you can change it. Then click:
+  - **Accept** — download the files as chosen. If a choice is not possible, an error is shown and nothing is downloaded, so you can choose again.
   - **Reject** — refuse the files. The sender sees that the request was rejected.
 
-At the top of the page, there's a **search field** to filter files by name, and a **Refresh** button to reload the file list.
+#### Sending to Another Server
 
-#### Main Tabs
+You can send quizzes and archive records to another WebQuiz server, for example from one classroom computer to another. Both servers must:
+- be connected to **the same tunnel server** with the keys of **the same SSH user**;
+- have a fixed and different `socket_name` (see [Configuration](040_config.md));
+- have the SSH tunnel connected in the admin panel.
 
-- **CSV files** — list of quiz result files.
-  Each item shows the file name, size, and last modification date.
-  Three buttons are available for each file:
-  - **Text** — view the raw CSV content in the browser
-  - **Table** — view the data in a formatted table (see below)
-  - **Download** — save the file locally
+The **Send files to another server** panel appears in the **Quizzes** and **Archive** sections only while the tunnel is connected. It shows the name of this server.
 
-- **Logs** — server launch logs.
-  Useful for finding technical errors or checking how the server performed in previous sessions.
-
-- **Quizzes** — list of quiz YAML files from the `quizzes` folder.
-  You can view and edit quiz files directly. When editing, a **Validate** button checks the YAML syntax before saving.
-
-#### Sending Files to Another Server
-
-You can send quiz, log and CSV files to another WebQuiz server, for example from one classroom computer to another. Both servers must:
-- be connected to the **same tunnel server** with keys of the **same SSH user**;
-- have a fixed, different `socket_name` (see [Configuration](040_config.md));
-- have the SSH tunnel connected on the admin panel.
-
-The **Send files to another server** panel appears only while the tunnel is connected. It shows the name of this server, and a checkbox appears next to every quiz, log and CSV file.
-
-1. Tick the files on any tab.
-2. Type the name of the other server (its `socket_name`) and click **Send**.
-3. The other server's admin panel shows the request. After **Accept**, the files are downloaded.
-4. Below the panel you see the status of your requests: waiting, accepted, rejected or expired.
+1. Select quizzes in the **Quizzes** section or records in the **Archive** section.
+2. Enter the other server's name (its `socket_name`) and click **Send**.
+3. The other server's admin panel shows the request. After **Accept** the files are downloaded.
+4. Below the panel you see the state of your requests: waiting, accepted, rejected or expired.
 
 Notes:
-- A request expires if it is not answered in 30 minutes. Keep both servers connected until then.
-- Images and attached files used by a sent quiz (from `quizzes/imgs/` and `quizzes/attach/`) are sent with it automatically. You do not need to select them.
-- On the other server, the admin chooses for every file: save, replace, rename or skip (see **File Transfer Requests** above). Logs and CSV files are saved with the sender name (`room-12_0001.log`).
+- A request expires if nobody answers it within 30 minutes. Both servers must stay connected until then.
+- Images and attachments used by a quiz (from `quizzes/imgs/` and `quizzes/attach/`) are sent with it automatically. You do not need to select them.
+- An archive record is sent as a whole folder (as `<record>.zip`) and becomes a folder in the other server's archive again. A renamed record gets the sender's name at the end (`2026-10-15-143005-math-room-12`).
 - If an image or attachment is saved under a new name, the received quiz is changed to use it, so the quiz shows the right image.
-
-#### Table View
-
-![CSV Table View](../imgs/file_manager_table.png)
-
-When you click the **Table** button for a CSV file, a modal window opens displaying the data in a formatted table. The table shows columns such as:
-- **user_id** — the participant's ID
-- **question** — the question text
-- **selected_answer** — the answer chosen by the participant
-- **correct_answer** — the correct answer
-- **is_correct** — whether the answer was correct (True/False)
-- **time_taken** — time spent on the question in seconds
-
-This view makes it easy to analyze quiz results without downloading the file.
 
 ---
 

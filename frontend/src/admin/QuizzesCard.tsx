@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
-import { App, Button, Card, Input, Modal, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { App, Button, Card, Flex, Input, Modal, Space, Table, Tag, Tooltip, Typography } from "antd";
 import {
+  CodeOutlined,
   CopyOutlined,
   DeleteOutlined,
+  DownloadOutlined,
   EditOutlined,
   FolderOpenOutlined,
   FolderOutlined,
@@ -11,13 +13,17 @@ import {
   PlusOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { apiGet, apiSend } from "../shared/api";
+import { apiGet, apiSend, downloadFile } from "../shared/api";
+import { TransferPanel } from "../files/TransferPanel";
+import { transferKey } from "../files/types";
+import { useTransfer } from "../files/useTransfer";
 import { t } from "../shared/i18n";
 import { formatPoints } from "../shared/points";
 import { formatDuration } from "./overview";
 import { buildQuizTree, isFolderKey, type QuizTreeNode } from "./quizTree";
 import type { QuizInfo, QuizList } from "./types";
 import type { EditorTarget } from "./QuizEditor";
+import { QuizYamlEditor } from "./QuizYamlEditor";
 
 type NamePrompt = { title: string; value: string; onOk: (name: string) => Promise<void> } | null;
 
@@ -50,6 +56,8 @@ export function QuizzesCard({
   const [promptValue, setPromptValue] = useState("");
   const current = list.current_quiz;
   const single = selected.length === 1 ? selected[0] : null;
+  const [transfer, reloadTransfer] = useTransfer();
+  const [yamlFile, setYamlFile] = useState<string | null>(null);
   const tree = useMemo(() => buildQuizTree(list.quizzes), [list.quizzes]);
   // Folders are closed until the admin opens them
   const [expanded, setExpanded] = useState<string[]>([]);
@@ -74,9 +82,9 @@ export function QuizzesCard({
     const restart = single === current;
     setBusy("switch");
     try {
-      const result = await apiSend<{ csv_file: string }>("POST", "/api/admin/switch-quiz", { quiz_filename: single });
+      const result = await apiSend<{ run: string }>("POST", "/api/admin/switch-quiz", { quiz_filename: single });
       if (result.ok) {
-        message.success(t(restart ? "quizzes.restarted" : "quizzes.switched", { name: single, csv: result.data.csv_file }));
+        message.success(t(restart ? "quizzes.restarted" : "quizzes.switched", { name: single, csv: result.data.run }));
         setSelected([]);
         await reload();
       } else {
@@ -160,205 +168,231 @@ export function QuizzesCard({
     });
   };
 
+  const download = async () => {
+    for (const name of selected) {
+      const error = await downloadFile(`/api/admin/quiz-file/${encodeURIComponent(name)}`, name.split("/").pop() || name);
+      if (error) message.error(t("files.download_failed", { error: `${name}: ${error}` }));
+    }
+  };
+
   const currentInfo = list.quizzes.find((quiz) => quiz.filename === current);
 
   return (
-    <Card
-      title={t("quizzes.card_title")}
-      extra={
-        <Button
-          icon={<ReloadOutlined />}
-          title={t("quizzes.refresh")}
-          onClick={async () => {
-            await reload();
-            message.success(t("quizzes.refreshed"));
+    <Flex vertical gap={16}>
+      {transfer.available && (
+        <TransferPanel
+          state={transfer}
+          selected={new Set(selected.map((name) => transferKey("quizzes", name)))}
+          onSent={() => {
+            setSelected([]);
+            reloadTransfer();
           }}
         />
-      }
-    >
-      <Typography.Paragraph data-testid="current-quiz">
-        {t("quizzes.current")}{" "}
-        {current ? (
-          <Tag color="green">
-            {current}
-            {currentInfo?.title ? ` - ${currentInfo.title}` : ""}
-          </Tag>
-        ) : (
-          <Tag>{t("quizzes.none")}</Tag>
-        )}
-      </Typography.Paragraph>
-
-      <Space wrap style={{ marginBottom: 12 }}>
-        {selected.length > 1 ? (
-          <Button type="primary" icon={<MergeCellsOutlined />} onClick={unite} data-testid="unite-btn">
-            {t("quizzes.unite")}
-          </Button>
-        ) : (
-          <>
-            <Button
-              type="primary"
-              icon={<PlayCircleOutlined />}
-              disabled={!single}
-              loading={busy === "switch"}
-              onClick={switchQuiz}
-              data-testid="switch-btn"
-            >
-              {single && single === current ? t("quizzes.restart_current") : t("quizzes.switch")}
-            </Button>
-            <Button icon={<EditOutlined />} disabled={!single} onClick={() => single && openEditor(single)} data-testid="edit-btn">
-              {t("common.edit")}
-            </Button>
-            <Button icon={<CopyOutlined />} disabled={!single} onClick={duplicate} data-testid="duplicate-btn">
-              {t("quizzes.duplicate")}
-            </Button>
-          </>
-        )}
-        <Tooltip title={current && selected.includes(current) ? t("quizzes.cannot_delete_current") : undefined}>
+      )}
+      <Card
+        title={t("quizzes.card_title")}
+        extra={
           <Button
-            danger
-            icon={<DeleteOutlined />}
-            disabled={selected.length === 0 || (!!current && selected.includes(current))}
-            onClick={remove}
-            data-testid="delete-btn"
-          >
-            {t("common.delete")}
-          </Button>
-        </Tooltip>
-        <Button icon={<PlusOutlined />} onClick={() => onEdit({ mode: "create" })} data-testid="create-btn">
-          {t("quizzes.new")}
-        </Button>
-      </Space>
-
-      <Table<QuizTreeNode>
-        data-testid="quiz-list"
-        rowKey="key"
-        size="small"
-        pagination={false}
-        scroll={{ x: "max-content", y: 480 }}
-        dataSource={tree}
-        locale={{ emptyText: t("quizzes.empty") }}
-        expandable={{
-          expandedRowKeys: expanded,
-          onExpand: (_, node) => toggleFolder(node.key),
-          indentSize: 20,
-        }}
-        rowSelection={{
-          selectedRowKeys: selected,
-          onChange: (keys) => setSelected((keys as string[]).filter((key) => !isFolderKey(key))),
-          renderCell: (_, node, __, checkbox) => (node.quiz ? checkbox : null),
-          hideSelectAll: true,
-        }}
-        onRow={(node) => ({
-          // A click selects only this quiz; Ctrl/Cmd+click adds it to the selection; a click on a folder opens or closes it
-          onClick: (event) => {
-            if ((event.target as HTMLElement).closest(".ant-table-selection-column, .ant-table-row-expand-icon")) return;
-            if (!node.quiz) {
-              toggleFolder(node.key);
-              return;
-            }
-            const filename = node.quiz.filename;
-            setSelected((currentSelection) =>
-              event.ctrlKey || event.metaKey
-                ? currentSelection.includes(filename)
-                  ? currentSelection.filter((name) => name !== filename)
-                  : [...currentSelection, filename]
-                : [filename],
-            );
-          },
-          onDoubleClick: () => node.quiz && openEditor(node.quiz.filename),
-          style: { cursor: "pointer" },
-        })}
-        columns={[
-          {
-            key: "filename",
-            title: t("quizzes.col_file"),
-            render: (_, node) =>
-              node.quiz ? (
-                <span className="quiz-name-cell">
-                  <Space size={4}>
-                    <Typography.Text strong={node.key === current}>{node.name}</Typography.Text>
-                    {node.key === current && <Tag color="green">{t("quizzes.current_tag")}</Tag>}
-                  </Space>
-                  {node.quiz.title && (
-                    <Typography.Text type="secondary" className="quiz-title-inline">
-                      {node.quiz.title}
-                    </Typography.Text>
-                  )}
-                </span>
-              ) : (
-                <Space size={6} className="quiz-folder">
-                  {expanded.includes(node.key) ? <FolderOpenOutlined /> : <FolderOutlined />}
-                  <Typography.Text strong>{node.name}</Typography.Text>
-                  <Typography.Text type="secondary">({node.count})</Typography.Text>
-                </Space>
-              ),
-          },
-          {
-            key: "title",
-            title: t("quizzes.col_title"),
-            className: "quiz-title-cell",
-            responsive: ["md"],
-            render: (_, node) => node.quiz?.title || "",
-          },
-          {
-            key: "questions",
-            title: t("quizzes.col_questions"),
-            align: "center",
-            render: (_, node) => (node.quiz ? (node.quiz.total_questions ?? "—") : ""),
-          },
-          {
-            key: "points",
-            title: t("quizzes.col_points"),
-            align: "center",
-            responsive: ["sm"],
-            render: (_, node) =>
-              node.quiz ? (node.quiz.total_points === undefined || node.quiz.total_points === null ? "—" : formatPoints(node.quiz.total_points)) : "",
-          },
-          {
-            key: "time",
-            title: t("quizzes.col_time"),
-            align: "center",
-            render: (_, node) => (node.quiz ? (node.quiz.time_limit ? `⏱ ${formatDuration(node.quiz.time_limit)}` : "—") : ""),
-          },
-          {
-            key: "settings",
-            title: t("quizzes.col_settings"),
-            render: (_, node) => node.quiz && <SettingTags quiz={node.quiz} />,
-          },
-        ]}
-      />
-      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        {t("quizzes.hint")}
-      </Typography.Text>
-
-      <Modal
-        open={!!prompt}
-        title={prompt?.title}
-        okText="OK"
-        okButtonProps={{ disabled: !promptValue.trim() }}
-        confirmLoading={busy === "prompt"}
-        onCancel={() => setPrompt(null)}
-        onOk={async () => {
-          if (!prompt) return;
-          setBusy("prompt");
-          try {
-            await prompt.onOk(promptValue.trim());
-            setPrompt(null);
-          } catch (error) {
-            message.error(t("common.error", { error: (error as Error).message }));
-          } finally {
-            setBusy(null);
-          }
-        }}
-        destroyOnHidden
+            icon={<ReloadOutlined />}
+            title={t("quizzes.refresh")}
+            onClick={async () => {
+              await reload();
+              message.success(t("quizzes.refreshed"));
+            }}
+          />
+        }
       >
-        <Input
-          id="name-prompt"
-          value={promptValue}
-          autoFocus
-          onChange={(event) => setPromptValue(event.target.value)}
+        <Typography.Paragraph data-testid="current-quiz">
+          {t("quizzes.current")}{" "}
+          {current ? (
+            <Tag color="green">
+              {current}
+              {currentInfo?.title ? ` - ${currentInfo.title}` : ""}
+            </Tag>
+          ) : (
+            <Tag>{t("quizzes.none")}</Tag>
+          )}
+        </Typography.Paragraph>
+
+        <Space wrap style={{ marginBottom: 12 }}>
+          {selected.length > 1 ? (
+            <Button type="primary" icon={<MergeCellsOutlined />} onClick={unite} data-testid="unite-btn">
+              {t("quizzes.unite")}
+            </Button>
+          ) : (
+            <>
+              <Button
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                disabled={!single}
+                loading={busy === "switch"}
+                onClick={switchQuiz}
+                data-testid="switch-btn"
+              >
+                {single && single === current ? t("quizzes.restart_current") : t("quizzes.switch")}
+              </Button>
+              <Button icon={<EditOutlined />} disabled={!single} onClick={() => single && openEditor(single)} data-testid="edit-btn">
+                {t("common.edit")}
+              </Button>
+              <Button icon={<CodeOutlined />} disabled={!single} onClick={() => setYamlFile(single)} data-testid="yaml-btn">
+                {t("quizzes.edit_yaml")}
+              </Button>
+              <Button icon={<CopyOutlined />} disabled={!single} onClick={duplicate} data-testid="duplicate-btn">
+                {t("quizzes.duplicate")}
+              </Button>
+            </>
+          )}
+          <Tooltip title={current && selected.includes(current) ? t("quizzes.cannot_delete_current") : undefined}>
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              disabled={selected.length === 0 || (!!current && selected.includes(current))}
+              onClick={remove}
+              data-testid="delete-btn"
+            >
+              {t("common.delete")}
+            </Button>
+          </Tooltip>
+          <Button icon={<DownloadOutlined />} disabled={selected.length === 0} onClick={download} data-testid="download-btn">
+            {t("quizzes.download_files")}
+          </Button>
+          <Button icon={<PlusOutlined />} onClick={() => onEdit({ mode: "create" })} data-testid="create-btn">
+            {t("quizzes.new")}
+          </Button>
+        </Space>
+
+        <Table<QuizTreeNode>
+          data-testid="quiz-list"
+          rowKey="key"
+          size="small"
+          pagination={false}
+          scroll={{ x: "max-content", y: 480 }}
+          dataSource={tree}
+          locale={{ emptyText: t("quizzes.empty") }}
+          expandable={{
+            expandedRowKeys: expanded,
+            onExpand: (_, node) => toggleFolder(node.key),
+            indentSize: 20,
+          }}
+          rowSelection={{
+            selectedRowKeys: selected,
+            onChange: (keys) => setSelected((keys as string[]).filter((key) => !isFolderKey(key))),
+            renderCell: (_, node, __, checkbox) => (node.quiz ? checkbox : null),
+            hideSelectAll: true,
+          }}
+          onRow={(node) => ({
+            // A click selects only this quiz; Ctrl/Cmd+click adds it to the selection; a click on a folder opens or closes it
+            onClick: (event) => {
+              if ((event.target as HTMLElement).closest(".ant-table-selection-column, .ant-table-row-expand-icon")) return;
+              if (!node.quiz) {
+                toggleFolder(node.key);
+                return;
+              }
+              const filename = node.quiz.filename;
+              setSelected((currentSelection) =>
+                event.ctrlKey || event.metaKey
+                  ? currentSelection.includes(filename)
+                    ? currentSelection.filter((name) => name !== filename)
+                    : [...currentSelection, filename]
+                  : [filename],
+              );
+            },
+            onDoubleClick: () => node.quiz && openEditor(node.quiz.filename),
+            style: { cursor: "pointer" },
+          })}
+          columns={[
+            {
+              key: "filename",
+              title: t("quizzes.col_file"),
+              render: (_, node) =>
+                node.quiz ? (
+                  <span className="quiz-name-cell">
+                    <Space size={4}>
+                      <Typography.Text strong={node.key === current}>{node.name}</Typography.Text>
+                      {node.key === current && <Tag color="green">{t("quizzes.current_tag")}</Tag>}
+                    </Space>
+                    {node.quiz.title && (
+                      <Typography.Text type="secondary" className="quiz-title-inline">
+                        {node.quiz.title}
+                      </Typography.Text>
+                    )}
+                  </span>
+                ) : (
+                  <Space size={6} className="quiz-folder">
+                    {expanded.includes(node.key) ? <FolderOpenOutlined /> : <FolderOutlined />}
+                    <Typography.Text strong>{node.name}</Typography.Text>
+                    <Typography.Text type="secondary">({node.count})</Typography.Text>
+                  </Space>
+                ),
+            },
+            {
+              key: "title",
+              title: t("quizzes.col_title"),
+              className: "quiz-title-cell",
+              responsive: ["md"],
+              render: (_, node) => node.quiz?.title || "",
+            },
+            {
+              key: "questions",
+              title: t("quizzes.col_questions"),
+              align: "center",
+              render: (_, node) => (node.quiz ? (node.quiz.total_questions ?? "—") : ""),
+            },
+            {
+              key: "points",
+              title: t("quizzes.col_points"),
+              align: "center",
+              responsive: ["sm"],
+              render: (_, node) =>
+                node.quiz ? (node.quiz.total_points === undefined || node.quiz.total_points === null ? "—" : formatPoints(node.quiz.total_points)) : "",
+            },
+            {
+              key: "time",
+              title: t("quizzes.col_time"),
+              align: "center",
+              render: (_, node) => (node.quiz ? (node.quiz.time_limit ? `⏱ ${formatDuration(node.quiz.time_limit)}` : "—") : ""),
+            },
+            {
+              key: "settings",
+              title: t("quizzes.col_settings"),
+              render: (_, node) => node.quiz && <SettingTags quiz={node.quiz} />,
+            },
+          ]}
         />
-      </Modal>
-    </Card>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {t("quizzes.hint")}
+        </Typography.Text>
+
+        <Modal
+          open={!!prompt}
+          title={prompt?.title}
+          okText="OK"
+          okButtonProps={{ disabled: !promptValue.trim() }}
+          confirmLoading={busy === "prompt"}
+          onCancel={() => setPrompt(null)}
+          onOk={async () => {
+            if (!prompt) return;
+            setBusy("prompt");
+            try {
+              await prompt.onOk(promptValue.trim());
+              setPrompt(null);
+            } catch (error) {
+              message.error(t("common.error", { error: (error as Error).message }));
+            } finally {
+              setBusy(null);
+            }
+          }}
+          destroyOnHidden
+        >
+          <Input
+            id="name-prompt"
+            value={promptValue}
+            autoFocus
+            onChange={(event) => setPromptValue(event.target.value)}
+          />
+        </Modal>
+        <QuizYamlEditor filename={yamlFile} onClose={() => setYamlFile(null)} onSaved={reload} />
+      </Card>
+    </Flex>
   );
 }

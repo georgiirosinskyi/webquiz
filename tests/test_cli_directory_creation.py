@@ -73,11 +73,18 @@ def temp_dir():
         shutil.rmtree(temp_dir)
 
 
+def run_log(archive_dir):
+    """The log of the (only) run in an archive folder."""
+    runs = sorted(os.listdir(archive_dir))
+    assert runs, f"No run folder in {archive_dir}"
+    return os.path.join(archive_dir, runs[-1], "server.log")
+
+
 def test_webquiz_cli_creates_all_files(temp_dir):
     """Test that webquiz CLI creates all expected directories and files."""
     run_webquiz_cli_briefly()
     print(f"Contents of temp_dir: {os.listdir(temp_dir)}")
-    expected_dirs = ["quizzes", "logs", "data", "static"]
+    expected_dirs = ["quizzes", "archive", "static"]
     for dir_name in expected_dirs:
         dir_path = os.path.join(temp_dir, dir_name)
         assert os.path.exists(dir_path), f"Directory {dir_name} was not created by CLI command"
@@ -86,9 +93,7 @@ def test_webquiz_cli_creates_all_files(temp_dir):
     assert os.path.exists(imgs_dir), "quizzes/imgs directory was not created"
     default_quiz = os.path.join(temp_dir, "quizzes", "default.yaml")
     assert os.path.exists(default_quiz), "Default quiz file was not created by CLI command"
-    logs_dir = os.path.join(temp_dir, "logs")
-    log_files = [f for f in os.listdir(logs_dir) if f.endswith(".log")]
-    assert len(log_files) > 0, "No log files were created by CLI command"
+    assert os.path.isfile(run_log(os.path.join(temp_dir, "archive"))), "No log file was created by CLI command"
     index_file = os.path.join(temp_dir, "static", "index.html")
     assert os.path.exists(index_file), "index.html was not created in static directory"
 
@@ -96,22 +101,19 @@ def test_webquiz_cli_creates_all_files(temp_dir):
 def test_webquiz_cli_with_custom_directories(temp_dir):
     """Test that webquiz CLI respects custom directory arguments."""
     custom_quizzes = os.path.join(temp_dir, "my_quizzes")
-    custom_logs = os.path.join(temp_dir, "my_logs")
-    custom_data = os.path.join(temp_dir, "my_data")
+    custom_archive = os.path.join(temp_dir, "my_archive")
     custom_static = os.path.join(temp_dir, "my_static")
     run_webquiz_cli_briefly(
         [
             "--quizzes-dir",
             custom_quizzes,
-            "--logs-dir",
-            custom_logs,
-            "--csv-dir",
-            custom_data,
+            "--archive-dir",
+            custom_archive,
             "--static",
             custom_static,
         ]
     )
-    custom_dirs = [custom_quizzes, custom_logs, custom_data, custom_static]
+    custom_dirs = [custom_quizzes, custom_archive, custom_static]
     for dir_path in custom_dirs:
         assert os.path.exists(dir_path), f"Custom directory {dir_path} was not created"
         assert os.path.isdir(dir_path), f"Path {dir_path} is not a directory"
@@ -132,7 +134,7 @@ def test_webquiz_cli_handles_existing_directories(temp_dir):
     with open(custom_file, "r") as f:
         content = f.read()
         assert "Custom Quiz" in content
-    for dir_name in ["logs", "data", "static"]:
+    for dir_name in ["archive", "static"]:
         dir_path = os.path.join(temp_dir, dir_name)
         assert os.path.exists(dir_path), f"Directory {dir_name} was not created"
 
@@ -147,8 +149,7 @@ server:
 
 paths:
   quizzes_dir: "custom_quizzes"
-  logs_dir: "custom_logs"
-  csv_dir: "custom_data"
+  archive_dir: "custom_archive"
   static_dir: "custom_static"
 
 admin:
@@ -161,7 +162,7 @@ admin:
     run_webquiz_cli_briefly(["--config", config_file])
 
     # Check that custom directories from config were created
-    expected_dirs = ["custom_quizzes", "custom_logs", "custom_data", "custom_static"]
+    expected_dirs = ["custom_quizzes", "custom_archive", "custom_static"]
     for dir_name in expected_dirs:
         dir_path = os.path.join(temp_dir, dir_name)
         assert os.path.exists(dir_path), f"Config directory {dir_name} was not created"
@@ -178,8 +179,7 @@ def test_webquiz_cli_config_file_with_cli_overrides(temp_dir):
     config_content = """
 paths:
   quizzes_dir: "config_quizzes"
-  logs_dir: "config_logs"
-  csv_dir: "config_data"
+  archive_dir: "config_archive"
   static_dir: "config_static"
 """
     config_file = os.path.join(temp_dir, "test_config.yaml")
@@ -188,23 +188,26 @@ paths:
 
     # Run with config file but override some paths via CLI
     override_quizzes = os.path.join(temp_dir, "cli_override_quizzes")
-    override_logs = os.path.join(temp_dir, "cli_override_logs")
+    override_archive = os.path.join(temp_dir, "cli_override_archive")
 
-    run_webquiz_cli_briefly(["--config", config_file, "--quizzes-dir", override_quizzes, "--logs-dir", override_logs])
+    run_webquiz_cli_briefly(
+        ["--config", config_file, "--quizzes-dir", override_quizzes, "--archive-dir", override_archive]
+    )
 
     # CLI overrides should take precedence
     assert os.path.exists(override_quizzes), "CLI override for quizzes directory failed"
-    assert os.path.exists(override_logs), "CLI override for logs directory failed"
+    assert os.path.exists(override_archive), "CLI override for archive directory failed"
 
     # Config file values should be used where no CLI override exists
-    assert os.path.exists(os.path.join(temp_dir, "config_data")), "Config CSV directory not created"
     assert os.path.exists(os.path.join(temp_dir, "config_static")), "Config static directory not created"
 
     # Config directories that were overridden should NOT exist
     assert not os.path.exists(
         os.path.join(temp_dir, "config_quizzes")
     ), "Config quizzes dir should not exist (overridden)"
-    assert not os.path.exists(os.path.join(temp_dir, "config_logs")), "Config logs dir should not exist (overridden)"
+    assert not os.path.exists(
+        os.path.join(temp_dir, "config_archive")
+    ), "Config archive dir should not exist (overridden)"
 
 
 def test_webquiz_cli_with_master_key(temp_dir):
@@ -213,7 +216,7 @@ def test_webquiz_cli_with_master_key(temp_dir):
     run_webquiz_cli_briefly(["--master-key", "secret123"])
 
     # Check that all directories are still created normally
-    expected_dirs = ["quizzes", "logs", "data", "static"]
+    expected_dirs = ["quizzes", "archive", "static"]
     for dir_name in expected_dirs:
         dir_path = os.path.join(temp_dir, dir_name)
         assert os.path.exists(dir_path), f"Directory {dir_name} was not created with master key"
@@ -256,11 +259,7 @@ server:
     override_port = cli_test_port()
     run_webquiz_cli_briefly(["--config", config_file, "--port", str(override_port)])
 
-    logs_dir = os.path.join(temp_dir, "logs")
-    log_files = [f for f in os.listdir(logs_dir) if f.endswith(".log")]
-    assert log_files, "No log file was created"
-
-    with open(os.path.join(logs_dir, log_files[0]), "r") as f:
+    with open(run_log(os.path.join(temp_dir, "archive")), "r", encoding="utf-8") as f:
         log_content = f.read()
 
     assert f"Port: {override_port}" in log_content, "CLI --port was not applied"

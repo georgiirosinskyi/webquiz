@@ -1,19 +1,19 @@
 import { useEffect, useState } from "react";
 
 // Sections of the admin app. The server serves the same page for /admin/, /admin/{section}
-// and /files/ (the old file manager URL), the app picks the section from the path.
-export type Section = "overview" | "quizzes" | "files" | "settings" | "access";
+// and /files/ (the old file manager URL, now the archive), the app picks the section from the path.
+export type Section = "overview" | "quizzes" | "archive" | "settings" | "access";
 
 export const SECTION_PATHS: Record<Section, string> = {
   overview: "/admin/",
   quizzes: "/admin/quizzes",
-  files: "/admin/files",
+  archive: "/admin/archive",
   settings: "/admin/settings",
   access: "/admin/access",
 };
 
 export function sectionFromPath(pathname: string): Section {
-  if (pathname.startsWith("/files")) return "files";
+  if (pathname.startsWith("/files") || pathname.replace(/\/+$/, "") === "/admin/files") return "archive";
   const name = pathname.replace(/^\/admin\/?/, "").replace(/\/+$/, "");
   const section = (Object.keys(SECTION_PATHS) as Section[]).find((key) => key !== "overview" && key === name);
   return section || "overview";
