@@ -352,6 +352,8 @@ Images should be stored in the **`quizzes/imgs/`** folder.
 
 The image path is specified relative to the web root (`/imgs/`).
 
+On the quiz page a click on the question image opens it over the page, where the user can zoom in and out (mouse wheel or the buttons), drag and rotate it.
+
 ---
 
 #### Image-Only Question (Without Text)

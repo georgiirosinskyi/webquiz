@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Button, Card, Flex, Form, Input, Progress, Result, Spin, Tag, Typography } from "antd";
+import { Alert, Button, Card, Flex, Form, Image as ImagePreview, Input, Progress, Result, Spin, Tag, Typography } from "antd";
 import { ClockCircleOutlined, PaperClipOutlined, UserOutlined } from "@ant-design/icons";
 import { getServerData } from "../shared/serverData";
 import { createFetchWithRetry, shouldReloadForNewQuiz } from "./connection";
@@ -125,6 +125,7 @@ export function QuizApp({ page }: { page: QuizPageData }) {
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [username, setUsername] = useState<string | null>(null);
+  const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [questions, setQuestionsState] = useState<QuizQuestion[]>(() => initialQuestions(page.questions));
   const [current, setCurrentState] = useState(0);
   const [mode, setMode] = useState<Mode>("answering");
@@ -660,6 +661,14 @@ export function QuizApp({ page }: { page: QuizPageData }) {
       <div id="connection-banner" className={`connection-banner${bannerText ? "" : " hidden"}`} role="status">
         {bannerText && <Alert type="warning" banner title={bannerText} />}
       </div>
+      {/* The question image opens over the page, where it can be zoomed (wheel, buttons) and dragged */}
+      <div className="hidden">
+        <ImagePreview
+          src={zoomImage || undefined}
+          alt=""
+          preview={{ open: !!zoomImage, onOpenChange: (open) => !open && setZoomImage(null) }}
+        />
+      </div>
       <main className="quiz-page">
         <Card className="container">
           <Flex vertical gap={8} className="quiz-header">
@@ -757,9 +766,12 @@ export function QuizApp({ page }: { page: QuizPageData }) {
                     )}
                     {question.question && <div className="question-text" dangerouslySetInnerHTML={html(question.question)} />}
                     {question.image && (
-                      <a href={relativePath(question.image)} target="_blank" rel="noreferrer">
-                        <img src={relativePath(question.image)} alt="Question image" className="question-image quiz-question-img" />
-                      </a>
+                      <img
+                        src={relativePath(question.image)}
+                        alt="Question image"
+                        className="question-image quiz-question-img"
+                        onClick={() => setZoomImage(relativePath(question.image!))}
+                      />
                     )}
                     {question.file && (
                       <a href={relativePath(question.file)} download className="question-file">
