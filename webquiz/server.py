@@ -4682,6 +4682,13 @@ class TestingServer:
             status=409,
         )
 
+    def _public_url(self):
+        """The public tunnel URL while the tunnel is connected, else None."""
+        if not self.tunnel_manager:
+            return None
+        status = self.tunnel_manager.get_status()
+        return status.get("url") if status.get("connected") else None
+
     @local_network_only
     async def serve_admin_page(self, request):
         """Serve the admin app (one page for /admin/, its sections /admin/{section} and /files/).
@@ -4734,6 +4741,9 @@ class TestingServer:
             "networkUrls": urls,
             "downloadableQuizzes": downloadable_quizzes,
             "tunnelPublicKey": tunnel_public_key,
+            # For the projector page (a static page: it shows what was true when it was opened)
+            "publicUrl": self._public_url(),
+            "currentQuizTitle": getattr(self, "quiz_title", None) if self.current_quiz_file else None,
             **self._config_page_data(),
         }
         return render_ui_page(self.templates.get("ui/admin.html"), self._ui_page_data(page))

@@ -66,3 +66,32 @@ def test_menu_switches_sections_without_reload(temp_dir, browser):
         browser.back()
         wait_for_element(browser, By.CSS_SELECTOR, '[data-testid="quiz-list"]')
         assert browser.execute_script("return window.__notReloaded") is True
+
+@skip_if_selenium_disabled
+def test_projector_page_shows_the_addresses_large(temp_dir, browser):
+    """"For the projector" opens a page of its own: no menu, the addresses in huge letters with QR codes"""
+    import requests
+    from conftest import get_page_data
+
+    with custom_webquiz_server() as (proc, port):
+        admin_login(browser, port, section="access")
+        network_urls = get_page_data(requests.get(f"http://localhost:{port}/admin/access").text)["page"]["networkUrls"]
+        first_window = browser.current_window_handle
+
+        wait_for_element(browser, By.CSS_SELECTOR, '[data-testid="projector-btn"]').click()
+        WebDriverWait(browser, 10).until(lambda d: len(d.window_handles) == 2)
+        browser.switch_to.window(next(handle for handle in browser.window_handles if handle != first_window))
+        assert browser.current_url.endswith("/admin/projector")
+        wait_for_element(browser, By.CSS_SELECTOR, '[data-testid="projector"]')
+
+        assert not browser.find_elements(By.CSS_SELECTOR, '[data-testid="admin-panel"]')
+        assert "Test Quiz" in browser.find_element(By.CSS_SELECTOR, ".projector-quiz").text
+        addresses = browser.find_elements(By.CSS_SELECTOR, '[data-testid="projector-url"] .projector-address')
+        if network_urls:
+            shown = [el.text for el in addresses]
+            assert shown == [url.split("://", 1)[1].rstrip("/") for url in network_urls]
+            assert len(browser.find_elements(By.CSS_SELECTOR, '[data-testid="projector-url"] canvas')) == len(network_urls)
+            size = float(addresses[0].value_of_css_property("font-size").replace("px", ""))
+            assert size >= 28
+        else:
+            assert browser.find_element(By.CSS_SELECTOR, '[data-testid="projector-empty"]').is_displayed()

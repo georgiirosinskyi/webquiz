@@ -297,6 +297,11 @@ export const uk = {
   "send.status_expired": "⌛ термін минув (немає відповіді 30 хвилин)",
 
   // Access
+  "access.projector": "На проектор",
+  "projector.title": "Адреси для підключення",
+  "projector.open_in_browser": "Відкрийте в браузері або відскануйте код:",
+  "projector.from_internet": "з інтернету",
+  "projector.fullscreen": "На весь екран",
   "access.title": "🌐 Доступ",
   "access.urls": "Адреси для доступу з інших пристроїв:",
   "access.public_url": "🌐 Зовнішня адреса:",

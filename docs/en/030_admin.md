@@ -102,6 +102,9 @@ Click a row to see every question of the participant: the answer they gave (gree
   This includes the local network address (e.g., `http://192.168.1.100:8080/`).
   When an SSH tunnel is connected, an external URL is also shown with a green background.
 
+- **"For the projector" Button**
+  Opens a separate page (`/admin/projector`) in a new tab to show on a projector or a TV: the current quiz title and every address in huge letters with a large QR code, so people in the back rows can read or scan it (the tunnel address comes first, marked "from the internet"). Click **Full screen** (or press F11). The page does not update itself: after connecting the tunnel or switching the quiz, open it again.
+
 - **SSH Tunnel**
   This section appears only if the `tunnel` section is configured in `webquiz.yaml` (see [Configuration](040_config.md) for details).
   It allows you to expose your local quiz server to the internet via SSH reverse tunnel.

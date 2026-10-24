@@ -288,6 +288,7 @@ The project has **222+ tests** across **15 test files** covering:
 - **Registration Fields** (12 tests): Custom registration fields
 - **Registration Field Values** (5 + 2 Selenium tests): Fields with a list of values (`test_registration_field_options.py`)
 - **Settings Export/Import** (5 + 1 Selenium tests): The settings form as a YAML file and back (`test_config_export_import.py`)
+- **Projector Page** (1 + 1 Selenium tests): The access addresses for a projector or a TV (`test_ui_pages.py`, `test_selenium_admin_overview.py`)
 - **Show Right Answer** (5 tests): Answer display functionality
 - **Show Answers on Completion** (10 tests): Dynamic answer visibility after all students complete
 - **Integration Tests** (6 tests): Multiple choice, multiple answers
@@ -749,7 +750,7 @@ Admin app (one page with a menu at the top):
 - `/admin/quizzes` - Quiz files as a tree by folders (the `quizzes` folder itself on top, empty folders too), with question count, points, time limit and settings of each quiz: switch, edit, duplicate, unite, delete, download quiz sets; create, rename and delete folders and subfolders, a new quiz goes into the selected folder (the file name field takes the name alone)
 - `/admin/archive` (also `/files/`, `/admin/files`) - Archive: every quiz run with its date, quiz, number of questions and users, share of correct answers and average time per question; a record expands to its files under readable names (answers, users, server log last): view (a resizable window you can drag by its title, as wide as the table up to 90% of the screen), download CSV or XLSX, or download all files of the record as one zip; sending records to another server
 - `/admin/settings` - Configuration (form or YAML); the form settings can be exported to `webquiz-settings.yaml` and imported into the form on another server
-- `/admin/access` - URLs for other devices and the SSH tunnel
+- `/admin/access` - URLs for other devices and the SSH tunnel; **For the projector** opens `/admin/projector`, the addresses in huge letters with QR codes for a projector or a TV
 
 The admin panel automatically detects when the package has been updated while the server is running and displays a "Restart Required" notification, prompting you to restart the server to use the new version.
 

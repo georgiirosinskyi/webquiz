@@ -76,12 +76,21 @@ def test_admin_sections_serve_the_admin_app(temp_dir):
     """/admin/{section} and the old /files/ URL serve the same admin app with all its page data."""
     with custom_webquiz_server(quizzes=QUIZ) as (proc, port):
         admin = injected_data(requests.get(f"http://localhost:{port}/admin/").text)
-        for path in ["/admin/quizzes", "/admin/files", "/admin/settings", "/admin/access", "/files/"]:
+        for path in ["/admin/quizzes", "/admin/files", "/admin/settings", "/admin/access", "/admin/projector", "/files/"]:
             response = requests.get(f"http://localhost:{port}{path}")
             assert response.status_code == 200, path
             data = injected_data(response.text)
             assert data["page"].keys() == admin["page"].keys(), path
             assert "configContent" in data["page"] and "networkUrls" in data["page"]
+
+
+def test_admin_page_data_for_the_projector(temp_dir):
+    """The projector page is static: the current quiz title and the public URL come with the page."""
+    with custom_webquiz_server(quizzes=QUIZ) as (proc, port):
+        data = injected_data(requests.get(f"http://localhost:{port}/admin/projector").text)["page"]
+        assert data["currentQuizTitle"] == "UI Quiz"
+        assert data["publicUrl"] is None  # no tunnel
+        assert isinstance(data["networkUrls"], list)
 
 
 def test_admin_sections_are_local_only(temp_dir):

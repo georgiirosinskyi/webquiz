@@ -337,3 +337,81 @@ body {
   min-width: 22px;
   text-align: right;
 }
+/* Projector page: the access addresses on a projector or a TV, readable from the back rows */
+.projector {
+  position: relative;
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 3vh 3vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3vh;
+  background: #ffffff;
+  color: #000000;
+  text-align: center;
+}
+
+.projector-quiz {
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.projector-call {
+  color: #333333;
+  line-height: 1.2;
+}
+
+.projector-urls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4vw;
+  width: 100%;
+}
+
+.projector-url {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2vh;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.projector-address {
+  font-family: "Consolas", "Menlo", monospace;
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+.projector-url.public .projector-address {
+  color: #237804;
+}
+
+.projector-note {
+  color: #237804;
+  font-weight: 600;
+}
+
+.projector-empty {
+  color: #ad6800;
+  font-weight: 600;
+}
+
+.projector-fullscreen {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+@media (max-width: 768px) {
+  .projector-urls {
+    flex-direction: column;
+    align-items: center;
+  }
+}

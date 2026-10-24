@@ -8,6 +8,7 @@ describe("sectionFromPath", () => {
     expect(sectionFromPath("/admin/quizzes")).toBe("quizzes");
     expect(sectionFromPath("/admin/settings/")).toBe("settings");
     expect(sectionFromPath("/admin/access")).toBe("access");
+    expect(sectionFromPath("/admin/projector")).toBe("projector");
   });
 
   it("opens the archive from its path and from the old file manager URLs", () => {

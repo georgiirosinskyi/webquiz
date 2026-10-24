@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 
 // Sections of the admin app. The server serves the same page for /admin/, /admin/{section}
 // and /files/ (the old file manager URL, now the archive), the app picks the section from the path.
-export type Section = "overview" | "quizzes" | "archive" | "settings" | "access";
+// "projector" is the access addresses for a projector or a TV, a page of its own without the menu
+export type Section = "overview" | "quizzes" | "archive" | "settings" | "access" | "projector";
 
 export const SECTION_PATHS: Record<Section, string> = {
   overview: "/admin/",
@@ -10,6 +11,7 @@ export const SECTION_PATHS: Record<Section, string> = {
   archive: "/admin/archive",
   settings: "/admin/settings",
   access: "/admin/access",
+  projector: "/admin/projector",
 };
 
 export function sectionFromPath(pathname: string): Section {

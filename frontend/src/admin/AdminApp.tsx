@@ -17,9 +17,10 @@ import { ArchivePage } from "../files/ArchivePage";
 import { OverviewPage } from "./OverviewPage";
 import { QuizEditor, type EditorTarget } from "./QuizEditor";
 import { QuizzesCard } from "./QuizzesCard";
+import { ProjectorPage } from "./ProjectorPage";
 import { AccessCard, AdminFooter, DownloadableQuizzes, TransferRequests } from "./SideCards";
 import { upsertUser } from "./overview";
-import { navigate, useSection, type Section } from "./router";
+import { navigate, sectionFromPath, useSection, type Section } from "./router";
 import {
   mergeTunnel,
   type AdminMessage,
@@ -54,6 +55,7 @@ const SECTION_TITLES: Record<Section, MessageKey> = {
   archive: "menu.archive",
   settings: "menu.settings",
   access: "menu.access",
+  projector: "projector.title",
 };
 
 function SectionHeader({ title, extra }: { title: string; extra?: ReactNode }) {
@@ -282,9 +284,15 @@ function AdminShell() {
 }
 
 export function AdminApp() {
+  // A static page: no WebSocket, no messages popping up on the screen
+  const projector = sectionFromPath(window.location.pathname) === "projector";
   return (
     <AdminAuth title={t("auth.title")} isTrustedIp={page.isTrustedIp}>
-      <AdminShell />
+      {projector ? (
+        <ProjectorPage urls={page.networkUrls} publicUrl={page.publicUrl} quizTitle={page.currentQuizTitle} />
+      ) : (
+        <AdminShell />
+      )}
     </AdminAuth>
   );
 }

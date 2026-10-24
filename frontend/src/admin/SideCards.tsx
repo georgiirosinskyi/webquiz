@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, App, Button, Card, Flex, Input, List, Select, Space, Tag, Typography } from "antd";
-import { CheckOutlined, CloudDownloadOutlined, CopyOutlined, LinkOutlined } from "@ant-design/icons";
+import { CheckOutlined, CloudDownloadOutlined, CopyOutlined, FundProjectionScreenOutlined, LinkOutlined } from "@ant-design/icons";
 import { apiGet, apiSend } from "../shared/api";
 import { getLanguage, t, type MessageKey } from "../shared/i18n";
 import { formatFileSize } from "../shared/format";
@@ -12,6 +12,7 @@ import {
   type TransferRequest,
   type TunnelStatus,
 } from "./types";
+import { SECTION_PATHS } from "./router";
 
 const TRANSFER_TYPE_LABELS: Record<string, MessageKey> = {
   quizzes: "transfer.type_quizzes",
@@ -230,7 +231,20 @@ export function AccessCard({
   };
 
   return (
-    <Card title={t("access.title")} data-testid="access-card">
+    <Card
+      title={t("access.title")}
+      data-testid="access-card"
+      extra={
+        <Button
+          icon={<FundProjectionScreenOutlined />}
+          href={SECTION_PATHS.projector}
+          target="_blank"
+          data-testid="projector-btn"
+        >
+          {t("access.projector")}
+        </Button>
+      }
+    >
       <Typography.Text strong>{t("access.urls")}</Typography.Text>
       <Flex vertical gap={6} style={{ margin: "8px 0 0" }} data-testid="url-list">
         {tunnel?.connected && tunnel.url && (
