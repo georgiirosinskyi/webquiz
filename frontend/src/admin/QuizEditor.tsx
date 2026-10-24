@@ -5,10 +5,23 @@ import { apiGet, apiSend } from "../shared/api";
 import { t } from "../shared/i18n";
 import { ImagePicker, FilePicker } from "./Pickers";
 import { QuestionCard, type CheckerTemplate } from "./QuestionCard";
-import { formToQuiz, newQuestion, questionErrors, quizErrors, quizToForm, type QuestionForm, type QuizForm } from "./quizForm";
+import {
+  fileNameError,
+  formToQuiz,
+  newQuestion,
+  questionErrors,
+  quizErrors,
+  quizToForm,
+  type QuestionForm,
+  type QuizForm,
+} from "./quizForm";
+import { ROOT_FOLDER_NAME, folderOf } from "./quizTree";
 
-// What the editor is opened for: a new quiz, or an existing file with its parsed YAML
-export type EditorTarget = { mode: "create" } | { mode: "edit"; filename: string; parsed: Record<string, unknown> | null };
+// What the editor is opened for: a new quiz in a folder ("" is quizzes/ itself, "grade5/" a subfolder),
+// or an existing file with its parsed YAML
+export type EditorTarget =
+  | { mode: "create"; folder: string }
+  | { mode: "edit"; filename: string; parsed: Record<string, unknown> | null };
 
 interface Item {
   key: number;
@@ -34,6 +47,8 @@ export function QuizEditor({
   const [items, setItems] = useState<Item[]>([]);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [editingName, setEditingName] = useState<string | null>(null);
+  // The file name field holds the name alone; the quiz stays in this folder
+  const [folder, setFolder] = useState("");
   const [showErrors, setShowErrors] = useState(false);
   const [saving, setSaving] = useState<"close" | "continue" | null>(null);
   const [continueResult, setContinueResult] = useState<"ok" | "error" | null>(null);
@@ -54,6 +69,7 @@ export function QuizEditor({
     // Existing quizzes open with every question collapsed, a new one with its first question open
     setCollapsed(new Set(target.mode === "edit" ? loaded.map((item) => item.key) : []));
     setEditingName(target.mode === "edit" ? target.filename : null);
+    setFolder(target.mode === "edit" ? folderOf(target.filename) : target.folder);
     setShowErrors(false);
     setContinueResult(null);
   }, [target]);
@@ -111,7 +127,7 @@ export function QuizEditor({
     }
     setSaving(keepOpen ? "continue" : "close");
     setContinueResult(null);
-    const filename = settings.filename.trim();
+    const filename = folder + settings.filename.trim();
     try {
       const result = editingName
         ? await apiSend<{ message: string; filename?: string; renamed?: boolean }>(
@@ -135,7 +151,7 @@ export function QuizEditor({
         // A new quiz is edited from now on; a renamed one under its new name
         const saved = result.data.filename || `${filename}.yaml`;
         setEditingName(saved);
-        setSettings((current) => ({ ...current, filename: saved.replace(/\.ya?ml$/, "") }));
+        setSettings((current) => ({ ...current, filename: quizToForm(saved, null).filename }));
         setContinueResult("ok");
       } else {
         onClose();
@@ -212,10 +228,11 @@ export function QuizEditor({
         <Form.Item label={t("editor.filename")} required>
           <Input
             id="quiz-filename"
+            addonBefore={<span data-testid="quiz-folder">{`${ROOT_FOLDER_NAME}/${folder}`}</span>}
             value={settings.filename}
             placeholder={t("editor.filename_placeholder")}
             onChange={(event) => setSettings({ ...settings, filename: event.target.value })}
-            status={showErrors && !settings.filename.trim() ? "error" : undefined}
+            status={showErrors && fileNameError(settings.filename) ? "error" : undefined}
           />
         </Form.Item>
         <Form.Item label={t("editor.quiz_title")}>

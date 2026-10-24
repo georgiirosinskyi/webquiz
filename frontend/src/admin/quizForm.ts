@@ -113,7 +113,8 @@ export function quizToForm(filename: string, quiz: Json | null): QuizForm {
   const data = quiz || {};
   const questions = Array.isArray(data.questions) ? (data.questions as Json[]) : [];
   return {
-    filename: filename.replace(/\.ya?ml$/, ""),
+    // The name alone: the folder stays as it is (see QuizEditor)
+    filename: (filename.split("/").pop() || "").replace(/\.ya?ml$/, ""),
     title: str(data.title),
     show_right_answer: data.show_right_answer !== false,
     show_answers_on_completion: data.show_answers_on_completion === true,
@@ -196,9 +197,36 @@ export function questionErrors(form: QuestionForm, questionNumber: number): stri
   return errors;
 }
 
+// What is wrong with a file or folder name (no path, names Windows accepts too)
+function nameProblem(name: string): "empty" | "path" | "invalid" | null {
+  const value = name.trim();
+  if (!value) return "empty";
+  if (/[/\\]/.test(value)) return "path";
+  if (value === "." || value === ".." || /[<>:"|?*\x00-\x1f]/.test(value) || /[. ]$/.test(value)) {
+    return "invalid";
+  }
+  return null;
+}
+
+// A quiz file name without a folder: the folder is the one selected in the quiz list
+export function fileNameError(name: string): string | null {
+  const problem = nameProblem(name);
+  if (problem === "empty") return t("validation.filename");
+  if (problem === "path") return t("validation.filename_no_path");
+  return problem ? t("validation.filename_invalid") : null;
+}
+
+export function folderNameError(name: string): string | null {
+  const problem = nameProblem(name);
+  if (problem === "empty") return t("validation.folder_name");
+  if (problem === "path") return t("validation.folder_name_no_path");
+  return problem ? t("validation.folder_name_invalid") : null;
+}
+
 export function quizErrors(form: QuizForm): string[] {
   const errors: string[] = [];
-  if (!form.filename.trim()) errors.push(t("validation.filename"));
+  const nameError = fileNameError(form.filename);
+  if (nameError) errors.push(nameError);
   if (form.questions.length === 0) errors.push(t("validation.one_question"));
   form.questions.forEach((question, index) => errors.push(...questionErrors(question, index + 1)));
   return errors;

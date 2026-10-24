@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   changeQuestionType,
+  fileNameError,
+  folderNameError,
   formToQuiz,
   newQuestion,
   pointsError,
@@ -29,7 +31,7 @@ const quiz = {
 describe("quizToForm / formToQuiz", () => {
   it("round-trips a quiz without losing data", () => {
     const form = quizToForm("grade5/math.yaml", quiz);
-    expect(form.filename).toBe("grade5/math");
+    expect(form.filename).toBe("math");
     expect(form.questions.map((q) => q.type)).toEqual(["single", "multiple", "text", "single"]);
     expect(formToQuiz(form)).toEqual({ ...quiz, show_final_list: true });
   });
@@ -92,6 +94,22 @@ describe("validation", () => {
   it("requires a file name", () => {
     const form = quizToForm("", quiz);
     expect(quizErrors(form)).toEqual(["Будь ласка, введіть ім'я файлу"]);
+  });
+
+  it("takes only a name for the file: the folder is chosen in the list", () => {
+    expect(fileNameError("math")).toBeNull();
+    expect(fileNameError("  ")).toBe("Будь ласка, введіть ім'я файлу");
+    expect(fileNameError("grade5/math")).toBe("Ім'я файлу не може містити теку (/ або \\): теку виберіть у списку тестів");
+    expect(fileNameError("grade5\\math")).not.toBeNull();
+    expect(fileNameError("..")).not.toBeNull();
+    expect(quizErrors({ ...quizToForm("", quiz), filename: "a/b" })).toEqual([fileNameError("a/b")]);
+  });
+
+  it("checks a folder name the same way", () => {
+    expect(folderNameError("grade5")).toBeNull();
+    expect(folderNameError(" ")).toBe("Будь ласка, введіть назву теки");
+    expect(folderNameError("a/b")).toBe("Назва теки не може містити / або \\");
+    expect(folderNameError("a:b")).toBe("Назва теки містить недопустимі символи");
   });
 });
 

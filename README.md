@@ -276,6 +276,7 @@ The project has **222+ tests** across **15 test files** covering:
 - **Admin API** (14 tests): Admin interface and authentication
 - **Admin Quiz Management** (18 tests): Quiz switching and management
 - **Admin Quiz Editor** (7 tests): Wizard mode quiz creation with randomize_questions and show_answers_on_completion
+- **Quiz Folders** (11 + 4 Selenium tests): Creating, renaming and deleting folders and subfolders, the folder list, quizzes in the selected folder, name-only file names (`test_quiz_folders.py`, `test_selenium_quiz_editor.py`)
 - **Config Management** (23 tests): Config editor, validation, and form-based JSON updates
 - **Registration Approval** (21 tests + 3 Selenium): Approval workflow, timing and editing the data while waiting
 - **Archive** (`test_archive.py`, `test_selenium_files_page.py`): Run folders, summary, per-run log, archive API, quiz file download, resizing the CSV viewer
@@ -741,7 +742,7 @@ webquiz --master-key secret123
 
 Admin app (one page with a menu at the top):
 - `/admin/` - **Overview**: the current quiz (switch, restart, edit, open answers) and a live table of all participants with status, progress per question, points, grade, time left and approval buttons; a click on a row shows each answer the participant gave next to the correct one
-- `/admin/quizzes` - Quiz files as a tree by folders, with question count, points, time limit and settings of each quiz: switch, edit, duplicate, unite, delete, download quiz sets
+- `/admin/quizzes` - Quiz files as a tree by folders (the `quizzes` folder itself on top, empty folders too), with question count, points, time limit and settings of each quiz: switch, edit, duplicate, unite, delete, download quiz sets; create, rename and delete folders and subfolders, a new quiz goes into the selected folder (the file name field takes the name alone)
 - `/admin/archive` (also `/files/`, `/admin/files`) - Archive: every quiz run with its date, quiz, number of questions and users, share of correct answers and average time per question; a record expands to its files under readable names (answers, users, server log last): view (a resizable window you can drag by its title, as wide as the table up to 90% of the screen), download CSV or XLSX, or download all files of the record as one zip; sending records to another server
 - `/admin/settings` - Configuration (form or YAML)
 - `/admin/access` - URLs for other devices and the SSH tunnel

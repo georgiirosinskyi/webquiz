@@ -323,3 +323,8 @@ body {
   cursor: nwse-resize;
   background: linear-gradient(135deg, transparent 0 55%, #bfbfbf 55% 62%, transparent 62% 72%, #bfbfbf 72% 79%, transparent 79%);
 }
+
+/* The folder where new quizzes and folders are created (Quizzes section) */
+.ant-table-wrapper .quiz-folder-selected > td {
+  background: #e6f4ff !important;
+}

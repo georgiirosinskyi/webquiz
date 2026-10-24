@@ -33,6 +33,8 @@ export interface QuizInfo {
 
 export interface QuizList {
   quizzes: QuizInfo[];
+  // Every folder of quizzes/ ("grade5/", "grade5/algebra/"), empty ones too
+  folders?: string[];
   current_quiz: string | null;
   force_all_completed?: boolean;
   show_answers_on_completion?: boolean;

@@ -6,6 +6,7 @@ import {
   DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
+  FolderAddOutlined,
   FolderOpenOutlined,
   FolderOutlined,
   MergeCellsOutlined,
@@ -20,12 +21,21 @@ import { useTransfer } from "../files/useTransfer";
 import { t } from "../shared/i18n";
 import { formatPoints } from "../shared/points";
 import { formatDuration } from "./overview";
-import { buildQuizTree, isFolderKey, type QuizTreeNode } from "./quizTree";
+import { fileNameError, folderNameError } from "./quizForm";
+import { ROOT_FOLDER_KEY, ROOT_FOLDER_NAME, findNode, folderKey, folderOf, isFolderKey, quizRoot, type QuizTreeNode } from "./quizTree";
 import type { QuizInfo, QuizList } from "./types";
 import type { EditorTarget } from "./QuizEditor";
 import { QuizYamlEditor } from "./QuizYamlEditor";
 
-type NamePrompt = { title: string; value: string; onOk: (name: string) => Promise<void> } | null;
+// onOk returns false to keep the prompt open (the request failed); validate gives the error for a value
+type NamePrompt = {
+  title: string;
+  value: string;
+  onOk: (name: string) => Promise<boolean>;
+  validate?: (name: string) => string | null;
+} | null;
+
+const folderLabel = (folder: string) => `${ROOT_FOLDER_NAME}/${folder}`;
 
 // Settings that differ from the defaults, as tags
 function SettingTags({ quiz }: { quiz: QuizInfo }) {
@@ -58,15 +68,109 @@ export function QuizzesCard({
   const single = selected.length === 1 ? selected[0] : null;
   const [transfer, reloadTransfer] = useTransfer();
   const [yamlFile, setYamlFile] = useState<string | null>(null);
-  const tree = useMemo(() => buildQuizTree(list.quizzes), [list.quizzes]);
-  // Folders are closed until the admin opens them
-  const [expanded, setExpanded] = useState<string[]>([]);
+  const tree = useMemo(() => quizRoot(list.quizzes, list.folders ?? []), [list.quizzes, list.folders]);
+  // Folders are closed until the admin opens them; quizzes/ itself is open
+  const [expanded, setExpanded] = useState<string[]>([ROOT_FOLDER_KEY]);
   const toggleFolder = (key: string) =>
     setExpanded((keys) => (keys.includes(key) ? keys.filter((item) => item !== key) : [...keys, key]));
+  const expandFolders = (...keys: string[]) => setExpanded((current) => [...new Set([...current, ...keys])]);
+  // Where new quizzes and folders go: the clicked folder, or the folder of the clicked quiz
+  const [folder, setFolder] = useState("");
 
-  const askName = (title: string, value: string, onOk: (name: string) => Promise<void>) => {
+  const askName = (
+    title: string,
+    value: string,
+    onOk: (name: string) => Promise<boolean>,
+    validate?: (name: string) => string | null,
+  ) => {
     setPromptValue(value);
-    setPrompt({ title, value, onOk });
+    setPrompt({ title, value, onOk, validate });
+  };
+  const promptError = prompt?.validate && promptValue.trim() ? prompt.validate(promptValue) : null;
+
+  const selectFolder = (key: string) => {
+    setFolder(folderOf(key));
+    setSelected([]);
+    expandFolders(key);
+  };
+
+  // The selected folder below quizzes/ (rename and delete; quizzes/ itself stays)
+  const folderNode = folder ? findNode(tree, folderKey(folder)) : null;
+  const folderHasCurrent = !!folder && !!current && current.startsWith(folder);
+  // A clicked folder: no quiz is selected then
+  const folderSelected = !!folder && selected.length === 0;
+  const folderName = folder.slice(folder.slice(0, -1).lastIndexOf("/") + 1, -1);
+  const parentFolder = folder.slice(0, folder.length - folderName.length - 1);
+
+  const renameFolder = () => {
+    askName(
+      t("quizzes.rename_folder_prompt", { folder: folderLabel(folder) }),
+      folderName,
+      async (name) => {
+        const result = await apiSend<{ folder: string; message: string }>("POST", "/api/admin/rename-folder", {
+          folder,
+          new_name: name,
+        });
+        if (!result.ok) {
+          message.error(result.data.error || t("quizzes.folder_failed"));
+          return false;
+        }
+        message.success(result.data.message);
+        // Opened folders inside keep open under the new name
+        const renamed = result.data.folder;
+        const oldKey = folderKey(folder);
+        setExpanded((keys) =>
+          keys.map((key) => (key.startsWith(oldKey) ? folderKey(renamed + key.slice(oldKey.length)) : key)),
+        );
+        setFolder(renamed);
+        await reload();
+        return true;
+      },
+      folderNameError,
+    );
+  };
+
+  const deleteFolder = () => {
+    const target = folder;
+    modal.confirm({
+      title: t("quizzes.delete_folder_title", { folder: folderLabel(target) }),
+      content: t("quizzes.delete_folder_content", { count: folderNode?.count ?? 0 }),
+      okType: "danger",
+      okText: t("common.delete"),
+      onOk: async () => {
+        const result = await apiSend<{ message: string }>("POST", "/api/admin/delete-folder", { folder: target });
+        if (!result.ok) {
+          message.error(result.data.error || t("quizzes.folder_failed"));
+          return;
+        }
+        message.success(result.data.message);
+        setFolder(parentFolder);
+        await reload();
+      },
+    });
+  };
+
+  const createFolder = () => {
+    askName(
+      t("quizzes.new_folder_prompt", { folder: folderLabel(folder) }),
+      "",
+      async (name) => {
+        const result = await apiSend<{ folder: string; message: string }>("POST", "/api/admin/create-folder", {
+          folder: folder + name,
+        });
+        if (!result.ok) {
+          message.error(result.data.error || t("quizzes.create_folder_failed"));
+          return false;
+        }
+        message.success(result.data.message);
+        await reload();
+        expandFolders(folderKey(folder), folderKey(result.data.folder));
+        setFolder(result.data.folder);
+        setSelected([]);
+        return true;
+      },
+      folderNameError,
+    );
   };
 
   const openEditor = async (filename: string) => {
@@ -99,49 +203,62 @@ export function QuizzesCard({
 
   const duplicate = () => {
     if (!single) return;
-    askName(t("quizzes.duplicate_prompt"), single.replace(/\.ya?ml$/, "_copy"), async (name) => {
-      const original = await apiGet<{ content: string }>(`/api/admin/quiz/${encodeURIComponent(single)}`);
-      if (!original.ok) {
-        message.error(original.data.error || t("quizzes.load_original_failed"));
-        return;
-      }
-      const created = await apiSend<{ filename: string }>("POST", "/api/admin/create-quiz", {
-        filename: name,
-        mode: "text",
-        content: original.data.content,
-      });
-      if (created.ok) {
+    // The copy goes next to the original
+    const target = folderOf(single);
+    const baseName = single.slice(target.length).replace(/\.ya?ml$/, "");
+    askName(
+      t("quizzes.duplicate_prompt", { folder: folderLabel(target) }),
+      `${baseName}_copy`,
+      async (name) => {
+        const original = await apiGet<{ content: string }>(`/api/admin/quiz/${encodeURIComponent(single)}`);
+        if (!original.ok) {
+          message.error(original.data.error || t("quizzes.load_original_failed"));
+          return false;
+        }
+        const created = await apiSend<{ filename: string }>("POST", "/api/admin/create-quiz", {
+          filename: target + name,
+          mode: "text",
+          content: original.data.content,
+        });
+        if (!created.ok) {
+          message.error(created.data.error || t("quizzes.duplicate_failed"));
+          return false;
+        }
         message.success(t("quizzes.duplicated", { name: created.data.filename }));
         await reload();
         await openEditor(created.data.filename);
-      } else {
-        message.error(created.data.error || t("quizzes.duplicate_failed"));
-      }
-    });
+        return true;
+      },
+      fileNameError,
+    );
   };
 
   const unite = () => {
+    // The united quiz goes into the folder of the first one
+    const target = folderOf(selected[0]);
     askName(
-      t("quizzes.unite_prompt", { count: selected.length }),
-      selected[0].replace(/\.ya?ml$/, "_united"),
+      t("quizzes.unite_prompt", { count: selected.length, folder: folderLabel(target) }),
+      `${selected[0].slice(target.length).replace(/\.ya?ml$/, "")}_united`,
       async (name) => {
         const result = await apiSend<{ filename: string; total_questions: number; warning?: string }>(
           "POST",
           "/api/admin/unite-quizzes",
-          { quiz_filenames: selected, new_name: name },
+          { quiz_filenames: selected, new_name: target + name },
         );
-        if (result.ok) {
-          message.success(
-            t("quizzes.united", { name: result.data.filename, count: result.data.total_questions }) +
-              (result.data.warning ? `. ${result.data.warning}` : ""),
-          );
-          setSelected([]);
-          await reload();
-          await openEditor(result.data.filename);
-        } else {
+        if (!result.ok) {
           message.error(result.data.error || t("quizzes.unite_failed"));
+          return false;
         }
+        message.success(
+          t("quizzes.united", { name: result.data.filename, count: result.data.total_questions }) +
+            (result.data.warning ? `. ${result.data.warning}` : ""),
+        );
+        setSelected([]);
+        await reload();
+        await openEditor(result.data.filename);
+        return true;
       },
+      fileNameError,
     );
   };
 
@@ -231,9 +348,17 @@ export function QuizzesCard({
               >
                 {single && single === current ? t("quizzes.restart_current") : t("quizzes.switch")}
               </Button>
-              <Button icon={<EditOutlined />} disabled={!single} onClick={() => single && openEditor(single)} data-testid="edit-btn">
-                {t("common.edit")}
-              </Button>
+              {/* With a folder selected (not quizzes/ itself) Edit renames it */}
+              <Tooltip title={folderSelected && folderHasCurrent ? t("quizzes.folder_has_current") : undefined}>
+                <Button
+                  icon={<EditOutlined />}
+                  disabled={folderSelected ? folderHasCurrent : !single}
+                  onClick={() => (folderSelected ? renameFolder() : single && openEditor(single))}
+                  data-testid="edit-btn"
+                >
+                  {t("common.edit")}
+                </Button>
+              </Tooltip>
               <Button icon={<CodeOutlined />} disabled={!single} onClick={() => setYamlFile(single)} data-testid="yaml-btn">
                 {t("quizzes.edit_yaml")}
               </Button>
@@ -242,12 +367,25 @@ export function QuizzesCard({
               </Button>
             </>
           )}
-          <Tooltip title={current && selected.includes(current) ? t("quizzes.cannot_delete_current") : undefined}>
+          {/* With a folder selected Delete removes the folder with everything in it */}
+          <Tooltip
+            title={
+              folderSelected
+                ? folderHasCurrent
+                  ? t("quizzes.folder_has_current")
+                  : undefined
+                : current && selected.includes(current)
+                  ? t("quizzes.cannot_delete_current")
+                  : undefined
+            }
+          >
             <Button
               danger
               icon={<DeleteOutlined />}
-              disabled={selected.length === 0 || (!!current && selected.includes(current))}
-              onClick={remove}
+              disabled={
+                folderSelected ? folderHasCurrent : selected.length === 0 || (!!current && selected.includes(current))
+              }
+              onClick={folderSelected ? deleteFolder : remove}
               data-testid="delete-btn"
             >
               {t("common.delete")}
@@ -256,10 +394,19 @@ export function QuizzesCard({
           <Button icon={<DownloadOutlined />} disabled={selected.length === 0} onClick={download} data-testid="download-btn">
             {t("quizzes.download_files")}
           </Button>
-          <Button icon={<PlusOutlined />} onClick={() => onEdit({ mode: "create" })} data-testid="create-btn">
+          <Button icon={<PlusOutlined />} onClick={() => onEdit({ mode: "create", folder })} data-testid="create-btn">
             {t("quizzes.new")}
           </Button>
+          <Button icon={<FolderAddOutlined />} onClick={createFolder} data-testid="create-folder-btn">
+            {t("quizzes.new_folder")}
+          </Button>
         </Space>
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+          {t("quizzes.target_folder")}{" "}
+          <Tag icon={<FolderOpenOutlined />} data-testid="target-folder">
+            {folderLabel(folder)}
+          </Tag>
+        </Typography.Paragraph>
 
         <Table<QuizTreeNode>
           data-testid="quiz-list"
@@ -281,14 +428,16 @@ export function QuizzesCard({
             hideSelectAll: true,
           }}
           onRow={(node) => ({
-            // A click selects only this quiz; Ctrl/Cmd+click adds it to the selection; a click on a folder opens or closes it
+            // A click selects only this quiz; Ctrl/Cmd+click adds it to the selection; a click on a folder
+            // selects it for new quizzes and opens it (the arrow opens and closes it)
             onClick: (event) => {
               if ((event.target as HTMLElement).closest(".ant-table-selection-column, .ant-table-row-expand-icon")) return;
               if (!node.quiz) {
-                toggleFolder(node.key);
+                selectFolder(node.key);
                 return;
               }
               const filename = node.quiz.filename;
+              setFolder(folderOf(filename));
               setSelected((currentSelection) =>
                 event.ctrlKey || event.metaKey
                   ? currentSelection.includes(filename)
@@ -299,7 +448,9 @@ export function QuizzesCard({
             },
             onDoubleClick: () => node.quiz && openEditor(node.quiz.filename),
             style: { cursor: "pointer" },
+            ...(!node.quiz && { "data-folder": folderOf(node.key) }),
           })}
+          rowClassName={(node) => (!node.quiz && node.key === folderKey(folder) ? "quiz-folder-selected" : "")}
           columns={[
             {
               key: "filename",
@@ -367,15 +518,14 @@ export function QuizzesCard({
           open={!!prompt}
           title={prompt?.title}
           okText="OK"
-          okButtonProps={{ disabled: !promptValue.trim() }}
+          okButtonProps={{ disabled: !promptValue.trim() || !!promptError }}
           confirmLoading={busy === "prompt"}
           onCancel={() => setPrompt(null)}
           onOk={async () => {
             if (!prompt) return;
             setBusy("prompt");
             try {
-              await prompt.onOk(promptValue.trim());
-              setPrompt(null);
+              if (await prompt.onOk(promptValue.trim())) setPrompt(null);
             } catch (error) {
               message.error(t("common.error", { error: (error as Error).message }));
             } finally {
@@ -388,8 +538,14 @@ export function QuizzesCard({
             id="name-prompt"
             value={promptValue}
             autoFocus
+            status={promptError ? "error" : undefined}
             onChange={(event) => setPromptValue(event.target.value)}
           />
+          {promptError && (
+            <Typography.Text type="danger" data-testid="name-prompt-error">
+              {promptError}
+            </Typography.Text>
+          )}
         </Modal>
         <QuizYamlEditor filename={yamlFile} onClose={() => setYamlFile(null)} onSaved={reload} />
       </Card>

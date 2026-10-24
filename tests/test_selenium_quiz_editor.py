@@ -11,6 +11,8 @@ Tests verify:
 7. Settings the editor does not show (marks, ...) survive a save
 """
 
+import os
+
 import requests
 import yaml
 from selenium.webdriver.common.by import By
@@ -227,3 +229,128 @@ def test_editor_keeps_settings_it_does_not_show(temp_dir, browser):
         assert saved["default_mark"] == 1
         assert saved["time_limit"] == 300
         assert saved["questions"][0] == {"question": "Q", "options": ["A2", "B"], "correct_answer": 1, "custom": "kept"}
+
+
+def folder_row(browser, folder):
+    """The row of a folder in the quiz list ("" is quizzes/ itself)."""
+    return wait_for_element(browser, By.CSS_SELECTOR, f'[data-testid="quiz-list"] tr[data-row-key="folder:{folder}"]')
+
+
+def target_folder(browser):
+    return browser.find_element(By.CSS_SELECTOR, '[data-testid="target-folder"]').text
+
+
+def create_folder_in_ui(browser, name):
+    click_js(browser, browser.find_element(By.CSS_SELECTOR, '[data-testid="create-folder-btn"]'))
+    wait_for_modal(browser)
+    wait_for_element(browser, By.ID, "name-prompt").send_keys(name)
+    click_button(browser, "OK")
+
+
+def fill_new_quiz(browser, name):
+    """Open the editor for a new quiz and fill the name and one question."""
+    click_js(browser, browser.find_element(By.CSS_SELECTOR, '[data-testid="create-btn"]'))
+    wait_for_modal(browser)
+    wait_for_element(browser, By.ID, "quiz-filename").send_keys(name)
+    item = question_items(browser)[0]
+    item.find_element(By.CSS_SELECTOR, ".question-text").send_keys("Question")
+    for option, text in zip(item.find_elements(By.CSS_SELECTOR, ".option-text"), "ABCD"):
+        option.send_keys(text)
+
+
+@skip_if_selenium_disabled
+def test_create_folder_and_a_quiz_in_it(temp_dir, browser):
+    """A new folder becomes the selected one; a new quiz goes into it and the name field takes the name alone"""
+    with custom_webquiz_server() as (proc, port):
+        admin_login(browser, port)
+        folder_row(browser, "")
+        assert target_folder(browser) == "quizzes/"
+
+        create_folder_in_ui(browser, "grade5")
+        WebDriverWait(browser, 10).until(lambda d: target_folder(d) == "quizzes/grade5/")
+        folder_row(browser, "grade5/")
+
+        fill_new_quiz(browser, "math")
+        assert browser.find_element(By.CSS_SELECTOR, '[data-testid="quiz-folder"]').text == "quizzes/grade5/"
+        click_js(browser, browser.find_element(By.CSS_SELECTOR, '[data-testid="save-quiz"]'))
+
+        WebDriverWait(browser, 10).until(
+            lambda d: d.find_elements(By.CSS_SELECTOR, '[data-testid="quiz-list"] tr[data-row-key="grade5/math.yaml"]')
+        )
+        assert yaml.safe_load(quiz_file(port, "grade5%2Fmath.yaml"))["questions"][0]["question"] == "Question"
+
+
+@skip_if_selenium_disabled
+def test_subfolder_goes_into_the_clicked_folder_and_root_can_be_selected(temp_dir, browser):
+    with custom_webquiz_server() as (proc, port):
+        requests.post(
+            f"http://localhost:{port}/api/admin/create-folder", cookies=get_admin_session(port), json={"folder": "grade5"}
+        )
+        admin_login(browser, port)
+
+        # An empty folder shows too; a click selects it
+        click_js(browser, folder_row(browser, "grade5/").find_element(By.CSS_SELECTOR, "td:not(.ant-table-selection-column)"))
+        WebDriverWait(browser, 10).until(lambda d: target_folder(d) == "quizzes/grade5/")
+        create_folder_in_ui(browser, "algebra")
+        WebDriverWait(browser, 10).until(lambda d: target_folder(d) == "quizzes/grade5/algebra/")
+        folder_row(browser, "grade5/algebra/")
+        assert os.path.isdir(os.path.join(f"quizzes_{port}", "grade5", "algebra"))
+
+        # Back to quizzes/ itself: a new quiz goes to the top
+        click_js(browser, folder_row(browser, "").find_element(By.CSS_SELECTOR, "td:not(.ant-table-selection-column)"))
+        WebDriverWait(browser, 10).until(lambda d: target_folder(d) == "quizzes/")
+        fill_new_quiz(browser, "top")
+        click_js(browser, browser.find_element(By.CSS_SELECTOR, '[data-testid="save-quiz"]'))
+        WebDriverWait(browser, 10).until(lambda d: os.path.isfile(os.path.join(f"quizzes_{port}", "top.yaml")))
+
+
+@skip_if_selenium_disabled
+def test_quiz_file_name_cannot_have_a_folder(temp_dir, browser):
+    with custom_webquiz_server() as (proc, port):
+        admin_login(browser, port)
+        fill_new_quiz(browser, "grade5/math")
+        click_js(browser, browser.find_element(By.CSS_SELECTOR, '[data-testid="save-quiz"]'))
+
+        WebDriverWait(browser, 10).until(
+            lambda d: "теку виберіть у списку тестів" in d.find_element(By.CSS_SELECTOR, ".ant-modal-body").text
+        )
+        assert not os.path.exists(os.path.join(f"quizzes_{port}", "grade5"))
+
+
+@skip_if_selenium_disabled
+def test_rename_and_delete_a_folder(temp_dir, browser):
+    """Edit and Delete work on a selected folder: it is renamed with its quizzes, then deleted (not quizzes/ itself)"""
+    with custom_webquiz_server() as (proc, port):
+        requests.post(
+            f"http://localhost:{port}/api/admin/create-quiz",
+            cookies=get_admin_session(port),
+            json={"filename": "grade5/math", "mode": "wizard", "quiz_data": {"questions": [{"question": "Q", "options": ["A", "B"], "correct_answer": 0}]}},
+        )
+        admin_login(browser, port)
+        click_js(browser, folder_row(browser, "").find_element(By.CSS_SELECTOR, "td:not(.ant-table-selection-column)"))
+        assert not browser.find_element(By.CSS_SELECTOR, '[data-testid="edit-btn"]').is_enabled()
+        assert not browser.find_element(By.CSS_SELECTOR, '[data-testid="delete-btn"]').is_enabled()
+
+        click_js(browser, folder_row(browser, "grade5/").find_element(By.CSS_SELECTOR, "td:not(.ant-table-selection-column)"))
+        WebDriverWait(browser, 10).until(lambda d: d.find_element(By.CSS_SELECTOR, '[data-testid="edit-btn"]').is_enabled())
+        click_js(browser, browser.find_element(By.CSS_SELECTOR, '[data-testid="edit-btn"]'))
+        wait_for_modal(browser)
+        name_input = wait_for_element(browser, By.ID, "name-prompt")
+        assert name_input.get_attribute("value") == "grade5"
+        clear_input(name_input)
+        name_input.send_keys("grade6")
+        click_button(browser, "OK")
+
+        WebDriverWait(browser, 10).until(lambda d: target_folder(d) == "quizzes/grade6/")
+        folder_row(browser, "grade6/")
+        assert os.path.isfile(os.path.join(f"quizzes_{port}", "grade6", "math.yaml"))
+
+        click_js(browser, browser.find_element(By.CSS_SELECTOR, '[data-testid="delete-btn"]'))
+        WebDriverWait(browser, 10).until(lambda d: "1 шт." in d.find_element(By.CSS_SELECTOR, ".ant-modal-confirm").text)
+        click_js(browser, browser.find_element(By.CSS_SELECTOR, ".ant-modal-confirm .ant-btn-dangerous"))
+
+        WebDriverWait(browser, 10).until(lambda d: not os.path.exists(os.path.join(f"quizzes_{port}", "grade6")))
+        WebDriverWait(browser, 10).until(lambda d: target_folder(d) == "quizzes/")
+        WebDriverWait(browser, 10).until(
+            lambda d: not d.find_elements(By.CSS_SELECTOR, '[data-testid="quiz-list"] tr[data-row-key="folder:grade6/"]')
+        )

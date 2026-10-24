@@ -1047,6 +1047,46 @@ class TestingServer:
                         quiz_files[filename] = self._quiz_list_entry(quizzes_path, quiz_path)
         return sorted(quiz_files.values(), key=lambda x: x["filename"])
 
+    # Folders of quizzes/ that hold images and attachments, not quizzes
+    MEDIA_FOLDERS = ("imgs", "attach")
+
+    def list_quiz_folders(self):
+        """All folders under quizzes/ ("grade5/", "grade5/algebra/"), empty ones included, without imgs/ and attach/."""
+        folders = []
+        for root, dirs, _files in os.walk(self.quizzes_dir):
+            relative = Path(os.path.relpath(root, self.quizzes_dir))
+            if relative == Path("."):
+                dirs[:] = [name for name in dirs if name not in self.MEDIA_FOLDERS]
+                continue
+            folders.append(relative.as_posix() + "/")
+        return sorted(folders)
+
+    def _resolve_new_folder(self, folder):
+        """Absolute path and "a/b/" name of a folder to create, or None when the name is not allowed."""
+        if not isinstance(folder, str):
+            return None
+        name = folder.replace("\\", "/").strip()
+        if name.startswith("/"):
+            return None
+        parts = name.rstrip("/").split("/")
+        if any(not self._is_valid_folder_part(part) for part in parts) or parts[0] in self.MEDIA_FOLDERS:
+            return None
+        base = os.path.realpath(self.quizzes_dir)
+        path = os.path.realpath(os.path.join(base, *parts))
+        if os.path.commonpath([base, path]) != base or path == base:
+            return None
+        return path, "/".join(parts) + "/"
+
+    @staticmethod
+    def _is_valid_folder_part(part):
+        # Names Windows accepts too: no reserved characters, no trailing dot or space, not "." or ".."
+        return (
+            bool(part.strip())
+            and part not in (".", "..")
+            and not part.endswith((".", " "))
+            and not re.search(r'[<>:"/\\|?*\x00-\x1f]', part)
+        )
+
     async def switch_quiz(self, quiz_filename: str):
         """Switch to a different quiz file and reset server state.
 
@@ -2914,6 +2954,7 @@ class TestingServer:
         return web.json_response(
             {
                 "quizzes": quizzes,
+                "folders": self.list_quiz_folders(),
                 "current_quiz": self._current_quiz_name(),
                 "force_all_completed": self.force_all_completed,
                 "show_answers_on_completion": self.show_answers_on_completion,
@@ -3164,6 +3205,76 @@ class TestingServer:
             return web.json_response(
                 {"filename": filename, "content": quiz_content, "parsed": None, "yaml_error": str(e)}
             )
+
+    @admin_auth_required
+    async def admin_create_folder(self, request):
+        """Create a folder (subfolders too) in quizzes/ for new quizzes: {folder: "grade5/algebra"}."""
+        data = await request.json()
+        resolved = self._resolve_new_folder(data.get("folder"))
+        if not resolved:
+            return web.json_response({"error": self._t("invalid_folder_name")}, status=400)
+        path, folder = resolved
+        if os.path.exists(path):
+            return web.json_response({"error": self._t("folder_exists", name=folder)}, status=409)
+        os.makedirs(path)
+        logger.info(f"Created quiz folder: {folder}")
+        return web.json_response({"success": True, "folder": folder, "message": self._t("folder_created", name=folder)})
+
+    def _existing_folder(self, folder):
+        """(path, "a/b/") of an existing quiz folder, or a json error response (quizzes/ itself is not allowed)."""
+        resolved = self._resolve_new_folder(folder)
+        if not resolved:
+            return web.json_response({"error": self._t("invalid_folder_name")}, status=400)
+        if not os.path.isdir(resolved[0]):
+            return web.json_response({"error": self._t("folder_not_found", name=resolved[1])}, status=404)
+        # The active quiz would lose its file
+        current = self._current_quiz_name()
+        if current and current.startswith(resolved[1]):
+            return web.json_response({"error": self._t("folder_in_use", name=resolved[1])}, status=409)
+        return resolved
+
+    @admin_auth_required
+    async def admin_rename_folder(self, request):
+        """Rename a quiz folder in place: {folder: "a/b/", new_name: "c"} -> "a/c/"."""
+        data = await request.json()
+        existing = self._existing_folder(data.get("folder"))
+        if isinstance(existing, web.Response):
+            return existing
+        path, folder = existing
+        new_name = data.get("new_name")
+        parent = folder[: folder.rstrip("/").rfind("/") + 1]
+        if not isinstance(new_name, str) or not new_name.strip() or "/" in new_name or "\\" in new_name:
+            return web.json_response({"error": self._t("invalid_folder_name")}, status=400)
+        resolved = self._resolve_new_folder(parent + new_name.strip())
+        if not resolved:
+            return web.json_response({"error": self._t("invalid_folder_name")}, status=400)
+        new_path, new_folder = resolved
+        if os.path.exists(new_path):
+            return web.json_response({"error": self._t("folder_exists", name=new_folder)}, status=409)
+        os.rename(path, new_path)
+        logger.info(f"Renamed quiz folder: {folder} -> {new_folder}")
+        return web.json_response(
+            {"success": True, "folder": new_folder, "message": self._t("folder_renamed", name=folder, new_name=new_folder)}
+        )
+
+    @admin_auth_required
+    async def admin_delete_folder(self, request):
+        """Delete a quiz folder with everything in it: {folder: "a/b/"}."""
+        data = await request.json()
+        existing = self._existing_folder(data.get("folder"))
+        if isinstance(existing, web.Response):
+            return existing
+        path, folder = existing
+        quizzes = sum(1 for pattern in ("*.yaml", "*.yml") for _ in Path(path).rglob(pattern))
+        shutil.rmtree(path)
+        logger.info(f"Deleted quiz folder: {folder} ({quizzes} quizzes)")
+        return web.json_response(
+            {
+                "success": True,
+                "deleted_quizzes": quizzes,
+                "message": self._t("folder_deleted", name=folder, count=quizzes),
+            }
+        )
 
     @admin_auth_required
     async def admin_create_quiz(self, request):
@@ -4702,6 +4813,9 @@ async def create_app(config: WebQuizConfig):
     app.router.add_post("/api/admin/switch-quiz", server.admin_switch_quiz)
     app.router.add_get("/api/admin/quiz/{filename}", server.admin_get_quiz)
     app.router.add_post("/api/admin/create-quiz", server.admin_create_quiz)
+    app.router.add_post("/api/admin/create-folder", server.admin_create_folder)
+    app.router.add_post("/api/admin/rename-folder", server.admin_rename_folder)
+    app.router.add_post("/api/admin/delete-folder", server.admin_delete_folder)
     app.router.add_put("/api/admin/quiz/{filename}", server.admin_update_quiz)
     app.router.add_delete("/api/admin/quiz/{filename}", server.admin_delete_quiz)
     app.router.add_post("/api/admin/unite-quizzes", server.admin_unite_quizzes)

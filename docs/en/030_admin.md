@@ -63,7 +63,8 @@ Click a row to see every question of the participant: the answer they gave (gree
 ### Quizzes
 
 - **Available Quiz Files**
-  The **Quizzes** card shows a tree of all quizzes in the `quizzes` folder: quizzes from subfolders are grouped into folders (folders start closed; click a folder or its `+`/`−` to open or close it, the number in brackets is how many quizzes it holds).
+  The **Quizzes** card shows a tree of all quizzes in the `quizzes` folder. The top row is the `quizzes` folder itself; quizzes from subfolders are grouped into folders, empty folders are shown too (folders start closed, the `+`/`−` opens or closes one, the number in brackets is how many quizzes it holds).
+  A click on a folder selects it (it is highlighted and opens): new quizzes and folders are created there. The selected folder is shown under the buttons (**New quizzes and folders are created in:**); a click on a quiz selects its folder, a click on the top `quizzes` row selects the `quizzes` folder itself.
   Each quiz shows its file, title, number of questions, total points, time limit and the settings that differ from the defaults: 🔀 Shuffle, ⏭ Can skip, 🙈 Right answers hidden (`show_right_answer: false`), 👁 Answers after everyone (`show_answers_on_completion: true`), 📋 No final list (`show_final_list: false`). On a phone the title is shown under the file name.
   The current active quiz is marked with a green **current** tag; its name is also shown above the table.
 
@@ -76,7 +77,13 @@ Click a row to see every question of the participant: the answer they gave (gree
 
 - **"New quiz" Button**
   Opens the interface for creating a new quiz in visual mode.
-  The new file will be added to the `quizzes` directory.
+  The new file is added to the selected folder.
+
+- **"New folder" Button**
+  Asks for a name and creates a folder inside the selected folder (so subfolders are made the same way). The new folder becomes the selected one.
+
+- **Renaming and deleting a folder**
+  Select a folder (not the top `quizzes` row): **Edit** renames it (it stays in its place with all its quizzes), **Delete** asks for a confirmation that shows how many quizzes are inside and removes the folder with everything in it. Both are disabled while the folder holds the active quiz.
 
 - **"Delete" Button**
   Deletes the selected quizzes from the file system after a confirmation.
@@ -188,7 +195,7 @@ The editor uses a visual wizard interface for easy question management.
 #### Quiz Settings
 
 - **Quiz Filename**
-  The filename for the quiz (without the `.yaml` extension). To put the quiz into a folder inside `quizzes/`, include the path, for example `grade5/math`; missing folders are created automatically. This also works when renaming an existing quiz and when uniting quizzes.
+  The filename for the quiz (without the `.yaml` extension), the name alone: `/` and `\` are not allowed. The folder is shown in front of the field: it is the folder selected in the quiz list for a new quiz, and the quiz's own folder when editing (renaming keeps the quiz in its folder). **Duplicate** puts the copy next to the original, **Unite quizzes** puts the result into the folder of the first selected quiz.
 
 - **Quiz Name (optional)**
   A human-readable title for the quiz. If not specified, the filename is used.
