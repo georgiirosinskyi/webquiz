@@ -176,7 +176,8 @@ def test_archive_api_lists_runs_with_live_numbers(temp_dir):
         assert run["answers"] == 1
         assert run["correct_percent"] == 100
         assert run["title"] == "Archive Quiz"
-        assert "server.log" in [f["name"] for f in run["files"]]
+        # The current run is flushed first: its CSV files are listed without waiting for the periodic flush
+        assert [f["name"] for f in run["files"]] == ["users.csv", "answers.csv", "server.log"]
 
 
 def test_archive_file_view_and_download(temp_dir):
@@ -291,7 +292,8 @@ def test_archive_run_downloads_as_zip(temp_dir):
 
     with custom_webquiz_server(quizzes={"quiz.yaml": QUIZ}) as (proc, port):
         cookies = get_admin_session(port)
-        requests.post(f"http://localhost:{port}/api/register", json={"username": "Олена"})
+        user_id = requests.post(f"http://localhost:{port}/api/register", json={"username": "Олена"}).json()["user_id"]
+        _answer(port, user_id, 1, 0)
         run = os.path.basename(latest_run_dir(port))
         assert requests.get(f"http://localhost:{port}/api/admin/archive-zip/{run}").status_code == 401
 

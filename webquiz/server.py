@@ -4320,6 +4320,10 @@ class TestingServer:
     async def admin_archive_list(self, request):
         """Runs in the archive, newest first; the current run gets its live numbers."""
         current = os.path.basename(self.run_dir) if self.run_dir else None
+        if current:
+            # The current run: its CSV files are listed before the periodic flush writes them
+            await self.flush_responses_to_csv()
+            await self.flush_users_to_csv()
         runs = archive.list_runs(self.archive_dir)
         for run in runs:
             run["current"] = run["name"] == current
@@ -4373,12 +4377,12 @@ class TestingServer:
         if not archive.is_valid_run_name(run) or not archive.is_valid_file_name(filename):
             return web.json_response({"error": self._t("invalid_filename")}, status=400)
         file_path = os.path.join(self.archive_dir, run, filename)
-        if not os.path.isfile(file_path):
-            return web.json_response({"error": self._t("file_not_found")}, status=404)
         if run == os.path.basename(self.run_dir or ""):
-            # The current run: show what is still in memory too
+            # The current run: show what is still in memory too (the file may not be written yet)
             await self.flush_responses_to_csv()
             await self.flush_users_to_csv()
+        if not os.path.isfile(file_path):
+            return web.json_response({"error": self._t("file_not_found")}, status=404)
 
         if request.query.get("download") and request.query.get("format") == "xlsx" and filename.endswith(".csv"):
             xlsx_name = f"{run}-{filename[: -len('.csv')]}.xlsx"
