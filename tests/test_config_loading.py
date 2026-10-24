@@ -352,6 +352,8 @@ def test_load_config_with_overrides_no_config_file():
             assert config is not None
             assert isinstance(config, WebQuizConfig)
             assert config.server.port == 8080
+            # The created file asks for admin approval of new users
+            assert config.registration.approve is True
         finally:
             # Leave tmpdir before it is removed: Windows cannot delete the cwd
             os.chdir(original_cwd)

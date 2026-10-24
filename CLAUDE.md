@@ -214,7 +214,7 @@ webquiz-stress-test -c 50
   - `server.port` - Port the server listens on (default: 8080). CLI `--port` overrides it
   - `server.include_ipv6: true` - Include IPv6 addresses in network interfaces list (default: false)
   - `server.url_format` - URL format for admin panel network access URLs (default: `http://{IP}:{PORT}/`). Placeholders: `{IP}`, `{PORT}`. Example for reverse proxy: `http://{IP}/webquiz/`
-  - `registration.approve: true` - Admin approval required, timing starts on approval (default: false)
+  - `registration.approve: true` - Admin approval required, timing starts on approval (default: false; the `webquiz.yaml` created from `server_config.yaml.example` on the first start has `true`)
   - `registration.username_label` - Customize username field label (default: empty = falls back to language translation, "Ім'я користувача" for uk / "Username" for en)
   - `registration.fields` - List of additional registration fields shown to users (default: empty)
   - `registration.field_options` - `{field label: [values]}`: the field is an antd `Select` on the quiz page (registration form and the edit dialog, `FieldSelect`) in this order; register/update-registration accept only a listed value (400 `server_field_not_in_list`). Page data `registrationFields[].options`, `_admin_quiz_info.field_options` {field name: values} for `fieldSorter(name, options)` on the overview (list order, other values after). The Settings form shows the values as a nested `Form.List` under each field, closed until its toggle opens it (add, edit, remove, move up/down); `formToConfig` always sends `field_options`. Hot-reloadable

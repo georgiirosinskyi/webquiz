@@ -137,6 +137,7 @@ This section defines how users register before taking quizzes.
 - **approve**
   If set to `true`, the user will not be able to start the quiz immediately after filling out the form — their request will be added to a waiting list, and the administrator must approve it manually. Until then the user can correct the name and the other fields: a click on the name at the top of the page (with the ✎ icon) opens a dialog (**Save changes**); the administrator sees the new data right away. Once the administrator approves the user, the data can no longer be changed and an open dialog closes by itself.
   If the value is `false`, the user can start the quiz immediately after registration.
+  The `webquiz.yaml` the server creates on the first start has `approve: true`; without this line in the file it is `false`.
 
 - **username_label**
   Customizes the label text for the username input field in the registration form.
