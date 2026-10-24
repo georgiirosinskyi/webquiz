@@ -311,7 +311,10 @@ body {
   position: relative;
 }
 
+/* antd turns pointer events off on .ant-modal outside its content: without this the press goes
+   through to the modal wrapper, which closes the viewer like a click on the mask */
 .modal-resize-handle {
+  pointer-events: auto;
   position: absolute;
   right: 2px;
   bottom: 2px;

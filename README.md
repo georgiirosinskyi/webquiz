@@ -278,7 +278,7 @@ The project has **222+ tests** across **15 test files** covering:
 - **Admin Quiz Editor** (7 tests): Wizard mode quiz creation with randomize_questions and show_answers_on_completion
 - **Config Management** (23 tests): Config editor, validation, and form-based JSON updates
 - **Registration Approval** (21 tests + 3 Selenium): Approval workflow, timing and editing the data while waiting
-- **Archive** (`test_archive.py`): Run folders, summary, per-run log, archive API, quiz file download
+- **Archive** (`test_archive.py`, `test_selenium_files_page.py`): Run folders, summary, per-run log, archive API, quiz file download, resizing the CSV viewer
 - **Admin Overview** (6 + 3 Selenium tests): Live participant records on the admin WebSocket and the overview page (`test_admin_overview_websocket.py`, `test_selenium_admin_overview.py`)
 - **SSH Tunnel** (31 tests): Key generation, config fetch, connect/disconnect (`test_tunnel.py`)
 - **File Transfer** (59 tests): Sending files between servers through the tunnel (`test_transfer.py`, `test_transfer_api.py`)

@@ -6,7 +6,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
 from conftest import custom_webquiz_server, get_admin_session, get_page_data
-from selenium_helpers import skip_if_selenium_disabled, browser
+from selenium_helpers import skip_if_selenium_disabled, browser, wait_for_modal
 
 
 def login(browser, base_url, path="/files/", ready='[data-testid="archive-table"]'):
@@ -37,6 +37,36 @@ def test_archive_shows_run_and_its_csv(browser):
         WebDriverWait(browser, 10).until(
             lambda d: "Olena" in d.find_element(By.CSS_SELECTOR, '[data-testid="csv-table"]').get_attribute("textContent")
         )
+
+
+@skip_if_selenium_disabled
+def test_csv_viewer_resizes_by_the_corner(browser):
+    """Dragging the bottom right corner makes the table viewer wider and taller"""
+    from selenium.webdriver.common.action_chains import ActionChains
+
+    with custom_webquiz_server(config={"language": "en"}) as (proc, port):
+        base_url = f"http://localhost:{port}"
+        user_id = requests.post(f"{base_url}/api/register", json={"username": "Olena"}).json()["user_id"]
+        requests.post(f"{base_url}/api/submit-answer", json={"user_id": user_id, "question_id": 1, "selected_answer": 1})
+        login(browser, base_url)
+        browser.find_element(By.XPATH, "//div[@data-testid='archive-table']//tr[.//*[text()='Test Quiz']]").click()
+        users_card = WebDriverWait(browser, 10).until(
+            lambda d: d.find_element(By.CSS_SELECTOR, '[data-testid="archive-file"][data-file="users.csv"]')
+        )
+        users_card.find_element(By.XPATH, ".//button[contains(., 'View')]").click()
+        WebDriverWait(browser, 10).until(lambda d: d.find_elements(By.CSS_SELECTOR, '[data-testid="csv-table"]'))
+        wait_for_modal(browser)
+
+        modal = browser.find_element(By.CSS_SELECTOR, ".resizable-modal")
+        before = modal.size
+        handle = browser.find_element(By.CSS_SELECTOR, ".modal-resize-handle")
+        ActionChains(browser).click_and_hold(handle).move_by_offset(60, 50).move_by_offset(60, 50).release().perform()
+
+        def modal_size():
+            return browser.find_element(By.CSS_SELECTOR, ".resizable-modal").size
+
+        WebDriverWait(browser, 5).until(lambda d: modal_size()["width"] > before["width"] + 80, message=f"{before} -> {modal_size()}")
+        assert modal_size()["height"] > before["height"] + 60, f"{before} -> {modal_size()}"
 
 
 @skip_if_selenium_disabled
