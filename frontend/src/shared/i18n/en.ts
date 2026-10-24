@@ -302,7 +302,6 @@ export const en: Record<MessageKey, string> = {
   "access.projector": "For the projector",
   "projector.title": "Addresses to connect",
   "projector.open_in_browser": "Open in a browser or scan the code:",
-  "projector.from_internet": "from the internet",
   "projector.fullscreen": "Full screen",
   "access.title": "🌐 Access",
   "access.urls": "Addresses for other devices:",

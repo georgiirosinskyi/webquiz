@@ -6,8 +6,8 @@ export interface AdminPageData {
   networkUrls: string[];
   downloadableQuizzes: DownloadableQuiz[];
   tunnelPublicKey: string;
-  // The projector page: the public tunnel URL (while connected) and the current quiz title, when it was opened
-  publicUrl?: string | null;
+  // The projector page: the one local address picked for it and the current quiz title, when it was opened
+  projectorUrl?: string | null;
   currentQuizTitle?: string | null;
   configPath: string | null;
   configContent: string | null;

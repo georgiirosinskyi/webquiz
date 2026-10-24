@@ -85,11 +85,13 @@ def test_admin_sections_serve_the_admin_app(temp_dir):
 
 
 def test_admin_page_data_for_the_projector(temp_dir):
-    """The projector page is static: the current quiz title and the public URL come with the page."""
+    """The projector page is static: the current quiz title comes with the page (only local addresses)."""
     with custom_webquiz_server(quizzes=QUIZ) as (proc, port):
         data = injected_data(requests.get(f"http://localhost:{port}/admin/projector").text)["page"]
         assert data["currentQuizTitle"] == "UI Quiz"
-        assert data["publicUrl"] is None  # no tunnel
+        assert "publicUrl" not in data
+        # One local address (or none on a computer without network interfaces)
+        assert data["projectorUrl"] is None or data["projectorUrl"] in data["networkUrls"]
         assert isinstance(data["networkUrls"], list)
 
 

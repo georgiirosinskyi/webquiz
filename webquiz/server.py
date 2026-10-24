@@ -548,6 +548,44 @@ def get_network_interfaces(include_ipv6=False):
     return list(set(interfaces))  # Remove duplicates
 
 
+def get_route_ip():
+    """The local address the computer reaches other networks through (the default route), or None.
+
+    A UDP socket "connected" to a public address only picks the route, nothing is sent.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(("8.8.8.8", 80))
+            return probe.getsockname()[0]
+    except OSError:
+        return None
+
+
+def pick_projector_ip(ips, route_ip):
+    """One address for the projector page out of all interfaces.
+
+    The default route address when it is one of them; otherwise a private network in the order
+    192.168.x.x, 10.x.x.x, 172.16-31.x.x (virtual adapters of Hyper-V, WSL or Docker usually
+    take 172.x), then anything else. None without addresses.
+    """
+    if not ips:
+        return None
+    if route_ip in ips:
+        return route_ip
+
+    def rank(ip):
+        try:
+            address = ipaddress.ip_address(ip)
+        except ValueError:
+            return 4
+        for index, network in enumerate(("192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12")):
+            if address in ipaddress.ip_network(network):
+                return index
+        return 3
+
+    return sorted(ips, key=lambda ip: (rank(ip), ip))[0]
+
+
 def admin_auth_required(func):
     """Decorator to require session cookie authentication for admin endpoints.
 
@@ -4682,12 +4720,13 @@ class TestingServer:
             status=409,
         )
 
-    def _public_url(self):
-        """The public tunnel URL while the tunnel is connected, else None."""
-        if not self.tunnel_manager:
+    def _projector_url(self, interfaces):
+        """The URL of the address picked for the projector page, or None without network interfaces."""
+        ip = pick_projector_ip(interfaces, get_route_ip())
+        if ip is None:
             return None
-        status = self.tunnel_manager.get_status()
-        return status.get("url") if status.get("connected") else None
+        port = str(self.config.server.port)
+        return normalize_url(self.config.server.url_format.replace("{IP}", ip).replace("{PORT}", port))
 
     @local_network_only
     async def serve_admin_page(self, request):
@@ -4741,8 +4780,9 @@ class TestingServer:
             "networkUrls": urls,
             "downloadableQuizzes": downloadable_quizzes,
             "tunnelPublicKey": tunnel_public_key,
-            # For the projector page (a static page: it shows what was true when it was opened)
-            "publicUrl": self._public_url(),
+            # For the projector page (a static page: it shows what was true when it was opened):
+            # one local address, the current quiz title
+            "projectorUrl": self._projector_url(interfaces),
             "currentQuizTitle": getattr(self, "quiz_title", None) if self.current_quiz_file else None,
             **self._config_page_data(),
         }

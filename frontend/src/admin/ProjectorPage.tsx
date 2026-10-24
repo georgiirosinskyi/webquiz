@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, QRCode } from "antd";
 import { FullscreenOutlined } from "@ant-design/icons";
 import { t } from "../shared/i18n";
-import { addressFontSize, displayUrl, projectorUrls } from "./projector";
+import { addressFontSize, displayUrl } from "./projector";
 
 function useWindowSize() {
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -14,23 +14,15 @@ function useWindowSize() {
   return size;
 }
 
-// The access addresses for a projector or a TV: huge text and QR codes, readable from the back rows.
-// A static page: it shows what was true when it was opened (open it again after a change).
-export function ProjectorPage({
-  urls,
-  publicUrl,
-  quizTitle,
-}: {
-  urls: string[];
-  publicUrl?: string | null;
-  quizTitle?: string | null;
-}) {
+// The local network address for a projector or a TV (a class is usually on the local network):
+// huge text and a QR code, readable from the back rows. The server picks one address
+// (pick_projector_ip). A static page: it shows what was true when it was opened.
+export function ProjectorPage({ url, quizTitle }: { url?: string | null; quizTitle?: string | null }) {
   const { width, height } = useWindowSize();
   const [fullscreen, setFullscreen] = useState(!!document.fullscreenElement);
-  const items = projectorUrls(urls, publicUrl);
-  const fontSize = addressFontSize(items.length, width);
-  // Side by side, each code as large as the window allows
-  const qrSize = Math.round(Math.max(160, Math.min(height * 0.42, (width * 0.8) / Math.max(items.length, 1))));
+  const fontSize = addressFontSize(width);
+  // The code as large as the window allows next to the texts
+  const qrSize = Math.round(Math.max(160, Math.min(height * 0.45, width * 0.8)));
 
   useEffect(() => {
     document.title = `${t("projector.title")} · WebQuiz`;
@@ -49,21 +41,12 @@ export function ProjectorPage({
       <div className="projector-call" style={{ fontSize: Math.round(fontSize * 0.45) }}>
         {t("projector.open_in_browser")}
       </div>
-      {items.length > 0 ? (
-        <div className="projector-urls">
-          {items.map((item) => (
-            <div key={item.url} className={`projector-url${item.public ? " public" : ""}`} data-testid="projector-url">
-              <QRCode value={item.url} size={qrSize} bordered={false} errorLevel="M" />
-              <div className="projector-address" style={{ fontSize }}>
-                {displayUrl(item.url)}
-              </div>
-              {item.public && (
-                <div className="projector-note" style={{ fontSize: Math.round(fontSize * 0.35) }}>
-                  {t("projector.from_internet")}
-                </div>
-              )}
-            </div>
-          ))}
+      {url ? (
+        <div className="projector-url" data-testid="projector-url">
+          <QRCode value={url} size={qrSize} bordered={false} errorLevel="M" />
+          <div className="projector-address" style={{ fontSize }}>
+            {displayUrl(url)}
+          </div>
         </div>
       ) : (
         <div className="projector-empty" style={{ fontSize: Math.round(fontSize * 0.5) }} data-testid="projector-empty">

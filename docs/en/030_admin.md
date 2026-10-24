@@ -103,7 +103,7 @@ Click a row to see every question of the participant: the answer they gave (gree
   When an SSH tunnel is connected, an external URL is also shown with a green background.
 
 - **"For the projector" Button**
-  Opens a separate page (`/admin/projector`) in a new tab to show on a projector or a TV: the current quiz title and every address in huge letters with a large QR code, so people in the back rows can read or scan it (the tunnel address comes first, marked "from the internet"). Click **Full screen** (or press F11). The page does not update itself: after connecting the tunnel or switching the quiz, open it again.
+  Opens a separate page (`/admin/projector`) in a new tab to show on a projector or a TV: the current quiz title and one local network address in huge letters with a large QR code, so people in the back rows can read or scan it. It is the address the computer reaches the network through (virtual adapters are left out); a class is usually on the local network, so the tunnel address is not shown. Click **Full screen** (or press F11). The page does not update itself: after switching the quiz, open it again.
 
 - **SSH Tunnel**
   This section appears only if the `tunnel` section is configured in `webquiz.yaml` (see [Configuration](040_config.md) for details).

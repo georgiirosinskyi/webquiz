@@ -364,14 +364,6 @@ body {
   line-height: 1.2;
 }
 
-.projector-urls {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 4vw;
-  width: 100%;
-}
-
 .projector-url {
   display: flex;
   flex-direction: column;
@@ -389,15 +381,6 @@ body {
   max-width: 100%;
 }
 
-.projector-url.public .projector-address {
-  color: #237804;
-}
-
-.projector-note {
-  color: #237804;
-  font-weight: 600;
-}
-
 .projector-empty {
   color: #ad6800;
   font-weight: 600;
@@ -407,11 +390,4 @@ body {
   position: absolute;
   top: 16px;
   right: 16px;
-}
-
-@media (max-width: 768px) {
-  .projector-urls {
-    flex-direction: column;
-    align-items: center;
-  }
 }

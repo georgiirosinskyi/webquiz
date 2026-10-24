@@ -11,7 +11,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from webquiz.server import get_network_interfaces, is_loopback_address
+from webquiz.server import get_network_interfaces, is_loopback_address, pick_projector_ip
 
 
 class TestIsLoopbackAddress:
@@ -286,3 +286,24 @@ class TestPort80Normalization:
         # :8080 should not be touched because we replace ":80/" not ":80"
         assert normalize_url("http://192.168.1.100:8080/") == "http://192.168.1.100:8080/"
         assert normalize_url("http://192.168.1.100:800/") == "http://192.168.1.100:800/"
+
+
+class TestPickProjectorIp:
+    """One address for the projector page: the one the computer reaches the network through."""
+
+    def test_the_route_address_wins(self):
+        ips = ["172.20.48.1", "192.168.0.105", "10.5.0.2"]
+        assert pick_projector_ip(ips, "10.5.0.2") == "10.5.0.2"
+
+    def test_without_a_route_a_home_or_school_network_is_preferred(self):
+        # Virtual adapters (Hyper-V, WSL, Docker) usually take 172.16.0.0/12
+        ips = ["172.20.48.1", "10.0.75.1", "192.168.1.20", "172.17.0.1"]
+        assert pick_projector_ip(ips, None) == "192.168.1.20"
+        assert pick_projector_ip(["172.20.48.1", "10.0.75.1"], None) == "10.0.75.1"
+        assert pick_projector_ip(["172.20.48.1"], None) == "172.20.48.1"
+
+    def test_a_route_address_that_is_not_listed_is_ignored(self):
+        assert pick_projector_ip(["192.168.1.20"], "100.64.0.5") == "192.168.1.20"
+
+    def test_no_addresses(self):
+        assert pick_projector_ip([], "192.168.1.20") is None

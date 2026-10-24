@@ -289,7 +289,7 @@ export function AdminApp() {
   return (
     <AdminAuth title={t("auth.title")} isTrustedIp={page.isTrustedIp}>
       {projector ? (
-        <ProjectorPage urls={page.networkUrls} publicUrl={page.publicUrl} quizTitle={page.currentQuizTitle} />
+        <ProjectorPage url={page.projectorUrl} quizTitle={page.currentQuizTitle} />
       ) : (
         <AdminShell />
       )}

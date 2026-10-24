@@ -69,13 +69,13 @@ def test_menu_switches_sections_without_reload(temp_dir, browser):
 
 @skip_if_selenium_disabled
 def test_projector_page_shows_the_addresses_large(temp_dir, browser):
-    """"For the projector" opens a page of its own: no menu, the addresses in huge letters with QR codes"""
+    """"For the projector" opens a page of its own: no menu, one local address in huge letters with a QR code"""
     import requests
     from conftest import get_page_data
 
     with custom_webquiz_server() as (proc, port):
         admin_login(browser, port, section="access")
-        network_urls = get_page_data(requests.get(f"http://localhost:{port}/admin/access").text)["page"]["networkUrls"]
+        projector_url = get_page_data(requests.get(f"http://localhost:{port}/admin/access").text)["page"]["projectorUrl"]
         first_window = browser.current_window_handle
 
         wait_for_element(browser, By.CSS_SELECTOR, '[data-testid="projector-btn"]').click()
@@ -87,11 +87,11 @@ def test_projector_page_shows_the_addresses_large(temp_dir, browser):
         assert not browser.find_elements(By.CSS_SELECTOR, '[data-testid="admin-panel"]')
         assert "Test Quiz" in browser.find_element(By.CSS_SELECTOR, ".projector-quiz").text
         addresses = browser.find_elements(By.CSS_SELECTOR, '[data-testid="projector-url"] .projector-address')
-        if network_urls:
-            shown = [el.text for el in addresses]
-            assert shown == [url.split("://", 1)[1].rstrip("/") for url in network_urls]
-            assert len(browser.find_elements(By.CSS_SELECTOR, '[data-testid="projector-url"] canvas')) == len(network_urls)
+        if projector_url:
+            assert [el.text for el in addresses] == [projector_url.split("://", 1)[1].rstrip("/")]
+            assert len(browser.find_elements(By.CSS_SELECTOR, '[data-testid="projector-url"] canvas')) == 1
             size = float(addresses[0].value_of_css_property("font-size").replace("px", ""))
             assert size >= 28
+            assert not browser.find_elements(By.CSS_SELECTOR, '[data-testid="projector-empty"]')
         else:
             assert browser.find_element(By.CSS_SELECTOR, '[data-testid="projector-empty"]').is_displayed()
