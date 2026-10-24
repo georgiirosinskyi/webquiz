@@ -345,6 +345,7 @@ ADMIN_TRANSLATIONS = {
         # Configuration file
         "no_config_file": "Файл конфігурації не задано. Сервер запущено без параметра --config.",
         "data_not_dict": "data має бути словником",
+        "settings_file_invalid": "У файлі немає налаштувань WebQuiz (мова, реєстрація, фон...)",
         "invalid_yaml_syntax": "Неправильний синтаксис YAML: {error}",
         "config_invalid": "Конфігурація не пройшла перевірку",
         "config_apply_failed": "Не вдалося застосувати конфігурацію: {error}. Зміни скасовано.",
@@ -503,6 +504,7 @@ ADMIN_TRANSLATIONS = {
         # Configuration file
         "no_config_file": "No config file was specified. Server started without --config parameter.",
         "data_not_dict": "data must be a dictionary",
+        "settings_file_invalid": "The file has no WebQuiz settings (language, registration, background...)",
         "invalid_yaml_syntax": "Invalid YAML syntax: {error}",
         "config_invalid": "Configuration validation failed",
         "config_apply_failed": "Failed to apply configuration: {error}. Changes rolled back.",

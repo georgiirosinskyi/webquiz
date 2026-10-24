@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { configToForm, formToConfig, parseTransferKey, transferKey } from "./types";
+import { configToForm, formToConfig, mergeImportedConfig, parseTransferKey, transferKey } from "./types";
 
 describe("transfer keys", () => {
   it("keeps slashes of quiz subfolders in the name", () => {
@@ -94,5 +94,24 @@ describe("config form", () => {
       background_color: "#1f2937",
       background_image: "/imgs/a.jpg",
     });
+  });
+});
+
+describe("settings import", () => {
+  it("replaces the sections found in the file and keeps the others", () => {
+    const current = configToForm({
+      language: "en",
+      extra_answers_with_users_csv: true,
+      registration: { approve: false, fields: ["Grade"] },
+      appearance: { background_color: "#111111", background_image: "" },
+    });
+    const merged = mergeImportedConfig(current, {
+      registration: { approve: true, fields: ["Level"], field_options: { Level: ["first", "second"] } },
+    });
+    expect(merged.language).toBe("en");
+    expect(merged.extra_answers_with_users_csv).toBe(true);
+    expect(merged.background_color).toBe("#111111");
+    expect(merged.approve).toBe(true);
+    expect(merged.fields).toEqual([{ name: "Level", enabled: true, options: ["first", "second"] }]);
   });
 });

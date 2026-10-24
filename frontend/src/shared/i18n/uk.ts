@@ -407,6 +407,12 @@ export const uk = {
   "settings.field_options_hint":
     "Якщо задати полю значення, користувач вибирає одне з них зі списку замість введення тексту. Список і сортування в огляді йдуть у тому ж порядку; без значень поле приймає довільний текст.",
   "settings.add_option": "Додати значення",
+  "settings.export": "Експорт",
+  "settings.import": "Імпорт",
+  "settings.export_failed": "Не вдалося експортувати налаштування",
+  "settings.import_failed": "Не вдалося імпортувати налаштування",
+  "settings.imported": "Налаштування з файлу {name} перенесено у форму. Перевірте їх і натисніть «Зберегти налаштування».",
+  "settings.import_ignored": "Пропущено (ці налаштування не імпортуються): {keys}",
   "settings.option_up": "Вище",
   "settings.option_down": "Нижче",
   "settings.option_remove": "Видалити значення",

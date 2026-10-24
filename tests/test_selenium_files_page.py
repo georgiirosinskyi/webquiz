@@ -137,6 +137,53 @@ def test_config_form_edits_the_values_of_a_field(browser):
 
 
 @skip_if_selenium_disabled
+def test_settings_export_and_import(browser, tmp_path):
+    """Export gives the form settings as YAML; import fills the form, saving writes it"""
+    config = {"registration": {"fields": ["Відділ"], "field_options": {"Відділ": ["перший", "другий"]}}}
+    with custom_webquiz_server(config=config) as (proc, port):
+        base_url = f"http://localhost:{port}"
+        login(browser, base_url, "/admin/settings", '[data-testid="cfg-reg-fields-list"]')
+
+        # The exported file is caught where the page hands it to the browser
+        browser.execute_script(
+            """
+            window.__exported = null;
+            const original = URL.createObjectURL;
+            URL.createObjectURL = (blob) => { blob.text().then((text) => { window.__exported = text; }); return original(blob); };
+            """
+        )
+        browser.find_element(By.CSS_SELECTOR, '[data-testid="cfg-export"]').click()
+        exported = WebDriverWait(browser, 10).until(lambda d: d.execute_script("return window.__exported"))
+        settings = yaml.safe_load(exported)
+        assert settings["registration"]["field_options"] == {"Відділ": ["перший", "другий"]}
+        assert "admin" not in settings and "server" not in settings
+
+        settings_file = tmp_path / "other.yaml"
+        settings_file.write_text(
+            yaml.safe_dump(
+                {"admin": {"master_key": "ignored"}, "registration": {"approve": True, "fields": ["Посада"]}},
+                allow_unicode=True,
+            ),
+            encoding="utf-8",
+        )
+        file_input = browser.find_element(By.CSS_SELECTOR, '[data-testid="cfg-import-file"]')
+        browser.execute_script("arguments[0].hidden = false;", file_input)
+        file_input.send_keys(str(settings_file))
+
+        WebDriverWait(browser, 10).until(lambda d: "admin" in d.find_element(By.CSS_SELECTOR, ".ant-alert-success").text)
+        names = [el.get_attribute("value") for el in browser.find_elements(By.CSS_SELECTOR, "input.cfg-reg-field-name")]
+        assert names == ["Посада"]
+
+        browser.find_element(By.XPATH, "//button[contains(., 'Зберегти налаштування')]").click()
+        WebDriverWait(browser, 15).until(lambda d: "збережено" in d.find_element(By.CSS_SELECTOR, ".ant-alert-success").text.lower())
+        html = requests.get(f"{base_url}/files/", cookies=get_admin_session(port)).text
+        saved = yaml.safe_load(get_page_data(html)["page"]["configContent"])
+        assert saved["registration"]["fields"] == ["Посада"]
+        assert saved["registration"]["approve"] is True
+        assert saved.get("admin", {}).get("master_key") != "ignored"
+
+
+@skip_if_selenium_disabled
 def test_settings_form_sets_quiz_background(browser):
     with custom_webquiz_server() as (proc, port):
         base_url = f"http://localhost:{port}"

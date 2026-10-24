@@ -409,6 +409,12 @@ export const en: Record<MessageKey, string> = {
   "settings.field_options_hint":
     "With values, a user chooses one of them from a list instead of typing. The list and the sorting on the overview follow the same order; without values the field takes any text.",
   "settings.add_option": "Add value",
+  "settings.export": "Export",
+  "settings.import": "Import",
+  "settings.export_failed": "Could not export the settings",
+  "settings.import_failed": "Could not import the settings",
+  "settings.imported": "The settings from {name} are in the form. Check them and click \"Save configuration\".",
+  "settings.import_ignored": "Skipped (these settings are not imported): {keys}",
   "settings.option_up": "Up",
   "settings.option_down": "Down",
   "settings.option_remove": "Remove value",

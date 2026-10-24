@@ -88,6 +88,11 @@ export function configToForm(config: ConfigData | null): ConfigFormValues {
   };
 }
 
+// The form after importing a settings file: the sections found in the file replace the form's, the rest stays
+export function mergeImportedConfig(values: ConfigFormValues, imported: Partial<ConfigData>): ConfigFormValues {
+  return configToForm({ ...formToConfig(values), ...imported } as ConfigData);
+}
+
 export function formToConfig(values: ConfigFormValues) {
   const fields = (values.fields || [])
     .map((field) => ({

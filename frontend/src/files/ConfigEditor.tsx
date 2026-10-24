@@ -1,21 +1,23 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Alert, App, Button, Card, Checkbox, ColorPicker, Flex, Form, Input, Segmented, Select, Space, Typography } from "antd";
 import type { Color } from "antd/es/color-picker";
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
   DeleteOutlined,
+  DownloadOutlined,
   DownOutlined,
   PictureOutlined,
   PlusOutlined,
   RightOutlined,
   SaveOutlined,
+  UploadOutlined,
 } from "@ant-design/icons";
 import { ImagePicker } from "../admin/Pickers";
-import { apiSend } from "../shared/api";
+import { apiSend, saveBlob } from "../shared/api";
 import { t } from "../shared/i18n";
 import { DEFAULT_BACKGROUND_COLOR } from "../shared/background";
-import { configToForm, formToConfig, type ConfigData, type ConfigFormValues } from "./types";
+import { configToForm, formToConfig, mergeImportedConfig, type ConfigData, type ConfigFormValues } from "./types";
 
 type View = "form" | "yaml";
 type Feedback = { type: "success" | "error"; text: string; details?: string[] } | null;
@@ -94,6 +96,48 @@ export function ConfigEditor({
     }
   };
 
+  // Settings of the form as a file (never the master key, server or paths), and back into the form
+  const importInput = useRef<HTMLInputElement>(null);
+
+  const exportSettings = async () => {
+    setFeedback(null);
+    try {
+      const result = await apiSend<{ content: string; filename: string }>("POST", "/api/admin/config/export", {
+        data: formToConfig(form.getFieldsValue(true)),
+      });
+      if (result.ok) {
+        saveBlob(new Blob([result.data.content], { type: "application/x-yaml" }), result.data.filename);
+      } else {
+        setFeedback({ type: "error", text: result.data.error || t("settings.export_failed"), details: result.data.errors });
+      }
+    } catch (error) {
+      setFeedback({ type: "error", text: t("common.error", { error: (error as Error).message }) });
+    }
+  };
+
+  const importSettings = async (file: File) => {
+    setFeedback(null);
+    try {
+      const result = await apiSend<{ data: Partial<ConfigData>; ignored: string[] }>("POST", "/api/admin/config/import", {
+        content: await file.text(),
+      });
+      if (!result.ok) {
+        setFeedback({ type: "error", text: result.data.error || t("settings.import_failed"), details: result.data.errors });
+        return;
+      }
+      // Into the form only: the admin looks at it and saves
+      form.setFieldsValue(mergeImportedConfig(form.getFieldsValue(true), result.data.data));
+      setFormDirty(true);
+      setFeedback({
+        type: "success",
+        text: t("settings.imported", { name: file.name }),
+        details: result.data.ignored.length > 0 ? [t("settings.import_ignored", { keys: result.data.ignored.join(", ") })] : undefined,
+      });
+    } catch (error) {
+      setFeedback({ type: "error", text: t("common.error", { error: (error as Error).message }) });
+    }
+  };
+
   const save = async () => {
     setFeedback(null);
     setSaving(true);
@@ -132,14 +176,39 @@ export function ConfigEditor({
         <strong>{t("settings.config_file")}</strong> <Typography.Text type="secondary">{configPath}</Typography.Text>
       </Typography.Text>
 
-      <Segmented<View>
-        value={view}
-        onChange={switchView}
-        options={[
-          { value: "form", label: t("settings.form") },
-          { value: "yaml", label: "YAML" },
-        ]}
-      />
+      <Flex justify="space-between" align="center" gap={8} wrap>
+        <Segmented<View>
+          value={view}
+          onChange={switchView}
+          options={[
+            { value: "form", label: t("settings.form") },
+            { value: "yaml", label: "YAML" },
+          ]}
+        />
+        {view === "form" && (
+          <Space wrap>
+            <Button icon={<DownloadOutlined />} onClick={exportSettings} data-testid="cfg-export">
+              {t("settings.export")}
+            </Button>
+            <Button icon={<UploadOutlined />} onClick={() => importInput.current?.click()} data-testid="cfg-import">
+              {t("settings.import")}
+            </Button>
+            <input
+              ref={importInput}
+              type="file"
+              accept=".yaml,.yml"
+              hidden
+              data-testid="cfg-import-file"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                // The same file can be chosen again
+                event.target.value = "";
+                if (file) importSettings(file);
+              }}
+            />
+          </Space>
+        )}
+      </Flex>
 
       <div style={{ display: view === "form" ? undefined : "none" }}>
         <Form

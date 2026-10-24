@@ -84,6 +84,11 @@ UI_PAGES = ["admin.html", "quiz.html"]
 HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
 
+# Top-level config keys the settings form edits: the ones a settings file exports and imports
+# (never the master key, server or paths)
+FORM_CONFIG_KEYS = ("language", "extra_answers_with_users_csv", "question_navigation", "registration", "appearance")
+
+
 def config_form_data(parsed) -> dict:
     """Parts of a parsed config file the settings form edits (language, CSV, registration, appearance)."""
     if not isinstance(parsed, dict):
@@ -3833,6 +3838,39 @@ class TestingServer:
 
         return len(errors) == 0
 
+    @admin_auth_required
+    async def admin_export_config(self, request):
+        """The settings of the form as a YAML file: {data: {...}} -> {content, filename}."""
+        data = (await request.json()).get("data")
+        if not isinstance(data, dict):
+            return web.json_response({"error": self._t("data_not_dict")}, status=400)
+        settings = {key: data[key] for key in FORM_CONFIG_KEYS if key in data}
+        errors = []
+        if not self._validate_config_data(settings, errors):
+            return web.json_response({"error": self._t("config_invalid"), "errors": errors}, status=400)
+        content = yaml.safe_dump(settings, allow_unicode=True, sort_keys=False, default_flow_style=False)
+        return web.json_response({"content": content, "filename": "webquiz-settings.yaml"})
+
+    @admin_auth_required
+    async def admin_import_config(self, request):
+        """Read a settings file (or a whole webquiz.yaml) for the form without saving it.
+
+        {content: yaml} -> {data: the form sections found in it, ignored: other top-level keys}
+        """
+        content = (await request.json()).get("content")
+        try:
+            parsed = yaml.safe_load(content) if isinstance(content, str) else None
+        except yaml.YAMLError as e:
+            return web.json_response({"error": self._t("invalid_yaml_syntax", error=str(e))}, status=400)
+        settings = {key: parsed[key] for key in FORM_CONFIG_KEYS if key in parsed} if isinstance(parsed, dict) else {}
+        if not settings:
+            return web.json_response({"error": self._t("settings_file_invalid")}, status=400)
+        errors = []
+        if not self._validate_config_data(settings, errors):
+            return web.json_response({"error": self._t("config_invalid"), "errors": errors}, status=400)
+        ignored = sorted(str(key) for key in parsed if key not in FORM_CONFIG_KEYS)
+        return web.json_response({"data": settings, "ignored": ignored})
+
     def _validate_config_data(self, data, errors=None):
         """Validate server configuration data structure.
 
@@ -4862,6 +4900,8 @@ async def create_app(config: WebQuizConfig):
     app.router.add_get("/api/admin/list-checker-templates", server.admin_list_checker_templates)
     app.router.add_post("/api/admin/download-quiz", server.admin_download_quiz)
     app.router.add_put("/api/admin/config", server.admin_update_config)
+    app.router.add_post("/api/admin/config/export", server.admin_export_config)
+    app.router.add_post("/api/admin/config/import", server.admin_import_config)
 
     # Tunnel routes
     app.router.add_post("/api/admin/tunnel/connect", server.tunnel_connect)

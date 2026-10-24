@@ -58,7 +58,13 @@ export async function downloadFile(url: string, filename: string): Promise<strin
       return `HTTP ${response.status}`;
     }
   }
-  const blobUrl = URL.createObjectURL(await response.blob());
+  saveBlob(await response.blob(), filename);
+  return null;
+}
+
+// Hand a file made on the page to the browser as a download
+export function saveBlob(blob: Blob, filename: string) {
+  const blobUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = blobUrl;
   link.download = filename;
@@ -66,7 +72,6 @@ export async function downloadFile(url: string, filename: string): Promise<strin
   link.click();
   link.remove();
   URL.revokeObjectURL(blobUrl);
-  return null;
 }
 
 // "error: a, b" from {error, errors} responses.

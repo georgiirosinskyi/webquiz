@@ -180,6 +180,8 @@ The **Settings** section provides two ways to edit the server configuration:
 
 Use the **Form** / **YAML** toggle to switch between views. If you have unsaved changes, you will be asked to confirm before switching. After saving, both views are automatically updated.
 
+**Export** and **Import** next to the toggle (Form view) move the form settings between servers: **Export** downloads `webquiz-settings.yaml` with what the form shows now — the language, the CSV option, question navigation, registration (fields, their values) and the background, never the master key, server or paths. **Import** reads such a file or a whole `webquiz.yaml`, puts the sections found in it into the form (the other sections stay as they are, the skipped keys are listed) and saves nothing: check the form and click **Save configuration**.
+
 - Click **Save Configuration** to save changes
 - Changes are validated before saving, and a backup is created automatically
 
