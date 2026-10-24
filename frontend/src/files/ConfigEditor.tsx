@@ -187,10 +187,10 @@ export function ConfigEditor({
         />
         {view === "form" && (
           <Space wrap>
-            <Button icon={<DownloadOutlined />} onClick={exportSettings} data-testid="cfg-export">
+            <Button icon={<UploadOutlined />} onClick={exportSettings} data-testid="cfg-export">
               {t("settings.export")}
             </Button>
-            <Button icon={<UploadOutlined />} onClick={() => importInput.current?.click()} data-testid="cfg-import">
+            <Button icon={<DownloadOutlined />} onClick={() => importInput.current?.click()} data-testid="cfg-import">
               {t("settings.import")}
             </Button>
             <input
