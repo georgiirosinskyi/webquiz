@@ -150,12 +150,13 @@ def test_save_and_continue_keeps_editor_open(temp_dir, browser):
         wait_for_element(browser, By.ID, "quiz-filename").send_keys("test_save_continue")
         browser.find_element(By.ID, "quiz-title").send_keys("Save and Continue Test")
 
-        # A new quiz starts with one empty, expanded question
+        # A new quiz starts with one empty, expanded question with 4 options
         item = question_items(browser)[0]
         item.find_element(By.CSS_SELECTOR, ".question-text").send_keys("Test question")
         options = item.find_elements(By.CSS_SELECTOR, ".option-text")
-        options[0].send_keys("Option A")
-        options[1].send_keys("Option B")
+        assert len(options) == 4
+        for option, text in zip(options, ["Option A", "Option B", "Option C", "Option D"]):
+            option.send_keys(text)
 
         save_continue = browser.find_element(By.CSS_SELECTOR, '[data-testid="save-continue"]')
         click_js(browser, save_continue)
@@ -168,7 +169,9 @@ def test_save_and_continue_keeps_editor_open(temp_dir, browser):
 
         saved = yaml.safe_load(quiz_file(port, "test_save_continue.yaml"))
         assert saved["title"] == "Save and Continue Test"
-        assert saved["questions"] == [{"question": "Test question", "options": ["Option A", "Option B"], "correct_answer": 0}]
+        assert saved["questions"] == [
+            {"question": "Test question", "options": ["Option A", "Option B", "Option C", "Option D"], "correct_answer": 0}
+        ]
 
 
 @skip_if_selenium_disabled
