@@ -109,8 +109,13 @@ export const USER_SORTERS = {
   time: (a: AdminUser, b: AdminUser) => (a.elapsed_seconds ?? -1) - (b.elapsed_seconds ?? -1),
 };
 
-export const fieldSorter = (name: string) => (a: AdminUser, b: AdminUser) =>
-  byText(a.registration_fields?.[name] || "", b.registration_fields?.[name] || "");
+// A field with values (registration.field_options) sorts in their order, values not in the list after them
+export const fieldSorter = (name: string, options: string[] = []) => (a: AdminUser, b: AdminUser) => {
+  const first = a.registration_fields?.[name] || "";
+  const second = b.registration_fields?.[name] || "";
+  const rank = (value: string) => (options.includes(value) ? options.indexOf(value) : options.length);
+  return rank(first) - rank(second) || byText(first, second);
+};
 
 // Registration field names of all users, in the order they first appear.
 export function registrationFieldNames(users: AdminUser[]): string[] {

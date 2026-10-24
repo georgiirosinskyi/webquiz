@@ -97,6 +97,8 @@ export interface CurrentQuiz {
   show_answers_on_completion: boolean;
   force_all_completed: boolean;
   requires_approval: boolean;
+  // Field name -> the values of a field with a fixed list, in their order
+  field_options?: Record<string, string[]>;
   questions: QuizQuestionInfo[];
 }
 

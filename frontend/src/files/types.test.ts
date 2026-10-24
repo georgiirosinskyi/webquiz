@@ -21,7 +21,13 @@ describe("config form", () => {
       language: "en",
       extra_answers_with_users_csv: true,
       question_navigation: true,
-      registration: { approve: true, username_label: "Name", fields: ["Grade"], disabled_fields: ["School"] },
+      registration: {
+        approve: true,
+        username_label: "Name",
+        fields: ["Grade"],
+        disabled_fields: ["School"],
+        field_options: { School: ["A", "B"], Other: ["x"] },
+      },
       appearance: { background_color: "#ffffff", background_image: "/imgs/bg.jpg" },
     });
     expect(form).toEqual({
@@ -31,8 +37,8 @@ describe("config form", () => {
       approve: true,
       username_label: "Name",
       fields: [
-        { name: "Grade", enabled: true },
-        { name: "School", enabled: false },
+        { name: "Grade", enabled: true, options: [] },
+        { name: "School", enabled: false, options: ["A", "B"] },
       ],
       background_mode: "image",
       background_color: "#ffffff",
@@ -48,9 +54,9 @@ describe("config form", () => {
       approve: false,
       username_label: "",
       fields: [
-        { name: " Grade ", enabled: true },
-        { name: "", enabled: true },
-        { name: "School", enabled: false },
+        { name: " Grade ", enabled: true, options: [" 9 ", "", "10"] },
+        { name: "", enabled: true, options: ["lost"] },
+        { name: "School", enabled: false, options: [] },
       ],
       background_mode: "color",
       background_color: "#336699",
@@ -62,6 +68,7 @@ describe("config form", () => {
       username_label: "",
       fields: ["Grade"],
       disabled_fields: ["School"],
+      field_options: { Grade: ["9", "10"] },
     });
   });
 

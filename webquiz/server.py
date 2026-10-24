@@ -1399,9 +1399,12 @@ class TestingServer:
 
         registration_fields = []
         if hasattr(self.config, "registration") and self.config.registration.fields:
-            registration_fields = [
-                {"label": label, "name": label.lower().replace(" ", "_")} for label in self.config.registration.fields
-            ]
+            for label in self.config.registration.fields:
+                field = {"label": label, "name": label.lower().replace(" ", "_")}
+                options = self._field_options(label)
+                if options:
+                    field["options"] = options
+                registration_fields.append(field)
 
         page = {
             "title": self.quiz_title,
@@ -1704,6 +1707,15 @@ class TestingServer:
             self.admin_websocket_clients, message, "admin WebSocket"
         )
 
+    def _field_options(self, field_label: str) -> list:
+        """The values of a registration field to choose from (empty: the field takes any text)."""
+        registration = getattr(self.config, "registration", None)
+        return list((getattr(registration, "field_options", None) or {}).get(field_label) or [])
+
+    def _is_field_option(self, field_label: str, value: str) -> bool:
+        options = self._field_options(field_label)
+        return not options or value in options
+
     def _extract_registration_fields(self, user_data: dict) -> dict:
         """Extract only custom registration fields for display to admin.
 
@@ -1737,6 +1749,12 @@ class TestingServer:
             "show_answers_on_completion": bool(getattr(self, "show_answers_on_completion", False)),
             "force_all_completed": self.force_all_completed,
             "requires_approval": hasattr(self.config, "registration") and self.config.registration.approve,
+            # Field name -> its values in their order (the overview sorts these fields by it)
+            "field_options": {
+                label.lower().replace(" ", "_"): self._field_options(label)
+                for label in (getattr(getattr(self.config, "registration", None), "fields", None) or [])
+                if self._field_options(label)
+            },
             "questions": [
                 {
                     "id": q["id"],
@@ -2106,6 +2124,10 @@ class TestingServer:
                 field_value = data.get(field_name, "").strip()
                 if not field_value:
                     return web.json_response({"error": self.translations["server_field_empty"].format(field=field_label)}, status=400)
+                if not self._is_field_option(field_label, field_value):
+                    return web.json_response(
+                        {"error": self.translations["server_field_not_in_list"].format(field=field_label)}, status=400
+                    )
                 user_data[field_name] = field_value
 
         # Generate random question order if randomization is enabled
@@ -2225,6 +2247,10 @@ class TestingServer:
                 if not field_value:
                     return web.json_response(
                         {"error": self.translations["server_field_empty"].format(field=field_label)}, status=400
+                    )
+                if not self._is_field_option(field_label, field_value):
+                    return web.json_response(
+                        {"error": self.translations["server_field_not_in_list"].format(field=field_label)}, status=400
                     )
                 updates[field_name] = field_value
 
@@ -3904,6 +3930,17 @@ class TestingServer:
                         errors.append(self._t("field_list", field="registration.disabled_fields"))
                     elif not all(isinstance(field, str) for field in registration["disabled_fields"]):
                         errors.append(self._t("field_list_str", field="registration.disabled_fields"))
+                if "field_options" in registration:
+                    options = registration["field_options"]
+                    if not isinstance(options, dict):
+                        errors.append(self._t("section_dict", field="registration.field_options"))
+                    else:
+                        for label, values in options.items():
+                            if (
+                                not isinstance(values, list)
+                                or not all(isinstance(value, str) and value.strip() for value in values)
+                            ):
+                                errors.append(self._t("field_list_str", field=f"registration.field_options.{label}"))
                 if "approve" in registration:
                     if not isinstance(registration["approve"], bool):
                         errors.append(self._t("field_bool", field="registration.approve"))

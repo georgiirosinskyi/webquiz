@@ -342,7 +342,7 @@ function UsersTable({
       key: `field-${name}`,
       title: fieldNameToLabel(name),
       responsive: ["md" as const],
-      sorter: fieldSorter(name),
+      sorter: fieldSorter(name, quiz?.field_options?.[name]),
       render: (_: unknown, user: AdminUser) => user.registration_fields?.[name] || "",
     })),
     {

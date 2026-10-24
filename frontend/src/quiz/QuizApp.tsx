@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Alert, Button, Card, Flex, Form, Image as ImagePreview, Input, Modal, Progress, Result, Spin, Tag, Typography } from "antd";
+import { Alert, Button, Card, Flex, Form, Image as ImagePreview, Input, Modal, Progress, Result, Select, Spin, Tag, Typography } from "antd";
 import { ClockCircleOutlined, EditOutlined, PaperClipOutlined, UserOutlined } from "@ant-design/icons";
 import { getServerData } from "../shared/serverData";
 import { createFetchWithRetry, shouldReloadForNewQuiz } from "./connection";
@@ -115,6 +115,36 @@ function useAutoHideError(): [string, (message: string) => void, () => void] {
   return [message, show, hide];
 }
 
+// A registration field with a fixed list of values (registration.field_options): a choice in their order
+function FieldSelect({
+  field,
+  id,
+  className,
+  value,
+  placeholder,
+  onChange,
+}: {
+  field: QuizPageData["registrationFields"][number];
+  id: string;
+  className: string;
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Select
+      id={id}
+      className={className}
+      data-field-name={field.name}
+      value={value || undefined}
+      placeholder={placeholder}
+      showSearch
+      options={(field.options || []).map((option) => ({ value: option, label: option }))}
+      onChange={onChange}
+    />
+  );
+}
+
 function ErrorMessage({ id, message }: { id: string; message: string }) {
   return (
     <div id={id} className={`error-message${message ? "" : " hidden"}`}>
@@ -168,6 +198,15 @@ export function QuizApp({ page }: { page: QuizPageData }) {
   const questionStartRef = useRef<Promise<unknown>>(Promise.resolve());
   const clientResultsRef = useRef<ClientResult[]>([]);
   const fieldRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  // Values chosen in the fields with a list (the text fields are read from fieldRefs)
+  const [chosenValues, setChosenValues] = useState<Record<string, string>>(() => {
+    const saved = loadRegistrationData();
+    return Object.fromEntries(
+      page.registrationFields
+        .filter((field) => field.options?.includes(saved[field.name]))
+        .map((field) => [field.name, saved[field.name]]),
+    );
+  });
   const reloadingRef = useRef(false);
 
   const setQuestions = (next: QuizQuestion[]) => {
@@ -431,8 +470,10 @@ export function QuizApp({ page }: { page: QuizPageData }) {
 
   const registerUser = async () => {
     const registrationData: Record<string, string> = {};
-    for (const name of ["username", ...page.registrationFields.map((field) => field.name)]) {
-      registrationData[name] = (fieldRefs.current[name]?.value || "").trim();
+    registrationData.username = (fieldRefs.current.username?.value || "").trim();
+    for (const field of page.registrationFields) {
+      const value = field.options?.length ? chosenValues[field.name] : fieldRefs.current[field.name]?.value;
+      registrationData[field.name] = (value || "").trim();
     }
     const problem = registrationProblem(registrationData, page.registrationFields, t);
     if (problem) {
@@ -754,6 +795,20 @@ export function QuizApp({ page }: { page: QuizPageData }) {
           {[{ name: "username", label: page.usernameLabel }, ...page.registrationFields].map((field) => {
             const isName = field.name === "username";
             const id = isName ? "waiting-username" : `waiting-field-${field.name}`;
+            if ("options" in field && field.options?.length) {
+              return (
+                <Form.Item key={field.name} label={field.label} htmlFor={id}>
+                  <FieldSelect
+                    field={field}
+                    id={id}
+                    className="waiting-field registration-select"
+                    value={editValues[field.name] ?? ""}
+                    placeholder={t.choose_from_list}
+                    onChange={(value) => setEditValues((values) => ({ ...values, [field.name]: value }))}
+                  />
+                </Form.Item>
+              );
+            }
             return (
               <Form.Item key={field.name} label={field.label} htmlFor={id}>
                 <Input
@@ -823,16 +878,27 @@ export function QuizApp({ page }: { page: QuizPageData }) {
               </Form.Item>
               {page.registrationFields.map((field) => (
                 <Form.Item key={field.name} label={field.label} htmlFor={`field-${field.name}`}>
-                  <Input
-                    id={`field-${field.name}`}
-                    className="registration-field"
-                    data-field-name={field.name}
-                    defaultValue={savedRegistration[field.name] || ""}
-                    autoComplete="off"
-                    ref={(element) => {
-                      fieldRefs.current[field.name] = element?.input || null;
-                    }}
-                  />
+                  {field.options?.length ? (
+                    <FieldSelect
+                      field={field}
+                      id={`field-${field.name}`}
+                      className="registration-field registration-select"
+                      value={chosenValues[field.name] || ""}
+                      placeholder={t.choose_from_list}
+                      onChange={(value) => setChosenValues((values) => ({ ...values, [field.name]: value }))}
+                    />
+                  ) : (
+                    <Input
+                      id={`field-${field.name}`}
+                      className="registration-field"
+                      data-field-name={field.name}
+                      defaultValue={savedRegistration[field.name] || ""}
+                      autoComplete="off"
+                      ref={(element) => {
+                        fieldRefs.current[field.name] = element?.input || null;
+                      }}
+                    />
+                  )}
                 </Form.Item>
               ))}
               <Button type="primary" htmlType="submit" block className="register-btn" disabled={registering} loading={registering}>

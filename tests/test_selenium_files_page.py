@@ -79,7 +79,7 @@ def test_config_form_saves_registration_fields(browser):
         login(browser, base_url, "/admin/settings", '[data-testid="cfg-reg-fields-list"]')
 
         fields = WebDriverWait(browser, 10).until(
-            lambda d: d.find_elements(By.CSS_SELECTOR, '[data-testid="cfg-reg-fields-list"] input[type="text"]')
+            lambda d: d.find_elements(By.CSS_SELECTOR, '[data-testid="cfg-reg-fields-list"] input.cfg-reg-field-name')
         )
         assert [field.get_attribute("value") for field in fields] == ["Grade", "School"]
 
@@ -96,6 +96,44 @@ def test_config_form_saves_registration_fields(browser):
         assert registration["approve"] is True
         assert registration["fields"] == ["Grade", "School"]
         assert registration["disabled_fields"] == []
+
+
+@skip_if_selenium_disabled
+def test_config_form_edits_the_values_of_a_field(browser):
+    """The values of a field are a list: add, move, remove and edit; saved as registration.field_options"""
+    from selenium_helpers import clear_input
+
+    config = {"registration": {"fields": ["Рівень"], "field_options": {"Рівень": ["перший", "другий"]}}}
+    with custom_webquiz_server(config=config) as (proc, port):
+        base_url = f"http://localhost:{port}"
+        login(browser, base_url, "/admin/settings", '[data-testid="cfg-reg-fields-list"]')
+
+        def values():
+            return [el.get_attribute("value") for el in browser.find_elements(By.CSS_SELECTOR, "input.cfg-reg-field-option")]
+
+        # The values are closed until the admin opens them
+        assert values() == []
+        browser.find_element(By.CSS_SELECTOR, '[data-testid="cfg-reg-options-toggle"]').click()
+        WebDriverWait(browser, 10).until(lambda d: values() == ["перший", "другий"])
+        browser.find_element(By.CSS_SELECTOR, '[data-testid="cfg-reg-add-option"]').click()
+        WebDriverWait(browser, 10).until(lambda d: len(values()) == 3)
+        browser.find_elements(By.CSS_SELECTOR, "input.cfg-reg-field-option")[2].send_keys("третій")
+        browser.find_elements(By.CSS_SELECTOR, '[data-testid="cfg-reg-option-up"]')[2].click()
+        WebDriverWait(browser, 10).until(lambda d: values() == ["перший", "третій", "другий"])
+        browser.find_elements(By.CSS_SELECTOR, '[data-testid="cfg-reg-option-remove"]')[0].click()
+        WebDriverWait(browser, 10).until(lambda d: values() == ["третій", "другий"])
+        second = browser.find_elements(By.CSS_SELECTOR, "input.cfg-reg-field-option")[1]
+        clear_input(second)
+        second.send_keys("четвертий")
+
+        browser.find_element(By.XPATH, "//button[contains(., 'Зберегти налаштування')]").click()
+        WebDriverWait(browser, 15).until(lambda d: d.find_elements(By.CSS_SELECTOR, ".ant-alert-success"))
+
+        html = requests.get(f"{base_url}/files/", cookies=get_admin_session(port)).text
+        options = yaml.safe_load(get_page_data(html)["page"]["configContent"])["registration"]["field_options"]["Рівень"]
+        assert options == ["третій", "четвертий"]
+        quiz_page = get_page_data(requests.get(f"{base_url}/").text)["page"]
+        assert quiz_page["registrationFields"][0]["options"] == options
 
 
 @skip_if_selenium_disabled

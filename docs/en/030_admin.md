@@ -174,7 +174,7 @@ The **Settings** section provides two ways to edit the server configuration:
 **Form view** (default) — a structured form for the language, the quiz page background (color or image, with a preview; see [Configuration](040_config.md)) and registration settings:
 - **Require admin approval** — checkbox to enable/disable approval workflow
 - **Username label** — customize the label for the username field
-- **Additional registration fields** — add/remove extra fields (e.g., Grade, School)
+- **Additional registration fields** — add/remove extra fields (e.g., Grade, School); under each field, the list of values to choose from (closed, opened with **Values to choose from (N)**), one per row (**Add value**, edit, remove, move up/down; no values = any text)
 
 **YAML view** — a text editor for direct YAML editing with full access to all configuration options.
 

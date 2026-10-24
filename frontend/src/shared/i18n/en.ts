@@ -405,4 +405,11 @@ export const en: Record<MessageKey, string> = {
   "settings.field_name": "Field name",
   "settings.field_remove": "Remove",
   "settings.add_field": "Add field",
+  "settings.field_options": "Values to choose from ({count})",
+  "settings.field_options_hint":
+    "With values, a user chooses one of them from a list instead of typing. The list and the sorting on the overview follow the same order; without values the field takes any text.",
+  "settings.add_option": "Add value",
+  "settings.option_up": "Up",
+  "settings.option_down": "Down",
+  "settings.option_remove": "Remove value",
 };

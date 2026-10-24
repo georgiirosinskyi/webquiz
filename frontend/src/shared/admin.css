@@ -328,3 +328,12 @@ body {
 .ant-table-wrapper .quiz-folder-selected > td {
   background: #e6f4ff !important;
 }
+/* Values of a registration field (Settings form): under the field, one per row */
+.field-options {
+  padding-left: 24px;
+}
+
+.field-option-number {
+  min-width: 22px;
+  text-align: right;
+}

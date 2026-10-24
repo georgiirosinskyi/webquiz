@@ -372,6 +372,58 @@ def test_edit_registration_dialog_closes_when_approved(temp_dir, browser):
         assert not browser.find_elements(By.ID, "waiting-username")
 
 
+def choose_option(browser, select_css, value):
+    """Open an antd Select and click one of its values."""
+    browser.find_element(By.CSS_SELECTOR, select_css).click()
+    option = WebDriverWait(browser, 10).until(
+        lambda d: next(
+            (el for el in d.find_elements(By.CSS_SELECTOR, f".ant-select-item-option[title='{value}']") if el.is_displayed()),
+            None,
+        )
+    )
+    option.click()
+
+
+@skip_if_selenium_disabled
+def test_field_with_values_is_a_choice(temp_dir, browser):
+    """A field with a list of values is chosen, not typed, on the form and in the edit dialog"""
+    config = {
+        "registration": {
+            "approve": True,
+            "fields": ["Рівень"],
+            "field_options": {"Рівень": ["перший", "другий", "третій"]},
+        }
+    }
+
+    with custom_webquiz_server(config=config) as (proc, port):
+        browser.get(f"http://localhost:{port}/")
+        wait_for_element(browser, By.ID, "username").send_keys("Петро")
+        assert not browser.find_elements(By.CSS_SELECTOR, "input.registration-field")
+
+        # Nothing chosen: the form asks to fill the field
+        find_register_button(browser).click()
+        error = wait_for_element(browser, By.ID, "registration-error")
+        WebDriverWait(browser, 10).until(lambda d: "Рівень" in error.text)
+
+        choose_option(browser, "#registration .registration-select", "другий")
+        find_register_button(browser).click()
+        WebDriverWait(browser, 10).until(EC.visibility_of_element_located((By.ID, "waiting-approval")))
+        user_id = browser.get_cookie("user_id")["value"]
+        user_data = requests.get(f"http://localhost:{port}/api/verify-user/{user_id}").json()["user_data"]
+        assert user_data["рівень"] == "другий"
+
+        # The edit dialog offers the same list with the chosen value
+        open_registration_editor(browser)
+        select = wait_for_element(browser, By.CSS_SELECTOR, ".ant-modal .registration-select")
+        assert "другий" in select.text
+        choose_option(browser, ".ant-modal .registration-select", "третій")
+        browser.find_element(By.ID, "save-registration-btn").click()
+        WebDriverWait(browser, 10).until(
+            lambda d: requests.get(f"http://localhost:{port}/api/verify-user/{user_id}").json()["user_data"]["рівень"]
+            == "третій"
+        )
+
+
 def open_registration_editor(browser):
     wait_for_clickable(browser, By.ID, "user-info").click()
     wait_for_modal(browser)

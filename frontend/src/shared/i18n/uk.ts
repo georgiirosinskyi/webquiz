@@ -403,6 +403,13 @@ export const uk = {
   "settings.field_name": "Назва поля",
   "settings.field_remove": "Видалити",
   "settings.add_field": "Додати поле",
+  "settings.field_options": "Значення для вибору ({count})",
+  "settings.field_options_hint":
+    "Якщо задати полю значення, користувач вибирає одне з них зі списку замість введення тексту. Список і сортування в огляді йдуть у тому ж порядку; без значень поле приймає довільний текст.",
+  "settings.add_option": "Додати значення",
+  "settings.option_up": "Вище",
+  "settings.option_down": "Нижче",
+  "settings.option_remove": "Видалити значення",
 };
 
 export type MessageKey = keyof typeof uk;

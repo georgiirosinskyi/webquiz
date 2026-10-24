@@ -190,6 +190,18 @@ describe("USER_SORTERS", () => {
     expect(order(list, fieldSorter("class"))).toEqual(["b", "a"]);
   });
 
+  it("sorts a field with values in the order of the values, other values after them", () => {
+    const levels = ["перший", "другий", "третій"];
+    const list = [
+      user({ user_id: "a", registration_fields: { level: "третій" } }),
+      user({ user_id: "b", registration_fields: { level: "інше" } }),
+      user({ user_id: "c", registration_fields: { level: "перший" } }),
+      user({ user_id: "d", registration_fields: { level: "другий" } }),
+    ];
+    expect(order(list, fieldSorter("level", levels))).toEqual(["c", "d", "a", "b"]);
+    expect(order(list, fieldSorter("level", []))).toEqual(["d", "b", "c", "a"]);
+  });
+
   it("sorts grades as numbers, missing grades first", () => {
     const list = [user({ user_id: "a", mark: 10 }), user({ user_id: "b", mark: null }), user({ user_id: "c", mark: "9" })];
     expect(order(list, USER_SORTERS.mark)).toEqual(["b", "c", "a"]);

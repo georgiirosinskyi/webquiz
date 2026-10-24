@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import yaml
 import logging
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 logger = logging.getLogger(__name__)
@@ -85,6 +85,8 @@ class RegistrationConfig:
 
     fields: List[str] = None
     disabled_fields: List[str] = None
+    # Field label -> the values a user chooses from (in this order) instead of typing
+    field_options: Dict[str, List[str]] = None
     approve: bool = False
     username_label: str = ""  # Empty = use translation for current language
 
@@ -93,6 +95,8 @@ class RegistrationConfig:
             self.fields = []
         if self.disabled_fields is None:
             self.disabled_fields = []
+        if self.field_options is None:
+            self.field_options = {}
 
 
 DEFAULT_BACKGROUND_COLOR = "#1f2937"

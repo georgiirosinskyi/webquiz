@@ -32,7 +32,8 @@ export interface QuizPageData {
   showRightAnswer: boolean;
   showFinalList: boolean;
   usernameLabel: string;
-  registrationFields: { label: string; name: string }[];
+  // options: the values to choose from, in this order (registration.field_options); none = free text
+  registrationFields: { label: string; name: string; options?: string[] }[];
   translations: Record<string, string>;
   // config `question_navigation`: the question bar also when skipping is off
   questionNavigation?: boolean;
@@ -174,6 +175,10 @@ export function registrationProblem(
   t: Record<string, string>,
 ): string | null {
   if (!(values.username || "").trim()) return t.please_enter_username;
-  const empty = fields.find((field) => !(values[field.name] || "").trim());
-  return empty ? t.please_fill_field.replace("{field}", empty.label) : null;
+  for (const field of fields) {
+    const value = (values[field.name] || "").trim();
+    if (!value) return t.please_fill_field.replace("{field}", field.label);
+    if (field.options?.length && !field.options.includes(value)) return t.please_choose_field.replace("{field}", field.label);
+  }
+  return null;
 }

@@ -286,6 +286,7 @@ The project has **222+ tests** across **15 test files** covering:
 - **Network Access** (22 tests): Local network restriction and proxy header handling
 - **Index Generation** (13 tests): Template generation tests
 - **Registration Fields** (12 tests): Custom registration fields
+- **Registration Field Values** (5 + 2 Selenium tests): Fields with a list of values (`test_registration_field_options.py`)
 - **Show Right Answer** (5 tests): Answer display functionality
 - **Show Answers on Completion** (10 tests): Dynamic answer visibility after all students complete
 - **Integration Tests** (6 tests): Multiple choice, multiple answers
@@ -505,6 +506,8 @@ registration:
     - School
   disabled_fields:         # Fields preserved in config but hidden from the form
     - Teacher              # Toggle on/off in the admin Settings section
+  field_options:           # Values to choose from (a drop-down list, in this order) instead of typing
+    Grade: ["9", "10", "11"]
 
 appearance:                # Background of the user quiz page (admin Settings: color or image)
   background_color: "#1f2937"   # Hex color, default dark

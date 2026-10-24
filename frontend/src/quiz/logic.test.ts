@@ -134,4 +134,12 @@ describe("registration form", () => {
     expect(registrationProblem({ username: "Ann", grade: "  " }, fields, t)).toBe('fill "Grade"');
     expect(registrationProblem({ username: "Ann", grade: "9" }, fields, t)).toBeNull();
   });
+
+  it("takes only a listed value for a field with values", () => {
+    const withOptions = [{ label: "Level", name: "level", options: ["first", "second"] }];
+    const tt = { ...t, please_choose_field: 'choose "{field}"' };
+    expect(registrationProblem({ username: "Ann", level: "" }, withOptions, tt)).toBe('fill "Level"');
+    expect(registrationProblem({ username: "Ann", level: "tenth" }, withOptions, tt)).toBe('choose "Level"');
+    expect(registrationProblem({ username: "Ann", level: "second" }, withOptions, tt)).toBeNull();
+  });
 });

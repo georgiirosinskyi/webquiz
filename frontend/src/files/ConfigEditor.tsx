@@ -1,7 +1,16 @@
 import { useState } from "react";
 import { Alert, App, Button, Card, Checkbox, ColorPicker, Flex, Form, Input, Segmented, Select, Space, Typography } from "antd";
 import type { Color } from "antd/es/color-picker";
-import { DeleteOutlined, PictureOutlined, PlusOutlined, SaveOutlined } from "@ant-design/icons";
+import {
+  ArrowDownOutlined,
+  ArrowUpOutlined,
+  DeleteOutlined,
+  DownOutlined,
+  PictureOutlined,
+  PlusOutlined,
+  RightOutlined,
+  SaveOutlined,
+} from "@ant-design/icons";
 import { ImagePicker } from "../admin/Pickers";
 import { apiSend } from "../shared/api";
 import { t } from "../shared/i18n";
@@ -54,6 +63,15 @@ export function ConfigEditor({
   const { modal } = App.useApp();
   const [form] = Form.useForm<ConfigFormValues>();
   const [view, setView] = useState<View>("form");
+  // Fields (Form.List keys) whose values are shown; the lists are closed until opened, they can be long
+  const [openOptions, setOpenOptions] = useState<Set<number>>(new Set());
+  const toggleOptions = (key: number) =>
+    setOpenOptions((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const [yaml, setYaml] = useState(initialContent);
   const [formDirty, setFormDirty] = useState(false);
   const [yamlDirty, setYamlDirty] = useState(false);
@@ -216,43 +234,112 @@ export function ConfigEditor({
             </Form.Item>
             <Form.Item
               label={t("settings.fields")}
-              extra={t("settings.fields_hint")}
+              extra={`${t("settings.fields_hint")} ${t("settings.field_options_hint")}`}
               style={{ marginBottom: 0 }}
             >
               <Form.List name="fields">
                 {(fields, { add, remove }) => (
                   <Flex vertical gap={8} data-testid="cfg-reg-fields-list">
                     {fields.map((field) => (
-                      <Flex key={field.key} gap={8} align="center">
-                        <Form.Item name={[field.name, "enabled"]} valuePropName="checked" noStyle>
-                          <Checkbox title={t("settings.field_toggle")} />
-                        </Form.Item>
-                        <Form.Item
-                          noStyle
-                          shouldUpdate={(prev, next) =>
-                            prev.fields?.[field.name]?.enabled !== next.fields?.[field.name]?.enabled
-                          }
-                        >
-                          {() => (
-                            <Form.Item name={[field.name, "name"]} noStyle>
-                              <Input
-                                placeholder={t("settings.field_name")}
-                                style={{
-                                  maxWidth: 400,
-                                  textDecoration:
-                                    form.getFieldValue(["fields", field.name, "enabled"]) === false
-                                      ? "line-through"
-                                      : undefined,
-                                }}
-                              />
-                            </Form.Item>
+                      <Flex key={field.key} vertical gap={6} data-testid="cfg-reg-field">
+                        <Flex gap={8} align="center">
+                          <Form.Item name={[field.name, "enabled"]} valuePropName="checked" noStyle>
+                            <Checkbox title={t("settings.field_toggle")} />
+                          </Form.Item>
+                          <Form.Item
+                            noStyle
+                            shouldUpdate={(prev, next) =>
+                              prev.fields?.[field.name]?.enabled !== next.fields?.[field.name]?.enabled
+                            }
+                          >
+                            {() => (
+                              <Form.Item name={[field.name, "name"]} noStyle>
+                                <Input
+                                  className="cfg-reg-field-name"
+                                  placeholder={t("settings.field_name")}
+                                  style={{
+                                    maxWidth: 400,
+                                    textDecoration:
+                                      form.getFieldValue(["fields", field.name, "enabled"]) === false
+                                        ? "line-through"
+                                        : undefined,
+                                  }}
+                                />
+                              </Form.Item>
+                            )}
+                          </Form.Item>
+                          <Button danger icon={<DeleteOutlined />} onClick={() => remove(field.name)} title={t("settings.field_remove")} />
+                        </Flex>
+                        {/* Values to choose from, one per row in their order: none = the field takes any text */}
+                        <Form.List name={[field.name, "options"]}>
+                          {(options, { add: addOption, remove: removeOption, move }) => (
+                            <Flex vertical gap={4} className="field-options" data-testid="cfg-reg-field-options">
+                              <div>
+                                <Button
+                                  size="small"
+                                  type="link"
+                                  icon={openOptions.has(field.key) ? <DownOutlined /> : <RightOutlined />}
+                                  onClick={() => toggleOptions(field.key)}
+                                  className="field-options-toggle"
+                                  data-testid="cfg-reg-options-toggle"
+                                >
+                                  {t("settings.field_options", { count: options.length })}
+                                </Button>
+                              </div>
+                              {openOptions.has(field.key) && options.map((option, index) => (
+                                <Flex key={option.key} gap={4} align="center">
+                                  <Typography.Text type="secondary" className="field-option-number">
+                                    {index + 1}.
+                                  </Typography.Text>
+                                  <Form.Item name={option.name} noStyle>
+                                    <Input className="cfg-reg-field-option" style={{ maxWidth: 320 }} />
+                                  </Form.Item>
+                                  <Button
+                                    type="text"
+                                    icon={<ArrowUpOutlined />}
+                                    disabled={index === 0}
+                                    onClick={() => move(index, index - 1)}
+                                    title={t("settings.option_up")}
+                                    data-testid="cfg-reg-option-up"
+                                  />
+                                  <Button
+                                    type="text"
+                                    icon={<ArrowDownOutlined />}
+                                    disabled={index === options.length - 1}
+                                    onClick={() => move(index, index + 1)}
+                                    title={t("settings.option_down")}
+                                    data-testid="cfg-reg-option-down"
+                                  />
+                                  <Button
+                                    type="text"
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    onClick={() => removeOption(option.name)}
+                                    title={t("settings.option_remove")}
+                                    data-testid="cfg-reg-option-remove"
+                                  />
+                                </Flex>
+                              ))}
+                              {openOptions.has(field.key) && (
+                                <div>
+                                  <Button
+                                    size="small"
+                                    type="dashed"
+                                    icon={<PlusOutlined />}
+                                    onClick={() => addOption("")}
+                                    data-testid="cfg-reg-add-option"
+                                  >
+                                    {t("settings.add_option")}
+                                  </Button>
+                                </div>
+                              )}
+                            </Flex>
                           )}
-                        </Form.Item>
-                        <Button danger icon={<DeleteOutlined />} onClick={() => remove(field.name)} title={t("settings.field_remove")} />
+                        </Form.List>
                       </Flex>
                     ))}
                     <div>
-                      <Button icon={<PlusOutlined />} onClick={() => add({ name: "", enabled: true })}>
+                      <Button icon={<PlusOutlined />} onClick={() => add({ name: "", enabled: true, options: [] })}>
                         {t("settings.add_field")}
                       </Button>
                     </div>

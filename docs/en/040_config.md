@@ -125,6 +125,11 @@ registration:
   disabled_fields:
     - Teacher
     - City
+  field_options:
+    Grade:
+      - "9"
+      - "10"
+      - "11"
 ```
 
 This section defines how users register before taking quizzes.
@@ -160,6 +165,10 @@ This section defines how users register before taking quizzes.
   Additional registration fields that are kept in the config but are not shown on the registration form. Use this to "park" fields you toggle on and off often without losing their names.
 
   In the admin **Settings** section (Form view), every additional field shows a checkbox: uncheck it to move the field from `fields` to `disabled_fields`, check it to move the field back. Saving the form simply shuffles each field between the two lists — nothing is deleted, so you can re-enable a field in one click later.
+
+- **field_options**
+  Fixed values for additional fields: field name → list of values. Such a field is a drop-down list (with search) instead of a text input, in the same order as the values are given; the server accepts only a value from the list (also when the data is edited while waiting for approval). On the admin overview the column of such a field sorts in the order of the values, not alphabetically. Fields without values take any text.
+  In the admin **Settings** form the values are a list under each field (closed, opened with **Values to choose from**): add, edit, remove and move them up or down.
 
 ---
 
