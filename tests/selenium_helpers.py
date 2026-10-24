@@ -14,7 +14,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException, TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 
 from conftest import get_worker_port
@@ -299,12 +299,18 @@ def open_quiz_editor(browser, filename):
 
 def wait_for_modal(browser):
     """Wait until an antd modal finished its opening animation (elements read as hidden while it runs)."""
-    WebDriverWait(browser, 10).until(
-        lambda d: any(
-            el.is_displayed() and "zoom" not in (el.get_attribute("class") or "")
-            for el in d.find_elements(By.CSS_SELECTOR, ".ant-modal")
-        )
-    )
+
+    def opened(d):
+        try:
+            return any(
+                el.is_displayed() and "zoom" not in (el.get_attribute("class") or "")
+                for el in d.find_elements(By.CSS_SELECTOR, ".ant-modal")
+            )
+        except StaleElementReferenceException:
+            # A modal that was closing disappeared meanwhile: look again
+            return False
+
+    WebDriverWait(browser, 10).until(opened)
 
 
 def clear_input(element):
