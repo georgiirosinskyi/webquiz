@@ -130,7 +130,7 @@ registration:
 This section defines how users register before taking quizzes.
 
 - **approve**
-  If set to `true`, the user will not be able to start the quiz immediately after filling out the form — their request will be added to a waiting list, and the administrator must approve it manually. Until then the user can correct the name and the other fields on the waiting screen (**Save changes**); the administrator sees the new data right away.
+  If set to `true`, the user will not be able to start the quiz immediately after filling out the form — their request will be added to a waiting list, and the administrator must approve it manually. Until then the user can correct the name and the other fields: a click on the name at the top of the page (with the ✎ icon) opens a dialog (**Save changes**); the administrator sees the new data right away. Once the administrator approves the user, the data can no longer be changed and an open dialog closes by itself.
   If the value is `false`, the user can start the quiz immediately after registration.
 
 - **username_label**
@@ -142,7 +142,7 @@ This section defines how users register before taking quizzes.
   username_label: "Student ID"
   username_label: "Прізвище та ім'я"
   ```
-  This label appears in both the registration form and the waiting for approval form.
+  This label appears in both the registration form and the dialog for editing the data while waiting for approval.
   Supports special characters, emojis, and multilingual text.
 
 - **fields**

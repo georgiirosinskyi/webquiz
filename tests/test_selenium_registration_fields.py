@@ -3,7 +3,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-from conftest import custom_webquiz_server
+from conftest import custom_webquiz_server, get_admin_session
 from selenium_helpers import (
     skip_if_selenium_disabled,
     browser,
@@ -11,6 +11,7 @@ from selenium_helpers import (
     wait_for_clickable,
     find_register_button,
     clear_input,
+    wait_for_modal,
 )
 import requests
 
@@ -270,7 +271,7 @@ def test_registration_with_cyrillic_labels_selenium(temp_dir, browser):
 
 @skip_if_selenium_disabled
 def test_edit_registration_while_waiting_for_approval(temp_dir, browser):
-    """A user waiting for approval changes the name and the fields; the data stays after a reload"""
+    """A user waiting for approval opens the dialog by the name, changes the data; it stays after a reload"""
     config = {"registration": {"approve": True, "fields": ["Grade"]}}
     quiz_data = {
         "default.yaml": {
@@ -286,6 +287,8 @@ def test_edit_registration_while_waiting_for_approval(temp_dir, browser):
         find_register_button(browser).click()
 
         WebDriverWait(browser, 10).until(EC.visibility_of_element_located((By.ID, "waiting-approval")))
+        assert browser.find_element(By.ID, "edit-registration-icon").is_displayed()
+        open_registration_editor(browser)
         username_input = wait_for_element(browser, By.ID, "waiting-username")
         grade_input = browser.find_element(By.CSS_SELECTOR, ".waiting-field[data-field-name='grade']")
         assert username_input.get_attribute("value") == "OldName"
@@ -300,13 +303,16 @@ def test_edit_registration_while_waiting_for_approval(temp_dir, browser):
         WebDriverWait(browser, 10).until(
             lambda d: d.find_element(By.ID, "username-display").text == "NewName"
         )
+        WebDriverWait(browser, 10).until(lambda d: not d.find_elements(By.ID, "waiting-username"))
         user_id = browser.get_cookie("user_id")["value"]
         user_data = requests.get(f"http://localhost:{port}/api/verify-user/{user_id}").json()["user_data"]
         assert user_data["username"] == "NewName"
         assert user_data["grade"] == "10"
 
-        # After a reload the form shows the saved data, still waiting
+        # After a reload the dialog shows the saved data, still waiting
         browser.refresh()
+        wait_for_element(browser, By.ID, "edit-registration-icon")
+        open_registration_editor(browser)
         username_input = wait_for_element(browser, By.ID, "waiting-username")
         WebDriverWait(browser, 10).until(lambda d: username_input.get_attribute("value") == "NewName")
         grade_input = browser.find_element(By.CSS_SELECTOR, ".waiting-field[data-field-name='grade']")
@@ -324,6 +330,8 @@ def test_edit_registration_rejects_empty_field(temp_dir, browser):
         browser.find_element(By.CSS_SELECTOR, ".registration-field[data-field-name='grade']").send_keys("9")
         find_register_button(browser).click()
 
+        wait_for_element(browser, By.ID, "edit-registration-icon")
+        open_registration_editor(browser)
         grade_input = wait_for_element(browser, By.CSS_SELECTOR, ".waiting-field[data-field-name='grade']")
         clear_input(grade_input)
         browser.find_element(By.ID, "save-registration-btn").click()
@@ -333,6 +341,40 @@ def test_edit_registration_rejects_empty_field(temp_dir, browser):
         user_id = browser.get_cookie("user_id")["value"]
         user_data = requests.get(f"http://localhost:{port}/api/verify-user/{user_id}").json()["user_data"]
         assert user_data["grade"] == "9"
+
+
+@skip_if_selenium_disabled
+def test_edit_registration_dialog_closes_when_approved(temp_dir, browser):
+    """The approval starts the test: the open dialog closes and the name is no longer editable"""
+    config = {"registration": {"approve": True, "fields": ["Grade"]}}
+
+    with custom_webquiz_server(config=config) as (proc, port):
+        browser.get(f"http://localhost:{port}/")
+        wait_for_element(browser, By.ID, "username").send_keys("Waiting")
+        browser.find_element(By.CSS_SELECTOR, ".registration-field[data-field-name='grade']").send_keys("9")
+        find_register_button(browser).click()
+
+        wait_for_element(browser, By.ID, "edit-registration-icon")
+        open_registration_editor(browser)
+        wait_for_element(browser, By.ID, "waiting-username")
+
+        user_id = browser.get_cookie("user_id")["value"]
+        requests.put(
+            f"http://localhost:{port}/api/admin/approve-user",
+            cookies=get_admin_session(port),
+            json={"user_id": user_id},
+        )
+
+        WebDriverWait(browser, 15).until(EC.visibility_of_element_located((By.ID, "test-section")))
+        WebDriverWait(browser, 10).until(lambda d: not d.find_elements(By.ID, "waiting-username"))
+        assert not browser.find_elements(By.ID, "edit-registration-icon")
+        browser.find_element(By.ID, "user-info").click()
+        assert not browser.find_elements(By.ID, "waiting-username")
+
+
+def open_registration_editor(browser):
+    wait_for_clickable(browser, By.ID, "user-info").click()
+    wait_for_modal(browser)
 
 
 if __name__ == "__main__":

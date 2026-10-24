@@ -58,6 +58,25 @@ body {
   min-width: 0;
 }
 
+/* While waiting for approval a click on the name opens the dialog to correct the data */
+.user-info.editable {
+  cursor: pointer;
+}
+
+.user-info.editable:hover,
+.user-info.editable:focus-visible {
+  border-color: var(--ant-color-primary, #1677ff);
+  color: var(--ant-color-primary, #1677ff);
+}
+
+.user-info-edit {
+  margin-inline-start: 6px;
+}
+
+.edit-registration-hint.ant-typography {
+  text-align: center;
+}
+
 #loading {
   padding: 32px 0;
 }

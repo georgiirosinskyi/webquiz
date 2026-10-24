@@ -7,7 +7,7 @@ A modern web-based quiz and testing system built with Python and aiohttp that al
 - **Multi-Quiz System**: Questions loaded from `quizzes/` directory with multiple YAML files
 - **Multiple Question Types**: Single choice, multiple choice, and text input questions with Python-based validation
 - **Admin Interface**: Web-based admin app with master key authentication: a live overview of the current quiz and all participants (status, progress, points, grade, time, approval), quiz management, the archive of quiz runs, settings and access in one menu
-- **Registration Approval**: Optional admin approval workflow for new registrations with real-time notifications; while waiting, users can correct their name and registration fields
+- **Registration Approval**: Optional admin approval workflow for new registrations with real-time notifications; while waiting, users can correct their name and registration fields in a dialog opened by a click on their name
 - **Question Randomization**: Configurable per-student question order randomization for fair testing
 - **Question Grouping**: Keep related questions together during randomization with `stick_to_the_previous` attribute
 - **Dynamic Answer Visibility**: Optional delayed answer reveal - show correct answers only after all students complete
@@ -277,7 +277,7 @@ The project has **222+ tests** across **15 test files** covering:
 - **Admin Quiz Management** (18 tests): Quiz switching and management
 - **Admin Quiz Editor** (7 tests): Wizard mode quiz creation with randomize_questions and show_answers_on_completion
 - **Config Management** (23 tests): Config editor, validation, and form-based JSON updates
-- **Registration Approval** (21 tests): Approval workflow, timing and editing the data while waiting
+- **Registration Approval** (21 tests + 3 Selenium): Approval workflow, timing and editing the data while waiting
 - **Archive** (`test_archive.py`): Run folders, summary, per-run log, archive API, quiz file download
 - **Admin Overview** (6 + 3 Selenium tests): Live participant records on the admin WebSocket and the overview page (`test_admin_overview_websocket.py`, `test_selenium_admin_overview.py`)
 - **SSH Tunnel** (31 tests): Key generation, config fetch, connect/disconnect (`test_tunnel.py`)

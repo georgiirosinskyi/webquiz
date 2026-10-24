@@ -21,6 +21,10 @@ TRANSLATIONS = {
         "check_status": "🔄 Перевірити",
         "data_updated": "✓ Дані успішно оновлено!",
         "not_approved_yet": "Ви ще не підтверджені. Будь ласка, зачекайте.",
+        "edit_registration_hint": "Щоб виправити свої дані, натисніть на своє ім'я вгорі.",
+        "edit_registration_title": "Редагування даних",
+        "edit_registration_button": "Змінити дані",
+        "cancel": "Скасувати",
 
         # Quiz interface
         "question_n_of_m": "Питання {n} з {m}",
@@ -120,6 +124,10 @@ TRANSLATIONS = {
         "check_status": "🔄 Check",
         "data_updated": "✓ Data updated successfully!",
         "not_approved_yet": "You have not been approved yet. Please wait.",
+        "edit_registration_hint": "To correct your data, click your name at the top.",
+        "edit_registration_title": "Edit your data",
+        "edit_registration_button": "Edit data",
+        "cancel": "Cancel",
 
         # Quiz interface
         "question_n_of_m": "Question {n} of {m}",

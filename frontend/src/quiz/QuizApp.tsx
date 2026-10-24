@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Button, Card, Flex, Form, Image as ImagePreview, Input, Progress, Result, Spin, Tag, Typography } from "antd";
-import { ClockCircleOutlined, PaperClipOutlined, UserOutlined } from "@ant-design/icons";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { Alert, Button, Card, Flex, Form, Image as ImagePreview, Input, Modal, Progress, Result, Spin, Tag, Typography } from "antd";
+import { ClockCircleOutlined, EditOutlined, PaperClipOutlined, UserOutlined } from "@ant-design/icons";
 import { getServerData } from "../shared/serverData";
 import { createFetchWithRetry, shouldReloadForNewQuiz } from "./connection";
 import {
@@ -148,8 +148,10 @@ export function QuizApp({ page }: { page: QuizPageData }) {
   const [registrationError, showRegistrationError, hideRegistrationError] = useAutoHideError();
   const [waitingError, showWaitingError, hideWaitingError] = useAutoHideError();
   const [testError, showTestError, hideTestError] = useAutoHideError();
-  // The registration data a waiting user can still change
+  // The registration data a waiting user can still change in a dialog opened by a click on the name
   const [waitingValues, setWaitingValues] = useState<Record<string, string>>({});
+  const [editValues, setEditValues] = useState<Record<string, string>>({});
+  const [editOpen, setEditOpen] = useState(false);
   const [savingRegistration, setSavingRegistration] = useState(false);
   const [updateError, showUpdateError, hideUpdateError] = useAutoHideError();
   const [updateSaved, showUpdateSaved, hideUpdateSaved] = useAutoHideError();
@@ -469,10 +471,23 @@ export function QuizApp({ page }: { page: QuizPageData }) {
     }
   };
 
+  // Only until the approval: once the test starts the dialog closes by itself
+  const canEditRegistration = phase === "waiting";
+  const openRegistrationEditor = () => {
+    if (!canEditRegistration) return;
+    setEditValues(waitingValues);
+    hideUpdateError();
+    hideUpdateSaved();
+    setEditOpen(true);
+  };
+  useEffect(() => {
+    if (!canEditRegistration) setEditOpen(false);
+  }, [canEditRegistration]);
+
   // A user waiting for approval corrects the name or the fields
   const updateRegistration = async () => {
     const values: Record<string, string> = {};
-    for (const [name, value] of Object.entries(waitingValues)) values[name] = value.trim();
+    for (const [name, value] of Object.entries(editValues)) values[name] = value.trim();
     const problem = registrationProblem(values, page.registrationFields, t);
     hideUpdateSaved();
     if (problem) {
@@ -490,11 +505,14 @@ export function QuizApp({ page }: { page: QuizPageData }) {
       const data = await response.json();
       if (!response.ok) {
         showUpdateError(data.error || t.update_error);
+        // Approved meanwhile: the check starts the test and closes the dialog
+        checkApprovalStatus();
         return;
       }
       setWaitingValues(values);
       setUsername(values.username);
       saveRegistrationData(values);
+      setEditOpen(false);
       showUpdateSaved(t.data_updated);
     } catch (error) {
       showUpdateError(t.error_prefix + (error as Error).message);
@@ -709,12 +727,71 @@ export function QuizApp({ page }: { page: QuizPageData }) {
           preview={{ open: !!zoomImage, onOpenChange: (open) => !open && setZoomImage(null) }}
         />
       </div>
+      <Modal
+        open={editOpen}
+        title={t.edit_registration_title}
+        onCancel={() => setEditOpen(false)}
+        destroyOnHidden
+        footer={[
+          <Button key="cancel" onClick={() => setEditOpen(false)}>
+            {t.cancel}
+          </Button>,
+          <Button
+            key="save"
+            type="primary"
+            htmlType="submit"
+            form="edit-registration-form"
+            id="save-registration-btn"
+            disabled={savingRegistration}
+            loading={savingRegistration}
+          >
+            {t.save_changes}
+          </Button>,
+        ]}
+      >
+        <Form id="edit-registration-form" layout="vertical" requiredMark={false} onFinish={updateRegistration}>
+          <ErrorMessage id="registration-update-error" message={updateError} />
+          {[{ name: "username", label: page.usernameLabel }, ...page.registrationFields].map((field) => {
+            const isName = field.name === "username";
+            const id = isName ? "waiting-username" : `waiting-field-${field.name}`;
+            return (
+              <Form.Item key={field.name} label={field.label} htmlFor={id}>
+                <Input
+                  id={id}
+                  className={isName ? undefined : "waiting-field"}
+                  data-field-name={isName ? undefined : field.name}
+                  value={editValues[field.name] ?? ""}
+                  autoComplete="off"
+                  onChange={(event) => setEditValues((values) => ({ ...values, [field.name]: event.target.value }))}
+                />
+              </Form.Item>
+            );
+          })}
+        </Form>
+      </Modal>
       <main className="quiz-page">
         <Card className="container">
           <Flex vertical gap={8} className="quiz-header">
             {username && (
-              <Tag id="user-info" icon={<UserOutlined />} className="user-info">
+              <Tag
+                id="user-info"
+                icon={<UserOutlined />}
+                className={`user-info${canEditRegistration ? " editable" : ""}`}
+                {...(canEditRegistration && {
+                  role: "button",
+                  tabIndex: 0,
+                  title: t.edit_registration_button,
+                  onClick: openRegistrationEditor,
+                  onKeyDown: (event: KeyboardEvent) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openRegistrationEditor();
+                    }
+                  },
+                })}
+              >
                 <span id="username-display">{username}</span>
+                {canEditRegistration && <EditOutlined id="edit-registration-icon" className="user-info-edit" />}
               </Tag>
             )}
             <Typography.Title level={3} className="quiz-title">
@@ -767,31 +844,12 @@ export function QuizApp({ page }: { page: QuizPageData }) {
           <div id="waiting-approval" className={`section${phase === "waiting" ? "" : " hidden"}`}>
             <Result icon={<Spin size="large" />} title={t.waiting_title} subTitle={t.waiting_description} />
             <ErrorMessage id="waiting-error" message={waitingError} />
-            <Form layout="vertical" requiredMark={false} onFinish={updateRegistration} className="registration-form waiting-form">
-              <ErrorMessage id="registration-update-error" message={updateError} />
-              <div id="registration-update-saved" className={`error-message${updateSaved ? "" : " hidden"}`}>
-                {updateSaved && <Alert type="success" showIcon title={updateSaved} />}
-              </div>
-              {[{ name: "username", label: page.usernameLabel }, ...page.registrationFields].map((field) => {
-                const isName = field.name === "username";
-                const id = isName ? "waiting-username" : `waiting-field-${field.name}`;
-                return (
-                  <Form.Item key={field.name} label={field.label} htmlFor={id}>
-                    <Input
-                      id={id}
-                      className={isName ? undefined : "waiting-field"}
-                      data-field-name={isName ? undefined : field.name}
-                      value={waitingValues[field.name] ?? ""}
-                      autoComplete="off"
-                      onChange={(event) => setWaitingValues((values) => ({ ...values, [field.name]: event.target.value }))}
-                    />
-                  </Form.Item>
-                );
-              })}
-              <Button htmlType="submit" block id="save-registration-btn" disabled={savingRegistration} loading={savingRegistration}>
-                {t.save_changes}
-              </Button>
-            </Form>
+            <div id="registration-update-saved" className={`error-message${updateSaved ? "" : " hidden"}`}>
+              {updateSaved && <Alert type="success" showIcon title={updateSaved} />}
+            </div>
+            <Typography.Paragraph type="secondary" className="edit-registration-hint">
+              {t.edit_registration_hint}
+            </Typography.Paragraph>
           </div>
 
           <div id="test-section" className={`section${phase === "test" ? "" : " hidden"}`}>
